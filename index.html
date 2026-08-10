@@ -1790,6 +1790,15 @@ OUTCOME: NEG
           </div>
         </div>
 
+        <div class="backup-block">
+          <label class="field-label">Storage check</label>
+          <div class="hint" style="margin-top:0;">On iPhone/iPad, storage for a page can behave differently depending on how it was opened (Safari directly vs. a Files app preview, a Home Screen icon, another app's built-in browser, or Private Browsing) — check here if a backup import doesn't seem to stick.</div>
+          <div id="storageCheckResult" class="hint" style="margin-top:8px; font-family:var(--font-mono); white-space:pre-line;"></div>
+          <div class="row" style="margin-top:10px;">
+            <button class="btn-ghost" id="storageCheckBtn">🔍 Check storage now</button>
+          </div>
+        </div>
+
         <div class="row" style="margin-top:20px;">
           <button class="btn-ghost" id="backFromSettingsBtn">← Back</button>
         </div>
@@ -1813,7 +1822,7 @@ function lsGet(key){
   try{ return _rawLS.getItem(key); }catch(e){ _lsBlocked = true; return null; }
 }
 function lsSet(key, val){
-  try{ _rawLS.setItem(key, val); }catch(e){ _lsBlocked = true; }
+  try{ _rawLS.setItem(key, val); return true; }catch(e){ _lsBlocked = true; return false; }
 }
 function lsRemove(key){
   try{ _rawLS.removeItem(key); }catch(e){ _lsBlocked = true; }
@@ -4660,7 +4669,15 @@ $('importDataFile').onchange = e => {
       e.target.value = '';
       return;
     }
-    Object.entries(parsed.data).forEach(([k, v]) => { try{ lsSet(k, v); }catch(err){} });
+    const entries = Object.entries(parsed.data);
+    const failedKeys = [];
+    entries.forEach(([k, v]) => {
+      let ok = false;
+      try{ ok = lsSet(k, v); }catch(err){ ok = false; }
+      // A write can "succeed" (no thrown error) yet still not actually persist
+      // in some restricted iOS contexts, so read it back to be sure.
+      if(!ok || lsGet(k) !== v) failedKeys.push(k);
+    });
     e.target.value = '';
     activeSetId = null;
     initBrainBreakToggle();
@@ -4682,10 +4699,75 @@ $('importDataFile').onchange = e => {
     }catch(err){}
     showLanding();
     renderStatsScreen();
-    alert('Backup imported.');
+    if(failedKeys.length){
+      alert(
+        `Imported, but ${failedKeys.length} of ${entries.length} item(s) didn't actually save to this device's storage, so the import is incomplete.\n\n` +
+        `This usually means this browser/view either has storage blocked (Private Browsing, or the page was opened somewhere other than Safari directly — e.g. a Files app preview or another app's in-app browser) or your data plus this backup is larger than this browser allows (Safari on iOS caps local storage per site at roughly 5MB total).\n\n` +
+        `Open Settings → Storage check below to see current usage, and try again from Safari directly if you haven't already.`
+      );
+    } else {
+      alert('Backup imported.');
+    }
   };
   reader.readAsText(file);
 };
+
+/* ---- Storage check: helps diagnose "import doesn't stick" reports, which
+   are almost always either (a) storage silently blocked/ephemeral in
+   whatever context the page was opened in — Private Browsing, a Files app
+   preview, a Home Screen icon, or another app's in-app browser all sandbox
+   or restrict it differently than opening the page directly in Safari — or
+   (b) the combined data exceeds this browser's per-site quota (iOS Safari
+   is roughly 5MB total for localStorage, shared across everything below). ---- */
+function formatBytes(n){
+  if(n < 1024) return `${n} B`;
+  if(n < 1024*1024) return `${(n/1024).toFixed(1)} KB`;
+  return `${(n/(1024*1024)).toFixed(2)} MB`;
+}
+async function runStorageCheck(){
+  const resultEl = $('storageCheckResult');
+  if(!resultEl) return;
+  resultEl.textContent = 'Checking…';
+  const lines = [];
+
+  if(_lsBlocked || !_rawLS){
+    lines.push('⚠️ localStorage is blocked or unavailable in this browser context right now.');
+    lines.push('This is the #1 cause of "import doesn\'t stick" — nothing typed or imported here will be saved at all until this is resolved.');
+    lines.push('Try opening this file directly in Safari (not a Files app preview, a Home Screen icon, or another app\'s built-in browser), and make sure Private Browsing is off.');
+    resultEl.textContent = lines.join('\n');
+    return;
+  }
+
+  // Quick round-trip write/read/remove to catch "no error, but doesn't
+  // actually persist" cases some restricted iOS contexts produce.
+  const probeKey = '__topicReviewStorageProbe__';
+  const probeVal = String(Date.now());
+  const wroteOk = lsSet(probeKey, probeVal);
+  const readBack = lsGet(probeKey);
+  lsRemove(probeKey);
+  const roundTripOk = wroteOk && readBack === probeVal;
+  lines.push(roundTripOk ? '✅ Storage write/read test passed.' : '⚠️ Storage write/read test FAILED — writes here are not actually persisting, even though no error was thrown. This matches "import doesn\'t reflect."');
+
+  // How much of this app's own data is already stored.
+  const appKeys = [SETS_KEY, STATS_KEY, GLOBAL_KEY, SESSIONS_KEY, CASE_PROGRESS_KEY, BG_KEY, BG_TYPE_KEY, PALETTE_KEY, BG_BLUR_KEY, BRAINBREAK_ENABLED_KEY, BRAINBREAK_INTERVAL_KEY];
+  let appBytes = 0;
+  appKeys.forEach(k => { const v = lsGet(k); if(v) appBytes += v.length; });
+  lines.push(`This app is currently using: ${formatBytes(appBytes)}`);
+
+  // Whole-origin estimate, where the browser exposes one.
+  if(navigator.storage && navigator.storage.estimate){
+    try{
+      const est = await navigator.storage.estimate();
+      if(est && typeof est.usage === 'number'){
+        lines.push(`Total storage for this page (all data, incl. backgrounds): ${formatBytes(est.usage)}${est.quota ? ` of ~${formatBytes(est.quota)} available` : ''}`);
+      }
+    }catch(err){ /* not fatal — some browsers restrict this API too */ }
+  }
+
+  resultEl.textContent = lines.join('\n');
+}
+const storageCheckBtn = $('storageCheckBtn');
+if(storageCheckBtn) storageCheckBtn.onclick = runStorageCheck;
 
 // Pulls the next card from the queue and shows it — the part of
 // nextFromQueue() that actually advances, separated out so the brain-break
