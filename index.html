@@ -1402,13 +1402,19 @@ body.dark-mode .zoom-controls button:hover{
           <div id="folderGridWrap" class="landing-col-folders">
             <div class="folder-header-row">
               <label class="field-label" style="margin-bottom:0;">Your sets</label>
-              <select id="folderSortSelect" class="sort-select">
-                <option value="recent">Sort: Last played</option>
-                <option value="az">Sort: A–Z</option>
-                <option value="count">Sort: Most sets</option>
-              </select>
+              <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                <select id="folderGroupSelect" class="sort-select">
+                  <option value="subject">Folders: By Subject</option>
+                  <option value="le">Folders: By LE</option>
+                </select>
+                <select id="folderSortSelect" class="sort-select">
+                  <option value="recent">Sort: Last played</option>
+                  <option value="az">Sort: A–Z</option>
+                  <option value="count">Sort: Most sets</option>
+                </select>
+              </div>
             </div>
-            <p class="landing-intro">Filed automatically by Subject — saved right on this device.</p>
+            <p class="landing-intro" id="folderGridIntro">Filed automatically by Subject — saved right on this device.</p>
             <div class="folder-grid" id="folderGrid"></div>
           </div>
         </div>
@@ -1458,9 +1464,14 @@ body.dark-mode .zoom-controls button:hover{
               <option value="5">LE 5</option>
               <option value="6">LE 6</option>
             </select>
+            <input type="text" id="setTopicInput" placeholder="Topic #" style="max-width:100px;">
+            <select id="setTypeSelect">
+              <option value="topic">Topic card</option>
+              <option value="samplex">Samplex</option>
+            </select>
           </div>
           <div class="row">
-            <span class="hint" style="margin:0;">Sets are filed automatically by Subject, and sorted by LE inside each folder.</span>
+            <span class="hint" style="margin:0;">Sets are filed automatically by Subject, and sorted by LE inside each folder. Switch the landing page to "Folders: By LE" to browse by LE and topic number instead, with Samplexes kept separate from topic cards.</span>
           </div>
           <div class="row">
             <button class="btn-ghost" id="saveSetBtn">💾 Save current set</button>
@@ -1968,7 +1979,9 @@ const tableBody = document.getElementById('tableBody');
 /* ---- Local library & stats (all data stays in this browser's localStorage) ---- */
 const SETS_KEY = 'topicReview_sets_v1';
 const FOLDER_SORT_KEY = 'topicReview_folderSort_v1';
+const FOLDER_GROUP_KEY = 'topicReview_folderGroup_v1'; // 'subject' | 'le' — which dimension the landing folder grid is grouped by
 const SET_SORT_KEY = 'topicReview_setSort_v1';
+const SET_SORT_LE_KEY = 'topicReview_setSortLE_v1'; // sort mode used inside an LE folder (Topic number / Last played / A–Z)
 const STATS_KEY = 'topicReview_stats_v1';
 const GLOBAL_KEY = 'topicReview_global_v1';
 let activeSetId = null;
@@ -1990,6 +2003,16 @@ let currentOptions = [];
 /* ---- Navigation between landing / folder / setup / quiz / results / stats ---- */
 const UNFILED = '__unfiled__';
 let currentFolderId = null;      // folder currently open in folderView ('__unfiled__' or a real folder id)
+let currentFolderMode = 'subject'; // 'subject' | 'le' — which dimension currentFolderId is keyed by
+// Folder ids are either a Subject code (e.g. "PED2", never purely numeric) or
+// an LE number (e.g. "1", always numeric) or UNFILED. So when we're not told
+// explicitly which dimension we're navigating back into (e.g. the setup
+// screen's "← Back"), we can infer it from the id's shape, falling back to
+// whatever dimension was last active for the ambiguous UNFILED case.
+function inferFolderMode(id, fallback){
+  if(id === UNFILED) return fallback || 'subject';
+  return /^\d+$/.test(String(id)) ? 'le' : 'subject';
+}
 let setupReturnTo = null;        // where "← Back" from setup should go: null (landing) or a folder id
 let statsReturnTo = {screen:'landing', folderId:null};
 let settingsReturnTo = {screen:'landing', folderId:null};
@@ -2027,9 +2050,10 @@ function showLanding(){
   renderLanding();
   renderRecentActivity();
 }
-function showFolder(id){
+function showFolder(id, mode){
   hideAllScreens();
   currentFolderId = id;
+  currentFolderMode = mode || inferFolderMode(id, currentFolderMode);
   $('folderView').classList.remove('hidden');
   renderFolderView();
 }
@@ -2140,21 +2164,48 @@ function fmtRelative(ts){
   return fmtDate(ts);
 }
 
-/* ---- Folders (auto-derived from each set's Subject tag; LE tag sorts within) ---- */
+/* ---- Folders (auto-derived from each set's Subject tag, or from its LE tag
+   when the landing grid is switched to "By LE"; Topic # sorts within an LE,
+   and Samplex/Topic-card kind splits an LE folder into two sections.) ---- */
 function subjectKey(s){ return (s.subject && s.subject.trim()) ? s.subject : UNFILED; }
+function leKey(s){ return (s.le && String(s.le).trim()) ? String(s.le).trim() : UNFILED; }
+function folderKeyFn(mode){ return mode === 'le' ? leKey : subjectKey; }
+// 'topic' (the default) covers ordinary topic-card sets; 'samplex' is the
+// other bucket a set can be tagged with. Older sets predate this field —
+// migrateSetTypes() backfills it once, by guessing from the set name.
+function cardTypeOf(s){ return s.cardType === 'samplex' ? 'samplex' : 'topic'; }
 
-function setsInFolder(folderId){
+function setsInFolder(folderId, mode){
   const sets = loadSets();
-  return Object.entries(sets).filter(([id, s]) => subjectKey(s) === folderId);
+  const keyFn = folderKeyFn(mode);
+  return Object.entries(sets).filter(([id, s]) => keyFn(s) === folderId);
 }
 
-// Assigns each Subject a consistent muted tint from the vineyard palette,
-// echoing real hospital-chart color-coded folder tabs — same subject always
-// gets the same color, so folders become recognizable by color at a glance.
+// Backfills cardType on sets saved before the Samplex/Topic-card split
+// existed, guessing from the set name (e.g. "2026 SAMPLEX", "Sample LE1").
+// Runs once at startup; a no-op after the first run since every set will
+// already have cardType set.
+function migrateSetTypes(){
+  const sets = loadSets();
+  let changed = false;
+  Object.values(sets).forEach(s => {
+    if(!s.cardType){
+      s.cardType = /samplex|^sample\b/i.test(s.name || '') ? 'samplex' : 'topic';
+      changed = true;
+    }
+  });
+  if(changed) saveSetsData(sets);
+}
+
+// Assigns each Subject (or LE) a consistent muted tint from the vineyard
+// palette, echoing real hospital-chart color-coded folder tabs — same
+// subject/LE always gets the same color, so folders become recognizable by
+// color at a glance.
 const SUBJECT_TAB_COLORS = ['#7A4E9E','#3E7A5C','#C9A24E','#B5493E','#4A7A9E','#9E6B4E','#3F8A82','#A85C7A'];
 // The Subject dropdown only ever offers these 8 codes, so they're mapped
 // explicitly for guaranteed-distinct colors; anything else (e.g. an
-// imported set with a custom subject) falls back to a hash of the string.
+// imported set with a custom subject, or an LE number) falls back to a hash
+// of the string.
 const SUBJECT_COLOR_MAP = {PED2:'#B5493E', PSY2:'#9E6B4E', LEG:'#C9A24E', OB:'#7A4E9E', OPT:'#3F8A82', MED2:'#4A7A9E', NEU2:'#A85C7A', SUR2:'#3E7A5C'};
 function subjectColor(id){
   if(SUBJECT_COLOR_MAP[id]) return SUBJECT_COLOR_MAP[id];
@@ -2169,56 +2220,77 @@ function renderLanding(){
   const grid = $('folderGrid');
   grid.innerHTML = '';
 
+  const groupMode = lsGet(FOLDER_GROUP_KEY) || 'subject';
+  const keyFn = folderKeyFn(groupMode);
+  const intro = $('folderGridIntro');
+  if(intro){
+    intro.textContent = groupMode === 'le'
+      ? 'Grouped by LE — saved right on this device.'
+      : 'Filed automatically by Subject — saved right on this device.';
+  }
+
   const allCaseProgress = loadCaseProgressAll();
-  const subjects = new Set();
-  Object.values(sets).forEach(s => { if(s.subject && s.subject.trim()) subjects.add(s.subject); });
+  const folderKeys = new Set();
+  Object.values(sets).forEach(s => { const k = keyFn(s); if(k !== UNFILED) folderKeys.add(k); });
   function folderLastPlayed(id){
-    return setsInFolder(id).reduce((max, [sid, s]) => Math.max(max, trueLastPlayedAt(sid, s, allSessions, allCaseProgress)), 0);
+    return setsInFolder(id, groupMode).reduce((max, [sid, s]) => Math.max(max, trueLastPlayedAt(sid, s, allSessions, allCaseProgress)), 0);
   }
   const folderSortMode = lsGet(FOLDER_SORT_KEY) || 'recent';
-  const subjectIds = Array.from(subjects).sort((a, b) => {
-    if(folderSortMode === 'az') return a.localeCompare(b);
-    if(folderSortMode === 'count') return setsInFolder(b).length - setsInFolder(a).length || a.localeCompare(b);
+  const sortCompare = (a, b) => {
+    if(folderSortMode === 'az'){
+      if(groupMode === 'le'){ const diff = Number(a) - Number(b); if(!Number.isNaN(diff) && diff !== 0) return diff; }
+      return a.localeCompare(b);
+    }
+    if(folderSortMode === 'count') return setsInFolder(b, groupMode).length - setsInFolder(a, groupMode).length || a.localeCompare(b);
     // 'recent' (default): most-recently-played folder first; folders with
-    // no play history yet fall back to alphabetical so they don't jump
-    // to the top ahead of folders that have actually been studied.
+    // no play history yet fall back to alphabetical (numeric for LE) so
+    // they don't jump to the top ahead of folders that have actually been
+    // studied.
     const diff = folderLastPlayed(b) - folderLastPlayed(a);
-    return diff !== 0 ? diff : a.localeCompare(b);
-  });
+    if(diff !== 0) return diff;
+    if(groupMode === 'le'){ const numDiff = Number(a) - Number(b); if(!Number.isNaN(numDiff)) return numDiff; }
+    return a.localeCompare(b);
+  };
+  const folderIds = Array.from(folderKeys).sort(sortCompare);
 
   function hasPausedSet(folderId){
-    return setsInFolder(folderId).some(([sid]) => {
+    return setsInFolder(folderId, groupMode).some(([sid]) => {
       const s = allSessions[sid];
       return s && s.current && Array.isArray(s.cards) && s.cards.length;
     });
   }
 
-  subjectIds.forEach(id => {
-    const count = setsInFolder(id).length;
+  const chipLabel = groupMode === 'le' ? 'LE' : 'Subject';
+  folderIds.forEach(id => {
+    const count = setsInFolder(id, groupMode).length;
     const tile = document.createElement('button');
     tile.type = 'button';
     tile.className = 'folder-tile';
-    tile.style.setProperty('--tab-color', subjectColor(id));
-    tile.innerHTML = `${hasPausedSet(id) ? '<span class="paused-dot" title="A set in here is paused mid-quiz"></span>' : ''}<div class="folder-tab-chip"><span class="tab-dot"></span>Subject</div><div class="folder-name">${escapeHtml(id)}</div><div class="folder-meta">${count} set${count===1?'':'s'}</div>`;
-    tile.onclick = () => showFolder(id);
+    tile.style.setProperty('--tab-color', groupMode === 'le' ? subjectColor('le' + id) : subjectColor(id));
+    const name = groupMode === 'le' ? `LE ${id}` : id;
+    tile.innerHTML = `${hasPausedSet(id) ? '<span class="paused-dot" title="A set in here is paused mid-quiz"></span>' : ''}<div class="folder-tab-chip"><span class="tab-dot"></span>${chipLabel}</div><div class="folder-name">${escapeHtml(name)}</div><div class="folder-meta">${count} set${count===1?'':'s'}</div>`;
+    tile.onclick = () => showFolder(id, groupMode);
     grid.appendChild(tile);
   });
 
-  const unfiledCount = setsInFolder(UNFILED).length;
-  if(unfiledCount > 0 || subjectIds.length === 0){
+  const unfiledCount = setsInFolder(UNFILED, groupMode).length;
+  if(unfiledCount > 0 || folderIds.length === 0){
     const unfiledTile = document.createElement('button');
     unfiledTile.type = 'button';
     unfiledTile.className = 'folder-tile unfiled';
-    unfiledTile.innerHTML = `${hasPausedSet(UNFILED) ? '<span class="paused-dot" title="A set in here is paused mid-quiz"></span>' : ''}<div class="folder-tab-chip"><span class="tab-dot"></span>Folder</div><div class="folder-name">Unfiled</div><div class="folder-meta">${unfiledCount} set${unfiledCount===1?'':'s'}</div>`;
-    unfiledTile.onclick = () => showFolder(UNFILED);
+    const unfiledLabel = groupMode === 'le' ? 'No LE tagged' : 'Unfiled';
+    unfiledTile.innerHTML = `${hasPausedSet(UNFILED) ? '<span class="paused-dot" title="A set in here is paused mid-quiz"></span>' : ''}<div class="folder-tab-chip"><span class="tab-dot"></span>Folder</div><div class="folder-name">${unfiledLabel}</div><div class="folder-meta">${unfiledCount} set${unfiledCount===1?'':'s'}</div>`;
+    unfiledTile.onclick = () => showFolder(UNFILED, groupMode);
     grid.appendChild(unfiledTile);
   }
 
-  if(subjectIds.length === 0 && unfiledCount === 0){
+  if(folderIds.length === 0 && unfiledCount === 0){
     const hint = document.createElement('div');
     hint.className = 'no-sets';
     hint.style.gridColumn = '1 / -1';
-    hint.textContent = 'Nothing saved yet — start a new set below and give it a Subject to file it automatically.';
+    hint.textContent = groupMode === 'le'
+      ? 'Nothing saved yet — start a new set below and give it an LE to file it automatically.'
+      : 'Nothing saved yet — start a new set below and give it a Subject to file it automatically.';
     grid.appendChild(hint);
   }
 }
@@ -2227,9 +2299,15 @@ $('folderSortSelect').onchange = e => {
   try{ lsSet(FOLDER_SORT_KEY, e.target.value); }catch(err){}
   renderLanding();
 };
+$('folderGroupSelect').value = lsGet(FOLDER_GROUP_KEY) || 'subject';
+$('folderGroupSelect').onchange = e => {
+  try{ lsSet(FOLDER_GROUP_KEY, e.target.value); }catch(err){}
+  renderLanding();
+};
 
-function folderDisplayName(id){
-  return id === UNFILED ? 'Unfiled' : id;
+function folderDisplayName(id, mode){
+  if(id === UNFILED) return mode === 'le' ? 'No LE tagged' : 'Unfiled';
+  return mode === 'le' ? `LE ${id}` : id;
 }
 
 // Builds one set row (name, meta, tags, paused badge, action buttons) as
@@ -2251,6 +2329,8 @@ function buildSetRow(sid, s, opts){
   const tags = [];
   if(opts.showFolderTag && s.subject) tags.push(`<span class="set-tag">${escapeHtml(s.subject)}</span>`);
   if(s.le) tags.push(`<span class="set-tag">LE ${escapeHtml(s.le)}</span>`);
+  if(s.topic) tags.push(`<span class="set-tag">Topic ${escapeHtml(s.topic)}</span>`);
+  if(cardTypeOf(s) === 'samplex') tags.push(`<span class="set-tag">Samplex</span>`);
   const session = allSessions[sid];
   const inProgress = session && session.current && Array.isArray(session.cards) && session.cards.length;
   const isCase = s.kind === 'algorithm';
@@ -2459,13 +2539,56 @@ function duplicateSetById(id){
   else if(!$('landing').classList.contains('hidden')){ renderLanding(); renderRecentActivity(); }
 }
 
+// Sorts by Topic # numerically (blank/non-numeric topics sort after numeric
+// ones), falling back to set name. Used inside an LE folder, where Topic #
+// is the meaningful ordering (LE is already fixed by the folder itself).
+function topicSortCompare(a, b){
+  const ta = (a[1].topic || '').trim();
+  const tb = (b[1].topic || '').trim();
+  const na = Number(ta), nb = Number(tb);
+  const aNum = ta !== '' && !Number.isNaN(na);
+  const bNum = tb !== '' && !Number.isNaN(nb);
+  if(aNum && bNum && na !== nb) return na - nb;
+  if(aNum && !bNum) return -1;
+  if(!aNum && bNum) return 1;
+  if(ta !== tb) return ta.localeCompare(tb);
+  return a[1].name.localeCompare(b[1].name);
+}
+
+// Splits an LE folder's sets into a "Topic Cards" section and a "Samplex"
+// section (each sorted by Topic #), so quiz sets and practice-exam sets
+// don't get mixed together while reviewing a single LE.
+function renderTopicSplitSections(list, entries){
+  const topicEntries = entries.filter(([, s]) => cardTypeOf(s) === 'topic').sort(topicSortCompare);
+  const samplexEntries = entries.filter(([, s]) => cardTypeOf(s) === 'samplex').sort(topicSortCompare);
+  const sections = [['Topic Cards', topicEntries], ['Samplex', samplexEntries]];
+  const multipleSections = sections.filter(([, group]) => group.length).length > 1;
+  sections.forEach(([label, group]) => {
+    if(!group.length) return;
+    if(multipleSections){
+      const header = document.createElement('div');
+      header.className = 'stats-section-title';
+      header.style.margin = '14px 0 8px';
+      header.textContent = label;
+      list.appendChild(header);
+    }
+    group.forEach(([sid, s]) => list.appendChild(buildSetRow(sid, s, {showFolderTag:false})));
+  });
+}
+
 function renderFolderView(){
   const id = currentFolderId;
-  $('folderViewTitle').textContent = folderDisplayName(id);
+  const mode = currentFolderMode;
+  $('folderViewTitle').textContent = folderDisplayName(id, mode);
+  // Relabel the default sort option to match what it actually does in this
+  // folder: inside an LE folder there's no LE to sort by (it's already
+  // fixed), so the default groups by Topic # / Samplex instead.
+  const defaultSortOpt = $('setSortSelect').querySelector('option[value="le"]');
+  if(defaultSortOpt) defaultSortOpt.textContent = mode === 'le' ? 'Sort: Topic #' : 'Sort: LE number';
 
   const list = $('folderSetsList');
   list.innerHTML = '';
-  const entries = setsInFolder(id);
+  const entries = setsInFolder(id, mode);
   if(entries.length === 0){
     const p = document.createElement('div');
     p.className = 'no-sets';
@@ -2492,7 +2615,15 @@ function renderFolderView(){
     return;
   }
 
-  // 'le' (default): group by LE tag (numeric ascending), untagged last; sort within a group by most recently updated
+  // Default sort mode. Inside an LE folder, Topic # + Samplex/Topic-card
+  // split is the meaningful ordering (see renderTopicSplitSections above).
+  if(mode === 'le'){
+    renderTopicSplitSections(list, entries);
+    return;
+  }
+
+  // Inside a Subject folder: group by LE tag (numeric ascending, untagged
+  // last); sort within a group by most recently updated.
   const groups = new Map();
   entries.forEach(entry => {
     const le = entry[1].le || '';
@@ -2563,6 +2694,8 @@ function loadSetById(id){
   $('setNameInput').value = s.name;
   $('setSubjectSelect').value = s.subject || '';
   $('setLESelect').value = s.le || '';
+  $('setTopicInput').value = s.topic || '';
+  $('setTypeSelect').value = cardTypeOf(s);
   $('setupError').textContent = '';
   pendingAlgorithm = s.kind === 'algorithm';
   $('algoTextInput').value = s.algoSource || '';
@@ -4032,6 +4165,8 @@ $('clearTableBtn').onclick = () => {
   $('setNameInput').value = '';
   $('setSubjectSelect').value = '';
   $('setLESelect').value = '';
+  $('setTopicInput').value = '';
+  $('setTypeSelect').value = 'topic';
 };
 
 $('loadSample').onclick = () => {
@@ -4042,6 +4177,8 @@ $('loadSample').onclick = () => {
   $('setNameInput').value = '';
   $('setSubjectSelect').value = '';
   $('setLESelect').value = '';
+  $('setTopicInput').value = '';
+  $('setTypeSelect').value = 'topic';
 };
 
 const sampleCards = parsePipeSample(sample);
@@ -4099,6 +4236,8 @@ $('saveSetBtn').onclick = () => {
   }
   const subject = $('setSubjectSelect').value;
   const le = $('setLESelect').value;
+  const topic = $('setTopicInput').value.trim();
+  const cardType = $('setTypeSelect').value === 'samplex' ? 'samplex' : 'topic';
   const sets = loadSets();
   let id = (activeSetId && sets[activeSetId]) ? activeSetId : null;
   if(!id){
@@ -4110,6 +4249,8 @@ $('saveSetBtn').onclick = () => {
     name,
     subject,
     le,
+    topic,
+    cardType,
     cards: parsed,
     mode: inputMode,
     kind: isCase ? 'algorithm' : 'flashcards',
@@ -4135,6 +4276,8 @@ $('newSetBtn').onclick = () => {
   $('setNameInput').value = '';
   $('setSubjectSelect').value = '';
   $('setLESelect').value = '';
+  $('setTopicInput').value = '';
+  $('setTypeSelect').value = 'topic';
   $('setupError').textContent = '';
   $('algoTextInput').value = '';
   $('algoParseStatus').textContent = '';
@@ -4150,6 +4293,8 @@ $('trySampleBtn').onclick = () => {
   $('setNameInput').value = '';
   $('setSubjectSelect').value = '';
   $('setLESelect').value = '';
+  $('setTopicInput').value = '';
+  $('setTypeSelect').value = 'topic';
   $('setupError').textContent = '';
   $('algoTextInput').value = '';
   $('algoParseStatus').textContent = '';
@@ -4173,6 +4318,8 @@ $('newSetInFolderBtn').onclick = () => {
   $('setNameInput').value = '';
   $('setSubjectSelect').value = currentFolderId !== UNFILED ? currentFolderId : '';
   $('setLESelect').value = '';
+  $('setTopicInput').value = '';
+  $('setTypeSelect').value = 'topic';
   $('setupError').textContent = '';
   $('algoTextInput').value = '';
   $('algoParseStatus').textContent = '';
@@ -4184,6 +4331,7 @@ $('setupBackBtn').onclick = () => {
   else showLanding();
 };
 
+migrateSetTypes();
 showLanding();
 
 $('homeBtn').onclick = () => {
