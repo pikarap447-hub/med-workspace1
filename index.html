@@ -287,6 +287,39 @@ overflow-wrap:break-word;
     background:#FFF9E8;
     box-shadow:inset 0 0 0 2px var(--tile-blue-mid);
   }
+  /* Controller/keyboard navigation focus ring — applied via JS in the
+     gamepad script so buttons that don't otherwise show one still do. */
+  .gp-focus{
+    outline:3px solid var(--tile-blue-mid) !important;
+    outline-offset:2px !important;
+    box-shadow:0 0 0 5px rgba(201,162,78,.35) !important;
+  }
+  .gp-map-rows{display:flex; flex-direction:column; gap:8px; margin-top:10px;}
+  .gp-map-group-label{
+    font-family:var(--font-mono);
+    font-weight:600;
+    font-size:11px;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--tile-blue);
+    margin:14px 0 2px;
+  }
+  .gp-map-group-label:first-child{margin-top:2px;}
+  .gp-map-row{
+    display:flex; align-items:center; gap:10px;
+    padding:9px 12px;
+    border:1.5px solid var(--tile-blue-pale);
+    border-radius:12px;
+    background:#FBF7EC;
+  }
+  .gp-map-label{flex:0 0 108px; font-weight:600; font-size:13px; color:var(--ink);}
+  .gp-map-current{flex:1; font-size:12.5px; color:var(--ink-soft); font-family:var(--font-mono);}
+  .gp-remap-btn{flex:0 0 auto; padding:6px 12px !important; font-size:12px !important;}
+  .gp-remap-btn.listening{
+    background:var(--tile-blue-mid) !important;
+    color:#fff !important;
+    border-color:var(--tile-blue-mid) !important;
+  }
   .cell:empty::before{
     content:attr(data-placeholder);
     color:#B8C6CC;
@@ -1731,6 +1764,19 @@ OUTCOME: NEG
           <div class="row" style="margin-top:16px;">
             <button class="btn-primary" id="imgSettingsSave">Save</button>
             <span id="imgSettingsSavedNote" class="hidden" style="font-size:12.5px; color:var(--green); font-weight:600;">Saved ✓</span>
+          </div>
+        </div>
+
+        <div class="backup-block">
+          <label class="field-label">Controller button mapping</label>
+          <p class="modal-hint">
+            Works with any Bluetooth gamepad — Xbox, PlayStation, 8BitDo, Switch Pro Controller, and so on. Quiz answers and menu navigation are mapped separately, so you can keep the same button for both or use different ones. Click "Remap" next to an action and press the button you want to use — then press Escape or click again to cancel.
+          </p>
+          <div id="gpStatus" class="hint" style="margin-top:0;">No controller detected yet — press any button on it to connect.</div>
+          <div id="gpLastPress" class="hint" style="margin-top:2px; font-family:var(--font-mono); font-size:11.5px;"></div>
+          <div id="gpMapRows" class="gp-map-rows"></div>
+          <div class="row" style="margin-top:14px;">
+            <button class="btn-ghost" id="gpResetMapBtn">⟲ Reset to defaults</button>
           </div>
         </div>
 
@@ -5061,6 +5107,288 @@ document.addEventListener('keydown', e => {
     if(nextBtn && !nextBtn.classList.contains('hidden')){ e.preventDefault(); nextBtn.click(); }
   }
 });
+
+/* ---- Gamepad support (Bluetooth controllers, e.g. Nintendo Switch Pro
+   Controller, Xbox, PlayStation, 8BitDo, ...): mirrors the keyboard
+   shortcuts above, plus stick-driven menu navigation. Controllers don't
+   all report their buttons in the same raw order — Chrome/Edge's
+   "standard" mapping numbers buttons by physical POSITION, not by the
+   printed label, and non-standard controllers can differ further — so
+   which raw button index means what is user-configurable in Settings
+   rather than hard-coded, and persisted to localStorage. Quiz-answer
+   buttons (A/B/C/D) and the menu-navigation confirm button are two
+   independent mappings, so remapping one never touches the other. The
+   Gamepad API has no press events, so button state and stick position
+   are polled every frame via requestAnimationFrame and compared against
+   the previous frame to catch a fresh press or a fresh stick direction.
+   The whole per-frame body is wrapped in try/catch — an uncaught error
+   on one frame would otherwise silently stop requestAnimationFrame from
+   ever being rescheduled, killing ALL further controller input (including
+   remap capture) until the page is reloaded. ---- */
+(function(){
+  const GP_FOCUSABLE_SELECTOR = 'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+
+  /* Visible focus ring for whatever the controller (or keyboard Tab) has
+     focused, since some buttons in this app don't otherwise show one. */
+  document.addEventListener('focusin', e => {
+    if(e.target && e.target.matches && e.target.matches(GP_FOCUSABLE_SELECTOR)) e.target.classList.add('gp-focus');
+  });
+  document.addEventListener('focusout', e => {
+    if(e.target && e.target.classList) e.target.classList.remove('gp-focus');
+  });
+
+  // Default mapping matches a standard-mapping Switch Pro Controller /
+  // Xbox pad: raw button 1=A, 0=B, 3=X, 2=Y.
+  const QUIZ_ACTIONS = ['optionA','optionB','optionC','optionD'];
+  const NAV_ACTIONS = ['confirm'];
+  const ALL_ACTIONS = [...QUIZ_ACTIONS, ...NAV_ACTIONS];
+  const ACTION_LABELS = {
+    optionA:'Option A', optionB:'Option B', optionC:'Option C', optionD:'Option D',
+    confirm:'Confirm / select'
+  };
+  const GROUPS = [
+    {label:'Quiz answers', actions:QUIZ_ACTIONS},
+    {label:'Menu navigation', actions:NAV_ACTIONS}
+  ];
+  const DEFAULT_MAP = {optionA:1, optionB:0, optionC:3, optionD:2, confirm:1};
+  const MAP_KEY = 'topicReviewGamepadMap';
+  const CAPTURE_TIMEOUT_MS = 10000;
+
+  let gpMap = Object.assign({}, DEFAULT_MAP);
+  try{
+    const saved = JSON.parse(lsGet(MAP_KEY) || 'null');
+    if(saved && typeof saved === 'object') gpMap = Object.assign({}, DEFAULT_MAP, saved);
+  } catch(e){ /* ignore malformed saved mapping */ }
+
+  let captureAction = null;   // action currently waiting for a button press to bind to it
+  let captureTimer = null;
+  let connectedName = null;
+  let lastPressIndex = null;
+
+  function saveMap(){ lsSet(MAP_KEY, JSON.stringify(gpMap)); }
+
+  function startCapture(action){
+    captureAction = action;
+    if(captureTimer) clearTimeout(captureTimer);
+    captureTimer = setTimeout(() => { captureAction = null; renderGpSettings(); }, CAPTURE_TIMEOUT_MS);
+    renderGpSettings();
+  }
+  function cancelCapture(){
+    captureAction = null;
+    if(captureTimer){ clearTimeout(captureTimer); captureTimer = null; }
+    renderGpSettings();
+  }
+
+  function faceToOption(){
+    const out = {};
+    QUIZ_ACTIONS.forEach((action, idx) => { out[gpMap[action]] = idx; });
+    return out;
+  }
+  function confirmButtons(){
+    // Any quiz-answer button, or the dedicated confirm button, or +/start
+    // all advance to the next card / continue past a brain break.
+    return Array.from(new Set([...QUIZ_ACTIONS.map(a => gpMap[a]), gpMap.confirm, 9]));
+  }
+
+  const DPAD_TO_OPTION = {12:0, 13:1, 14:2, 15:3}; // up / down / left / right, not user-remapped
+
+  function handleGamepadPress(i){
+    lastPressIndex = i;
+    updateLastPress();
+    if(captureAction){
+      gpMap[captureAction] = i;
+      saveMap();
+      cancelCapture(); // clears captureAction + timer, then re-renders with the new value
+      return;
+    }
+    const FACE_TO_OPTION = faceToOption();
+    const CONFIRM_BUTTONS = confirmButtons();
+    const brainBreak = $('brainBreak');
+    if(brainBreak && !brainBreak.classList.contains('hidden')){
+      if(CONFIRM_BUTTONS.includes(i)){
+        const btn = $('breakContinueBtn');
+        if(btn) btn.click();
+      }
+      return;
+    }
+    const quiz = $('quiz');
+    if(quiz && !quiz.classList.contains('hidden')){
+      if(!answered){
+        const idx = FACE_TO_OPTION[i] !== undefined ? FACE_TO_OPTION[i] : DPAD_TO_OPTION[i];
+        if(idx !== undefined){
+          const opts = Array.from(document.querySelectorAll('#optionsList .opt'));
+          const optBtn = opts[idx];
+          if(optBtn && !optBtn.disabled) optBtn.click();
+          return;
+        }
+      } else if(CONFIRM_BUTTONS.includes(i)){
+        const nextBtn = $('nextBtn');
+        if(nextBtn && !nextBtn.classList.contains('hidden')) nextBtn.click();
+        return;
+      }
+    }
+    // Any other screen (landing, setup, results, editing, ...): the
+    // separately-mapped "Confirm / select" button activates whatever the
+    // left stick currently has focused.
+    if(i === gpMap.confirm){
+      const el = document.activeElement;
+      if(el && el !== document.body && el.matches && el.matches(GP_FOCUSABLE_SELECTOR)) el.click();
+    }
+  }
+
+  /* ---- Settings panel: view/remap the mapping above ---- */
+  function updateLastPress(){
+    const el = $('gpLastPress');
+    if(el) el.textContent = lastPressIndex === null ? '' : `Last button pressed: ${lastPressIndex}`;
+  }
+  function renderGpSettings(){
+    const rowsEl = $('gpMapRows');
+    if(!rowsEl) return;
+    rowsEl.innerHTML = '';
+    GROUPS.forEach(group => {
+      const heading = document.createElement('div');
+      heading.className = 'gp-map-group-label';
+      heading.textContent = group.label;
+      rowsEl.appendChild(heading);
+      group.actions.forEach(action => {
+        const row = document.createElement('div');
+        row.className = 'gp-map-row';
+        const label = document.createElement('span');
+        label.className = 'gp-map-label';
+        label.textContent = ACTION_LABELS[action];
+        const current = document.createElement('span');
+        current.className = 'gp-map-current';
+        current.textContent = captureAction === action ? 'Press a button… (Esc to cancel)' : `Button ${gpMap[action]}`;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-ghost gp-remap-btn' + (captureAction === action ? ' listening' : '');
+        btn.textContent = captureAction === action ? 'Cancel' : 'Remap';
+        btn.onclick = () => { captureAction === action ? cancelCapture() : startCapture(action); };
+        row.append(label, current, btn);
+        rowsEl.appendChild(row);
+      });
+    });
+    const statusEl = $('gpStatus');
+    if(statusEl){
+      statusEl.textContent = connectedName
+        ? `Connected: ${connectedName}`
+        : 'No controller detected yet — press any button on it to connect.';
+    }
+    updateLastPress();
+  }
+  const resetBtn = $('gpResetMapBtn');
+  if(resetBtn) resetBtn.onclick = () => {
+    gpMap = Object.assign({}, DEFAULT_MAP);
+    saveMap();
+    cancelCapture();
+  };
+  document.addEventListener('keydown', e => {
+    if(e.key === 'Escape' && captureAction) cancelCapture();
+  });
+  renderGpSettings();
+
+  window.addEventListener('gamepadconnected', e => {
+    connectedName = e.gamepad && e.gamepad.id;
+    renderGpSettings();
+  });
+  window.addEventListener('gamepaddisconnected', () => {
+    connectedName = null;
+    renderGpSettings();
+  });
+
+  /* ---- Left-stick UI navigation ---- */
+  function isVisible(el){
+    if(!(el.offsetWidth || el.offsetHeight || el.getClientRects().length)) return false;
+    const cs = getComputedStyle(el);
+    if(cs.visibility === 'hidden' || cs.display === 'none') return false;
+    if(el.closest('.hidden')) return false;
+    return true;
+  }
+  function getFocusableEls(){
+    return Array.from(document.querySelectorAll(GP_FOCUSABLE_SELECTOR)).filter(isVisible);
+  }
+  const DIR_VECTORS = {up:{x:0,y:-1}, down:{x:0,y:1}, left:{x:-1,y:0}, right:{x:1,y:0}};
+  function moveFocus(dir){
+    const els = getFocusableEls();
+    if(!els.length) return;
+    const current = document.activeElement;
+    if(!els.includes(current)){ els[0].focus(); els[0].scrollIntoView({block:'nearest'}); return; }
+    const v = DIR_VECTORS[dir];
+    const cRect = current.getBoundingClientRect();
+    const cCenter = {x:cRect.left+cRect.width/2, y:cRect.top+cRect.height/2};
+    let best = null, bestScore = Infinity;
+    for(const el of els){
+      if(el === current) continue;
+      const r = el.getBoundingClientRect();
+      const center = {x:r.left+r.width/2, y:r.top+r.height/2};
+      const dx = center.x - cCenter.x, dy = center.y - cCenter.y;
+      const dist = Math.hypot(dx, dy);
+      if(dist < 1) continue;
+      const alignment = (dx*v.x + dy*v.y) / dist; // -1..1, how well it lines up with the pushed direction
+      if(alignment < 0.35) continue;
+      const perp = Math.abs(dx*v.y - dy*v.x);
+      const score = dist + perp * 1.5;
+      if(score < bestScore){ bestScore = score; best = el; }
+    }
+    if(best){ best.focus(); best.scrollIntoView({block:'nearest', inline:'nearest'}); }
+  }
+
+  const STICK_DEADZONE = 0.5;
+  const STICK_REPEAT_MS = 220; // how often a held-over stick keeps moving focus
+  const stickState = {};
+  function pollStick(pad){
+    const ax = pad.axes[0] || 0, ay = pad.axes[1] || 0;
+    let dir = null;
+    if(Math.abs(ax) > Math.abs(ay)){
+      if(ax > STICK_DEADZONE) dir = 'right'; else if(ax < -STICK_DEADZONE) dir = 'left';
+    } else {
+      if(ay > STICK_DEADZONE) dir = 'down'; else if(ay < -STICK_DEADZONE) dir = 'up';
+    }
+    const st = stickState[pad.index] || (stickState[pad.index] = {dir:null, last:0});
+    const now = performance.now();
+    if(!dir){ st.dir = null; return; }
+    if(dir !== st.dir){
+      moveFocus(dir);
+      st.dir = dir;
+      st.last = now;
+    } else if(now - st.last > STICK_REPEAT_MS){
+      moveFocus(dir);
+      st.last = now;
+    }
+  }
+
+  const prevPressed = {};
+  function isPressed(btn){
+    if(!btn) return false;
+    return typeof btn === 'object' ? btn.pressed : btn === 1;
+  }
+  function pollGamepads(){
+    try{
+      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      for(const pad of pads){
+        if(!pad) continue;
+        if(!connectedName){ connectedName = pad.id; renderGpSettings(); }
+        const prev = prevPressed[pad.index] || (prevPressed[pad.index] = []);
+        pad.buttons.forEach((btn, i) => {
+          const down = isPressed(btn);
+          if(down && !prev[i]){
+            try{ handleGamepadPress(i); } catch(err){ console.error('Gamepad button handler error:', err); }
+          }
+          prev[i] = down;
+        });
+        if(pad.axes && pad.axes.length >= 2){
+          try{ pollStick(pad); } catch(err){ console.error('Gamepad stick handler error:', err); }
+        }
+      }
+    } catch(err){
+      console.error('Gamepad polling error:', err);
+    }
+    // Always reschedule, even if something above threw, so one bad frame
+    // can never permanently stop controller input.
+    requestAnimationFrame(pollGamepads);
+  }
+  requestAnimationFrame(pollGamepads);
+})();
 </script>
 
 <span id="brainBreakCountdown" class="brain-break-countdown hidden"></span>
