@@ -783,6 +783,46 @@ margin:2px 2px;
 font-size:16px;
 }
 
+
+/* --- Mobile bottom controls --- */
+@media (max-width: 600px) {
+  /* Stack the two fixed bottom controls instead of letting them collide. */
+  .zoom-controls {
+    left: 50%;
+    right: auto;
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    max-width: calc(100vw - 24px);
+    gap: 4px;
+    padding: 5px;
+  }
+
+  .zoom-controls button {
+    width: 32px;
+    height: 32px;
+  }
+
+  .zoom-controls button#zoomReset {
+    width: 36px;
+    height: 36px;
+  }
+
+  .brain-break-countdown {
+    left: 50%;
+    right: auto;
+    bottom: calc(12px + env(safe-area-inset-bottom) + 52px);
+    transform: translateX(-50%);
+    max-width: calc(100vw - 24px);
+    white-space: nowrap;
+  }
+
+  /* Keep quiz content clear of both floating controls and the iPhone
+     home-indicator safe area. */
+  body {
+    padding-bottom: 130px !important;
+  }
+}
+
 /* --- Dark mode: filter-invert the whole page so every existing color
    relationship (contrast, hierarchy) is preserved automatically, then
    invert images/icons back so they read normally. --- */
