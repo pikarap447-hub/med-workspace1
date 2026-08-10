@@ -6,6 +6,14 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
+<!-- Discourage caching of this document itself. GitHub Pages' CDN sets its
+     own real HTTP cache headers that these meta tags can't override, but
+     some in-app/embedded browser contexts on iOS do still respect these,
+     so it's a harmless extra layer on top of the version+force-refresh
+     mechanism below, which is the real fix. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Topic Review</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap');
@@ -1799,6 +1807,15 @@ OUTCOME: NEG
           </div>
         </div>
 
+        <div class="backup-block">
+          <label class="field-label">App version</label>
+          <div class="hint" style="margin-top:0;">If a fix doesn't seem to take effect after you've updated the file on GitHub, check the version below — if it looks old, tap Force refresh to bypass any cached copy.</div>
+          <div id="appVersionLabel" class="hint" style="margin-top:8px; font-family:var(--font-mono);"></div>
+          <div class="row" style="margin-top:10px;">
+            <button class="btn-ghost" id="forceRefreshBtn">🔄 Force refresh</button>
+          </div>
+        </div>
+
         <div class="row" style="margin-top:20px;">
           <button class="btn-ghost" id="backFromSettingsBtn">← Back</button>
         </div>
@@ -1811,6 +1828,12 @@ OUTCOME: NEG
 </div>
 
 <script>
+/* Bump this string every time this file is edited/pushed. It's plain text
+   baked into the page, so if Settings shows an OLD value, that's proof the
+   browser is serving a stale cached copy rather than the real thing — use
+   the "Force refresh" button in Settings to break out of it. */
+const APP_VERSION = '2026-08-10 v1';
+
 /* Safe localStorage wrapper — some iOS contexts (e.g. Quick Look previews
    opened straight from the Files app) restrict or disable localStorage.
    These helpers keep the app running in-memory for the session instead
@@ -4768,6 +4791,25 @@ async function runStorageCheck(){
 }
 const storageCheckBtn = $('storageCheckBtn');
 if(storageCheckBtn) storageCheckBtn.onclick = runStorageCheck;
+
+/* ---- Version label + force refresh: proves whether the page you're
+   looking at is actually the latest pushed version, and gives a one-tap
+   way to bypass a stale cached copy (standalone Home Screen mode on iOS
+   is especially prone to holding onto an old copy after you push an
+   update to GitHub). ---- */
+const appVersionLabel = $('appVersionLabel');
+if(appVersionLabel) appVersionLabel.textContent = `Running: ${APP_VERSION}`;
+
+const forceRefreshBtn = $('forceRefreshBtn');
+if(forceRefreshBtn){
+  forceRefreshBtn.onclick = function(){
+    const url = new URL(window.location.href);
+    url.searchParams.set('_r', Date.now().toString());
+    // location.replace (not href=) so the cache-busted URL doesn't add a
+    // back-button entry, and so it behaves the same in standalone mode.
+    window.location.replace(url.toString());
+  };
+}
 
 // Pulls the next card from the queue and shows it — the part of
 // nextFromQueue() that actually advances, separated out so the brain-break
