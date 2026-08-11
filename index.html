@@ -1047,6 +1047,31 @@ body.dark-mode .zoom-controls button:hover{
 .set-item-name{font-weight:700; font-size:13.5px; color:var(--ink);}
 .set-item-meta{font-size:11.5px; color:var(--ink-soft); margin-top:2px;}
 .set-item-actions{display:flex; gap:6px; flex-shrink:0;}
+
+/* Below this width the full action row (Play again / practice-weak /
+   Load / rename / duplicate / delete) no longer fits alongside the name
+   column, and used to force the whole card into horizontal scroll with
+   buttons clipped off-screen. Stack the row instead and let the actions
+   wrap onto their own line(s) so every button stays reachable without
+   scrolling. */
+@media (max-width: 600px){
+  .set-item{
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .set-item-main{width:100%; min-width:0;}
+  .set-item-actions{
+    flex-wrap:wrap;
+    width:100%;
+  }
+  .set-item-actions .btn-primary.sm,
+  .set-item-actions .btn-ghost.sm{
+    flex:1 1 auto;
+  }
+  .set-item-actions .icon-only{
+    flex:0 0 auto;
+  }
+}
 .stats-overview{
   display:grid; grid-template-columns:repeat(2,1fr); gap:10px;
   margin:10px 0 22px;
