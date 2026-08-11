@@ -2358,11 +2358,13 @@ function buildSetRow(sid, s, opts){
   const allSessions = loadAllSessions();
   const st = statsAll[sid];
   let accStr = '';
+  let weakCardCount = 0;
   if(st && st.cardStats){
     const vals = Object.values(st.cardStats);
     const seen = vals.reduce((a,c) => a + c.seen, 0);
     const correct = vals.reduce((a,c) => a + c.correct, 0);
     if(seen) accStr = ' · ' + Math.round(correct / seen * 100) + '% avg';
+    weakCardCount = vals.filter(c => c.seen && c.correct < c.seen).length;
   }
   const row = document.createElement('div');
   row.className = 'set-item';
@@ -2399,6 +2401,7 @@ function buildSetRow(sid, s, opts){
       ${isCase ? `<button class="btn-primary sm" data-act="play" data-id="${sid}">${caseSaved ? '▶ Continue case' : '▶ Play case'}</button>` : ''}
       ${(inProgress && !isCase) ? `<button class="btn-primary sm" data-act="continue" data-id="${sid}">Continue →</button>` : ''}
       ${(!inProgress && !isCase && s.completed) ? `<button class="btn-primary sm" data-act="review" data-id="${sid}">▶ Play again</button>` : ''}
+      ${(!isCase && weakCardCount >= 2) ? `<button class="btn-ghost sm icon-only" data-act="weak" data-id="${sid}" title="Practice weakest cards in this set">🎯</button>` : ''}
       <button class="btn-ghost sm" data-act="load" data-id="${sid}">${isCase ? 'Edit' : 'Load'}</button>
       <button class="btn-ghost sm icon-only" data-act="rename" data-id="${sid}" title="Rename">✎</button>
       <button class="btn-ghost sm icon-only" data-act="dup" data-id="${sid}" title="Duplicate">⧉</button>
@@ -2415,6 +2418,10 @@ function buildSetRow(sid, s, opts){
     setupReturnTo = opts.returnTo !== undefined ? opts.returnTo : currentFolderId;
     setInputMode(s.mode || 'classic');
     launchQuiz(JSON.parse(JSON.stringify(s.cards)), sid);
+  });
+  row.querySelector('[data-act="weak"]')?.addEventListener('click', () => {
+    setupReturnTo = opts.returnTo !== undefined ? opts.returnTo : currentFolderId;
+    startWeakPracticeForSet(sid);
   });
   row.querySelector('[data-act="load"]').addEventListener('click', () => { setupReturnTo = opts.returnTo !== undefined ? opts.returnTo : currentFolderId; loadSetById(sid); });
   row.querySelector('[data-act="rename"]').addEventListener('click', () => renameSetById(sid));
@@ -4838,6 +4845,35 @@ function startWeakPractice(){
   launchQuiz(weakCards, PRACTICE_ID);
 }
 $('practiceWeakBtn').onclick = () => startWeakPractice();
+
+// Same idea as startWeakPractice, but scoped to a single saved set: pulls
+// that set's own tracked cardStats, ranks its cards by lowest accuracy
+// (cards seen at least once and not yet 100%), and launches the weakest
+// ones as a one-off quiz under PRACTICE_ID so it never overwrites the
+// real set's progress/stats.
+function startWeakPracticeForSet(sid){
+  const sets = loadSets();
+  const s = sets[sid];
+  if(!s || !Array.isArray(s.cards)) return;
+  const statsAll = loadStatsData();
+  const st = statsAll[sid];
+  const cardStats = (st && st.cardStats) || {};
+  const scored = [];
+  Object.values(cardStats).forEach(cs => {
+    if(!cs.seen || cs.correct >= cs.seen) return;
+    const full = s.cards.find(c => cardKey(c) === cardKey({front: cs.front}));
+    if(!full) return;
+    scored.push({card: full, acc: cs.correct / cs.seen});
+  });
+  scored.sort((a,b) => a.acc - b.acc);
+  const weakCards = scored.slice(0, 30).map(w => w.card);
+  if(weakCards.length < 2){
+    alert(`Not enough tracked weak spots in "${s.name}" yet — miss a few cards in this set first to build a targeted practice round.`);
+    return;
+  }
+  setInputMode(s.mode || 'classic');
+  launchQuiz(JSON.parse(JSON.stringify(weakCards)), PRACTICE_ID);
+}
 
 /* ---- Backup & restore: export everything to a downloadable JSON file, or restore from one ---- */
 function collectBackupData(){
