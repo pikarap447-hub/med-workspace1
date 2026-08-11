@@ -1499,6 +1499,38 @@ body.dark-mode .zoom-controls button:hover{
 .folder-tile.new-folder .folder-name{color:var(--tile-blue);}
 .folder-tile.unfiled{background:var(--primary-soft);}
 
+/* --- Settings: category menu + sub-pages, so Settings opens to a short
+   list instead of one long scrolling page. --- */
+.settings-menu-list{display:flex; flex-direction:column; gap:10px; margin-top:14px;}
+.settings-nav-row{
+  display:flex; align-items:center; gap:14px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  box-shadow:var(--shadow-sm);
+  padding:14px 16px;
+  cursor:pointer;
+  text-align:left;
+  width:100%;
+  font-family:var(--font);
+  transition:box-shadow .15s ease, transform .15s ease, border-color .15s ease;
+}
+.settings-nav-row:hover{transform:translateY(-2px); box-shadow:var(--shadow); border-color:var(--tile-blue-pale);}
+.settings-nav-row:active{transform:translateY(-1px) scale(.99);}
+.settings-nav-row .settings-nav-icon{
+  font-size:19px; width:36px; height:36px; flex-shrink:0;
+  border-radius:11px;
+  display:flex; align-items:center; justify-content:center;
+  background:var(--tile-blue-paler);
+}
+.settings-nav-row .settings-nav-text{flex:1; min-width:0;}
+.settings-nav-row .settings-nav-title{font-family:var(--font-display); font-weight:700; font-size:15px; color:var(--ink);}
+.settings-nav-row .settings-nav-sub{font-size:12px; color:var(--ink-soft); margin-top:2px;}
+.settings-nav-row .settings-nav-chev{font-size:18px; color:var(--ink-soft); flex-shrink:0;}
+.settings-page{margin-top:4px;}
+.settings-page .settings-page-back{margin-bottom:4px;}
+.settings-page .backup-block:first-of-type{margin-top:14px;}
+
 /* --- Landing: Continue studying + Your sets side-by-side ---
    Single column (stacked) by default so the phone layout keeps working
    exactly as before; becomes a two-up desk layout once there's room. */
@@ -2298,6 +2330,59 @@ OUTCOME: NEG
         <label class="field-label">Settings</label>
         <div class="hint" style="margin-top:0;">Background, display, and related-image options for this app.</div>
 
+        <div id="settingsMenu" class="settings-menu-list">
+          <button type="button" class="settings-nav-row" data-page="appearance">
+            <span class="settings-nav-icon">🎨</span>
+            <span class="settings-nav-text">
+              <span class="settings-nav-title">Appearance</span>
+              <span class="settings-nav-sub">Theme colors for the whole app</span>
+            </span>
+            <span class="settings-nav-chev">›</span>
+          </button>
+          <button type="button" class="settings-nav-row" data-page="display">
+            <span class="settings-nav-icon">🖼️</span>
+            <span class="settings-nav-text">
+              <span class="settings-nav-title">Background &amp; Display</span>
+              <span class="settings-nav-sub">Wallpaper, blur, and box transparency</span>
+            </span>
+            <span class="settings-nav-chev">›</span>
+          </button>
+          <button type="button" class="settings-nav-row" data-page="images">
+            <span class="settings-nav-icon">🔍</span>
+            <span class="settings-nav-text">
+              <span class="settings-nav-title">Related Images</span>
+              <span class="settings-nav-sub">Google image search on quiz cards</span>
+            </span>
+            <span class="settings-nav-chev">›</span>
+          </button>
+          <button type="button" class="settings-nav-row" data-page="controller">
+            <span class="settings-nav-icon">🎮</span>
+            <span class="settings-nav-text">
+              <span class="settings-nav-title">Controller</span>
+              <span class="settings-nav-sub">Gamepad button mapping</span>
+            </span>
+            <span class="settings-nav-chev">›</span>
+          </button>
+          <button type="button" class="settings-nav-row" data-page="backup">
+            <span class="settings-nav-icon">💾</span>
+            <span class="settings-nav-text">
+              <span class="settings-nav-title">Backup &amp; Storage</span>
+              <span class="settings-nav-sub">Export/import your data, check storage</span>
+            </span>
+            <span class="settings-nav-chev">›</span>
+          </button>
+          <button type="button" class="settings-nav-row" data-page="about">
+            <span class="settings-nav-icon">ℹ️</span>
+            <span class="settings-nav-text">
+              <span class="settings-nav-title">About</span>
+              <span class="settings-nav-sub">App version &amp; force refresh</span>
+            </span>
+            <span class="settings-nav-chev">›</span>
+          </button>
+        </div>
+
+        <div id="settingsPage-appearance" class="settings-page hidden">
+        <button type="button" class="back-link settings-page-back">← Settings</button>
         <div class="backup-block">
           <label class="field-label">Appearance theme</label>
           <div class="hint" style="margin-top:0;">Switch the app's whole look — colors, border, and headline font. Your sets, stats, and progress aren't affected either way.</div>
@@ -2352,7 +2437,10 @@ OUTCOME: NEG
             </button>
           </div>
         </div>
+        </div>
 
+        <div id="settingsPage-display" class="settings-page hidden">
+        <button type="button" class="back-link settings-page-back">← Settings</button>
         <div class="backup-block">
           <label class="field-label">Background</label>
           <div class="hint" style="margin-top:0;">Upload a custom background image or looping video (WebM). It's blurred behind the app and drives an automatic color accent.</div>
@@ -2377,7 +2465,10 @@ OUTCOME: NEG
             <span id="cardOpacityValue" style="font-weight:600; font-size:13px; min-width:34px; text-align:right;">100%</span>
           </div>
         </div>
+        </div>
 
+        <div id="settingsPage-images" class="settings-page hidden">
+        <button type="button" class="back-link settings-page-back">← Settings</button>
         <div class="backup-block">
           <label class="field-label">Related image on cards</label>
           <p class="modal-hint">
@@ -2399,7 +2490,10 @@ OUTCOME: NEG
             <span id="imgSettingsSavedNote" class="hidden" style="font-size:12.5px; color:var(--green); font-weight:600;">Saved ✓</span>
           </div>
         </div>
+        </div>
 
+        <div id="settingsPage-controller" class="settings-page hidden">
+        <button type="button" class="back-link settings-page-back">← Settings</button>
         <div class="backup-block">
           <label class="field-label">Controller button mapping</label>
           <p class="modal-hint">
@@ -2412,7 +2506,10 @@ OUTCOME: NEG
             <button class="btn-ghost" id="gpResetMapBtn">⟲ Reset to defaults</button>
           </div>
         </div>
+        </div>
 
+        <div id="settingsPage-backup" class="settings-page hidden">
+        <button type="button" class="back-link settings-page-back">← Settings</button>
         <div class="backup-block">
           <label class="field-label">Backup &amp; restore</label>
           <div class="hint" style="margin-top:0;">Your study data and your background are backed up separately. Importing a study backup will <strong>never change your current background</strong>.</div>
@@ -2437,7 +2534,10 @@ OUTCOME: NEG
             <button class="btn-ghost" id="storageCheckBtn">🔍 Check storage now</button>
           </div>
         </div>
+        </div>
 
+        <div id="settingsPage-about" class="settings-page hidden">
+        <button type="button" class="back-link settings-page-back">← Settings</button>
         <div class="backup-block">
           <label class="field-label">App version</label>
           <div class="hint" style="margin-top:0;">If a fix doesn't seem to take effect after you've updated the file on GitHub, check the version below — if it looks old, tap Force refresh to bypass any cached copy.</div>
@@ -2446,8 +2546,9 @@ OUTCOME: NEG
             <button class="btn-ghost" id="forceRefreshBtn">🔄 Force refresh</button>
           </div>
         </div>
+        </div>
 
-        <div class="row" style="margin-top:20px;">
+        <div class="row" style="margin-top:20px;" id="settingsExitRow">
           <button class="btn-ghost" id="backFromSettingsBtn">← Back</button>
         </div>
       </div>
@@ -2773,9 +2874,9 @@ function inferFolderMode(id, fallback){
   if(id === UNFILED) return fallback || 'subject';
   return /^\d+$/.test(String(id)) ? 'le' : 'subject';
 }
-let setupReturnTo = null;        // where "← Back" from setup should go: null (landing) or a folder id
-let statsReturnTo = {screen:'landing', folderId:null};
-let settingsReturnTo = {screen:'landing', folderId:null};
+let setupReturnTo = null;        // where "← Back" from setup should go: null (landing) or {screen:'folder', id, mode, cardType}
+let statsReturnTo = {screen:'landing'};
+let settingsReturnTo = {screen:'landing'};
 
 /* ---- Quiz navigation/persistence helpers ----
    Leaving the quiz via Home, Stats, or Settings is a pause/navigation action,
@@ -2811,13 +2912,30 @@ function showLanding(){
   renderLanding();
   renderRecentActivity();
 }
-function showFolder(id, mode){
+function showFolder(id, mode, cardType){
   hideAllScreens();
   currentFolderId = id;
   currentFolderMode = mode || inferFolderMode(id, currentFolderMode);
-  currentFolderCardType = null;
+  currentFolderCardType = cardType || null;
   $('folderView').classList.remove('hidden');
   renderFolderView();
+}
+// Captures the folder the user is currently browsing — including which
+// Topic Cards/Samplex sub-folder, if any — so a "← Back" from setup,
+// stats, or settings can return to exactly where they were instead of
+// resetting to the folder's root. Returns null if folder view isn't open.
+function currentFolderReturnTarget(){
+  if($('folderView').classList.contains('hidden')) return null;
+  return {screen:'folder', id: currentFolderId, mode: currentFolderMode, cardType: currentFolderCardType};
+}
+// A row action's return target is usually wherever the user currently is
+// (a folder/sub-folder) — but the search-results list passes an explicit
+// `returnTo: null` to mean "landing" instead, since a search hit isn't
+// filed under the folder currently open (if any). Explicit values (null
+// included) always win; only a genuinely omitted opts.returnTo falls back
+// to the current folder.
+function resolveReturnTarget(explicit){
+  return explicit !== undefined ? explicit : currentFolderReturnTarget();
 }
 function showSetupScreen(){
   hideAllScreens();
@@ -3211,22 +3329,20 @@ function buildSetRow(sid, s, opts){
       <button class="btn-ghost sm" data-act="del" data-id="${sid}">Delete</button>
     </div>`;
   row.querySelector('[data-act="play"]')?.addEventListener('click', () => {
-    const returnTo = opts.returnTo !== undefined ? opts.returnTo : currentFolderId;
-    const rt = returnTo === null ? {screen:'landing'} : {screen:'folder', id: returnTo};
-    const result = startCaseGame(s.algoSource || '', sid, s.name, rt);
+    const result = startCaseGame(s.algoSource || '', sid, s.name, resolveReturnTarget(opts.returnTo));
     if(!result.ok) alert(result.message);
   });
-  row.querySelector('[data-act="continue"]')?.addEventListener('click', () => { setupReturnTo = opts.returnTo !== undefined ? opts.returnTo : currentFolderId; resumeSession(sid); });
+  row.querySelector('[data-act="continue"]')?.addEventListener('click', () => { setupReturnTo = resolveReturnTarget(opts.returnTo); resumeSession(sid); });
   row.querySelector('[data-act="review"]')?.addEventListener('click', () => {
-    setupReturnTo = opts.returnTo !== undefined ? opts.returnTo : currentFolderId;
+    setupReturnTo = resolveReturnTarget(opts.returnTo);
     setInputMode(s.mode || 'classic');
     launchQuiz(JSON.parse(JSON.stringify(s.cards)), sid);
   });
   row.querySelector('[data-act="weak"]')?.addEventListener('click', () => {
-    setupReturnTo = opts.returnTo !== undefined ? opts.returnTo : currentFolderId;
+    setupReturnTo = resolveReturnTarget(opts.returnTo);
     startWeakPracticeForSet(sid);
   });
-  row.querySelector('[data-act="load"]').addEventListener('click', () => { setupReturnTo = opts.returnTo !== undefined ? opts.returnTo : currentFolderId; loadSetById(sid); });
+  row.querySelector('[data-act="load"]').addEventListener('click', () => { setupReturnTo = resolveReturnTarget(opts.returnTo); loadSetById(sid); });
   row.querySelector('[data-act="rename"]').addEventListener('click', () => renameSetById(sid));
   row.querySelector('[data-act="dup"]').addEventListener('click', () => duplicateSetById(sid));
   row.querySelector('[data-act="del"]').addEventListener('click', () => deleteSetById(sid));
@@ -4073,6 +4189,31 @@ function populateSettingsFields(){
   }catch(e){}
   $('imgSettingsSavedNote').classList.add('hidden');
 }
+
+// Settings opens to a short category menu instead of one long scrolling
+// page; each category is its own sub-page. showSettingsMenu() resets back
+// to that menu (also called whenever Settings is (re)opened), and
+// showSettingsPage(page) opens one category. The in-page "← Settings" link
+// on every sub-page always returns to the menu, not out of Settings
+// entirely — that's still what the outer "← Back" (backFromSettingsBtn) does.
+const SETTINGS_PAGE_IDS = ['appearance','display','images','controller','backup','about'];
+function showSettingsMenu(){
+  $('settingsMenu').classList.remove('hidden');
+  $('settingsExitRow').classList.remove('hidden');
+  SETTINGS_PAGE_IDS.forEach(p => $('settingsPage-' + p).classList.add('hidden'));
+}
+function showSettingsPage(page){
+  $('settingsMenu').classList.add('hidden');
+  $('settingsExitRow').classList.add('hidden');
+  SETTINGS_PAGE_IDS.forEach(p => $('settingsPage-' + p).classList.toggle('hidden', p !== page));
+}
+document.querySelectorAll('.settings-nav-row').forEach(row => {
+  row.onclick = () => showSettingsPage(row.dataset.page);
+});
+document.querySelectorAll('.settings-page-back').forEach(btn => {
+  btn.onclick = showSettingsMenu;
+});
+
 $('imgSettingsSave').onclick = () => {
   imgFeatureEnabled = $('imgFeatureToggle').checked;
   const key = $('imgApiKeyInput').value.trim();
@@ -4656,7 +4797,7 @@ function caseChoose(choice){
 function exitCaseGame(){
   caseData = null;
   if(caseReturnTo && caseReturnTo.screen === 'setup') showSetupScreen();
-  else if(caseReturnTo && caseReturnTo.screen === 'folder') showFolder(caseReturnTo.id);
+  else if(caseReturnTo && caseReturnTo.screen === 'folder') showFolder(caseReturnTo.id, caseReturnTo.mode, caseReturnTo.cardType);
   else showLanding();
 }
 
@@ -5140,7 +5281,7 @@ $('saveSetBtn').onclick = () => {
   saveSetsData(sets);
   activeSetId = id;
   pendingAlgorithm = isCase;
-  setupReturnTo = subject ? subject : UNFILED;
+  setupReturnTo = {screen:'folder', id: subject ? subject : UNFILED, mode:'subject', cardType};
   $('setupError').textContent = '';
 };
 
@@ -5189,9 +5330,8 @@ $('searchClearBtn').onclick = () => {
 
 $('folderBackBtn').onclick = () => {
   // Inside a Topic Cards / Samplex sub-folder, back goes up one level to
-  // the LE folder's sub-folder tiles, not all the way out to the landing
-  // grid.
-  if(currentFolderMode === 'le' && currentFolderCardType){
+  // the folder's sub-folder tiles, not all the way out to the landing grid.
+  if(currentFolderCardType){
     currentFolderCardType = null;
     renderFolderView();
   } else {
@@ -5201,7 +5341,7 @@ $('folderBackBtn').onclick = () => {
 $('newSetInFolderBtn').onclick = () => {
   activeSetId = null;
   pendingAlgorithm = false;
-  setupReturnTo = currentFolderId;
+  setupReturnTo = currentFolderReturnTarget();
   tableBody.innerHTML = '';
   addRow();
   $('setNameInput').value = '';
@@ -5216,7 +5356,7 @@ $('newSetInFolderBtn').onclick = () => {
   showSetupScreen();
 };
 $('setupBackBtn').onclick = () => {
-  if(setupReturnTo) showFolder(setupReturnTo);
+  if(setupReturnTo) showFolder(setupReturnTo.id, setupReturnTo.mode, setupReturnTo.cardType);
   else showLanding();
 };
 
@@ -5239,7 +5379,7 @@ $('statsToggleBtn').onclick = () => {
   if(isQuizScreenVisible()) statsReturnTo = {screen:'quiz'};
   else if(isBrainBreakVisible()) statsReturnTo = {screen:'brainBreak'};
   else if(!$('setup').classList.contains('hidden')) statsReturnTo = {screen:'setup'};
-  else if(!$('folderView').classList.contains('hidden')) statsReturnTo = {screen:'folder', folderId: currentFolderId};
+  else if(!$('folderView').classList.contains('hidden')) statsReturnTo = currentFolderReturnTarget();
   else statsReturnTo = {screen:'landing'};
 
   hideAllScreens();
@@ -5253,11 +5393,12 @@ $('settingsToggleBtn').onclick = () => {
   if(isQuizScreenVisible()) settingsReturnTo = {screen:'quiz'};
   else if(isBrainBreakVisible()) settingsReturnTo = {screen:'brainBreak'};
   else if(!$('setup').classList.contains('hidden')) settingsReturnTo = {screen:'setup'};
-  else if(!$('folderView').classList.contains('hidden')) settingsReturnTo = {screen:'folder', folderId: currentFolderId};
+  else if(!$('folderView').classList.contains('hidden')) settingsReturnTo = currentFolderReturnTarget();
   else settingsReturnTo = {screen:'landing'};
 
   hideAllScreens();
   populateSettingsFields();
+  showSettingsMenu();
   $('settingsView').classList.remove('hidden');
 };
 
@@ -5279,7 +5420,7 @@ $('backFromSettingsBtn').onclick = () => {
     $('brainBreak').classList.remove('hidden');
   }
   else if(settingsReturnTo.screen === 'setup') showSetupScreen();
-  else if(settingsReturnTo.screen === 'folder') showFolder(settingsReturnTo.folderId);
+  else if(settingsReturnTo.screen === 'folder') showFolder(settingsReturnTo.id, settingsReturnTo.mode, settingsReturnTo.cardType);
   else showLanding();
 };
 
@@ -5290,7 +5431,7 @@ $('backToSetupBtn').onclick = () => {
     $('brainBreak').classList.remove('hidden');
   }
   else if(statsReturnTo.screen === 'setup') showSetupScreen();
-  else if(statsReturnTo.screen === 'folder') showFolder(statsReturnTo.folderId);
+  else if(statsReturnTo.screen === 'folder') showFolder(statsReturnTo.id, statsReturnTo.mode, statsReturnTo.cardType);
   else showLanding();
 };
 $('resetStatsBtn').onclick = () => {
