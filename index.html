@@ -23,7 +23,12 @@
      app's actual brand system, instead of living only in decoration
      while an unrelated indigo ran the real UI. Variable names are kept as
      tile-blue-* so every existing call site cascades to the new palette
-     without needing to touch each usage individually. ---- */
+     without needing to touch each usage individually.
+
+     A second, semantic layer of tokens (--bg / --surface / --text / etc,
+     required by the design system) is layered on top and simply points
+     at the existing tile-* values — new UI should prefer the semantic
+     names, while every pre-existing component keeps working unchanged. ---- */
   :root{
     --tile-white:#F1EAD9;
     --tile-blue-deep:#2C5A42;   /* deep vine — primary actions */
@@ -41,8 +46,27 @@
     --grape:#7A4E9E;
     --card-alpha:1;
     --font:'Quicksand', sans-serif;
-    --font-display:'Quicksand', sans-serif;
+    --font-display:'Baloo 2', 'Quicksand', sans-serif;
     --font-mono:'Quicksand', sans-serif;
+
+    /* semantic layer */
+    --bg:#F7F1E1;
+    --surface:#ffffff;
+    --surface-elevated:#ffffff;
+    --text:var(--ink);
+    --text-muted:var(--ink-soft);
+    --primary:var(--tile-blue-deep);
+    --primary-soft:var(--tile-blue-paler);
+    --accent:var(--gold);
+    --success:var(--green);
+    --danger:var(--red);
+    --border:var(--tile-blue-pale);
+    --shadow:0 10px 32px rgba(30,50,40,.08);
+    --shadow-sm:0 2px 10px rgba(30,50,40,.06);
+    --radius:20px;
+    --radius-sm:12px;
+    --radius-lg:26px;
+    --nav-h:64px;
   }
 
   /* ---- Kawaii theme: an alternate palette+font+border skin, toggled in
@@ -53,38 +77,143 @@
      component-level changes needed beyond the vine-edge border tiles,
      which are raw data-URI SVGs below since they can't reference CSS
      vars. Scoped to body so it composes with dark mode's filter-invert
-     the same way the garden theme already does. ---- */
+     the same way the garden theme already does.
+
+     Rebalanced toward "cute Japanese stationery" rather than a candy
+     palette: cream base, strawberry/lavender/mint as accents rather than
+     an all-pink wash, and ink darkened for contrast. ---- */
   body.theme-kawaii{
-    --tile-white:#FFF7FB;
-    --tile-blue-deep:#FF6FA5;   /* bubblegum pink — primary actions */
-    --tile-blue:#C5789E;        /* muted rose — labels, secondary emphasis */
-    --tile-blue-mid:#FFC94A;    /* candy-gold — focus rings, highlights */
-    --tile-blue-pale:#FBD6E4;   /* pale pink — borders */
-    --tile-blue-paler:#FFF0F6;  /* blush — subtle fills */
-    --ink:#5A3A5E;
-    --ink-soft:#A186A8;
-    --gold:#FFC94A;
-    --green:#5FBF95;
-    --green-bg:#E1F7ED;
-    --red:#FF6F91;
-    --red-bg:#FFE3EA;
-    --grape:#FF8FC7;
+    --tile-white:#FFF9F6;
+    --tile-blue-deep:#E8567F;   /* strawberry — primary actions */
+    --tile-blue:#B06D93;        /* muted rose — labels, secondary emphasis */
+    --tile-blue-mid:#E3A73B;    /* butter-gold — focus rings, highlights */
+    --tile-blue-pale:#F3D8E2;   /* pale pink — borders */
+    --tile-blue-paler:#FDF1F5;  /* blush — subtle fills */
+    --ink:#4A3040;
+    --ink-soft:#8E7288;
+    --gold:#E3A73B;
+    --green:#4FAE86;
+    --green-bg:#E1F5EC;
+    --red:#E8567F;
+    --red-bg:#FBE2E9;
+    --grape:#9B7FCB;
     --font-display:'Baloo 2', 'Quicksand', sans-serif;
+    --bg:#FCF3F6;
+    --surface:#fffdfb;
+    --primary:var(--tile-blue-deep);
+    --primary-soft:var(--tile-blue-paler);
+    --accent:var(--grape);
+    --shadow:0 10px 32px rgba(180,70,110,.10);
+    --shadow-sm:0 2px 10px rgba(180,70,110,.08);
   }
-  body.theme-kawaii{ background:#FFF3F8; }
+  body.theme-kawaii{ background:var(--bg); }
+
+  /* ---- Midnight theme: the masculine/dark counterpart — deep navy +
+     slate + muted electric blue. Same variable-swap mechanism as Kawaii,
+     so every existing component repaints automatically. Deliberately
+     calmer than the built-in filter-invert dark mode; the two can still
+     be combined since dark-mode is a separate toggle. ---- */
+  body.theme-midnight{
+    --tile-white:#131A26;
+    --tile-blue-deep:#5B9CE8;   /* muted electric blue — primary actions */
+    --tile-blue:#7C93B3;        /* slate — labels, secondary emphasis */
+    --tile-blue-mid:#4FD6C0;    /* silver-teal — focus rings, highlights */
+    --tile-blue-pale:#2A3548;   /* border */
+    --tile-blue-paler:#1B2333;  /* subtle fills */
+    --ink:#E8EDF6;
+    --ink-soft:#8C99B3;
+    --gold:#E3B04B;
+    --green:#4FD6A8;
+    --green-bg:#173229;
+    --red:#E8697B;
+    --red-bg:#3A2028;
+    --grape:#8E8FE8;
+    --font-display:'Baloo 2', 'Quicksand', sans-serif;
+    --bg:#0D1420;
+    --surface:#161E2C;
+    --surface-elevated:#1B2434;
+    --primary:var(--tile-blue-deep);
+    --primary-soft:var(--tile-blue-paler);
+    --accent:var(--tile-blue-mid);
+    --shadow:0 10px 32px rgba(0,0,0,.35);
+    --shadow-sm:0 2px 10px rgba(0,0,0,.3);
+  }
+  body.theme-midnight{ background:var(--bg); }
+  body.theme-ocean{
+    --tile-white:#F5FBFC; --tile-blue-deep:#245B8F; --tile-blue:#3B7F9D; --tile-blue-mid:#46B7C9;
+    --tile-blue-pale:#C9E6EC; --tile-blue-paler:#EAF7FA; --ink:#17344A; --ink-soft:#648092;
+    --gold:#E3A84A; --green:#3E9275; --green-bg:#DDF3EB; --red:#C9575D; --red-bg:#F8E2E3;
+    --grape:#697BC4; --bg:#F1FAFC; --surface:#FFFFFF; --surface-elevated:#FFFFFF; --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--tile-blue-mid);
+    --shadow:0 10px 32px rgba(36,91,143,.10); --shadow-sm:0 2px 10px rgba(36,91,143,.07);
+  }
+  body.theme-ocean{background:var(--bg);}
+  body.theme-sunset{
+    --tile-white:#FFF8F2; --tile-blue-deep:#B84A6B; --tile-blue:#B96361; --tile-blue-mid:#E9785B;
+    --tile-blue-pale:#F2D5CA; --tile-blue-paler:#FFF0E8; --ink:#4B2E35; --ink-soft:#8C6D71;
+    --gold:#E3A64A; --green:#5A9870; --green-bg:#E5F2E7; --red:#C94C54; --red-bg:#F9E0E2; --grape:#9B6BB3;
+    --bg:#FFF7F1; --surface:#FFFDFC; --surface-elevated:#FFFDFC; --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--tile-blue-mid);
+    --shadow:0 10px 32px rgba(184,74,107,.10); --shadow-sm:0 2px 10px rgba(184,74,107,.07);
+  }
+  body.theme-sunset{background:var(--bg);}
+  body.theme-lavender{
+    --tile-white:#FBF8FF; --tile-blue-deep:#67539C; --tile-blue:#806BAF; --tile-blue-mid:#B79BE6;
+    --tile-blue-pale:#E3D9F3; --tile-blue-paler:#F7F0FF; --ink:#352A49; --ink-soft:#766B86;
+    --gold:#D9A84E; --green:#559477; --green-bg:#E3F2EA; --red:#C96575; --red-bg:#F8E2E7; --grape:#9B7FCB;
+    --bg:#F8F4FC; --surface:#FFFFFF; --surface-elevated:#FFFFFF; --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--tile-blue-mid);
+    --shadow:0 10px 32px rgba(103,83,156,.10); --shadow-sm:0 2px 10px rgba(103,83,156,.07);
+  }
+  body.theme-lavender{background:var(--bg);}
+  body.theme-monochrome{
+    --tile-white:#F7F7F7; --tile-blue-deep:#303030; --tile-blue:#555; --tile-blue-mid:#888;
+    --tile-blue-pale:#D8D8D8; --tile-blue-paler:#F1F1F1; --ink:#222; --ink-soft:#707070;
+    --gold:#666; --green:#4D7658; --green-bg:#E5EEE7; --red:#9A4A4A; --red-bg:#F4E4E4; --grape:#666;
+    --bg:#F4F4F4; --surface:#FFFFFF; --surface-elevated:#FFFFFF; --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--tile-blue-mid);
+    --shadow:0 10px 28px rgba(0,0,0,.08); --shadow-sm:0 2px 8px rgba(0,0,0,.06);
+  }
+  body.theme-monochrome{background:var(--bg);}
+  body.theme-forest{
+    --tile-white:#F5FAF5; --tile-blue-deep:#234A38; --tile-blue:#47785D; --tile-blue-mid:#B28C45;
+    --tile-blue-pale:#CFE0D3; --tile-blue-paler:#EDF5EE; --ink:#24352C; --ink-soft:#66796D;
+    --gold:#B28C45; --green:#4F8A68; --green-bg:#E1F0E5; --red:#B85B57; --red-bg:#F5E3E1; --grape:#756A98;
+    --bg:#F1F7F2; --surface:#FFFFFF; --surface-elevated:#FFFFFF; --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--gold);
+    --shadow:0 10px 32px rgba(35,74,56,.10); --shadow-sm:0 2px 10px rgba(35,74,56,.07);
+  }
+  body.theme-forest{background:var(--bg);}
+  body.theme-midnight .search-input,
+  body.theme-midnight textarea,
+  body.theme-midnight .header-title,
+  body.theme-midnight .set-item,
+  body.theme-midnight .set-stat-row,
+  body.theme-midnight .stat-tile,
+  body.theme-midnight .folder-tile,
+  body.theme-midnight .opt,
+  body.theme-midnight .edit-option-letter,
+  body.theme-midnight .card-edit-panel,
+  body.theme-midnight table.sheet td,
+  body.theme-midnight .modal-input{
+    background:var(--surface-elevated);
+  }
+  body.theme-midnight .card{ background:var(--surface); }
+  body.theme-midnight .sidebar-nav{ background:rgba(22,30,44,.75); }
+
   *{box-sizing:border-box;}
   html{-webkit-text-size-adjust:100%; text-size-adjust:100%;}
   body{
 margin:0;
 min-height:100vh;
-background:#F7F1E1;
+background:var(--bg);
 font-family:var(--font);
 color:var(--ink);
 display:flex;
 justify-content:center;
-padding:36px clamp(16px, 4vw, 48px) 116px;
+padding:28px clamp(16px, 4vw, 48px) 116px;
 overflow-x:auto;
+transition:background .25s ease, color .25s ease;
 }
+  @media (prefers-reduced-motion: reduce){
+    *, *::before, *::after{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; }
+  }
+  :focus-visible{ outline:2px solid var(--tile-blue-mid); outline-offset:2px; border-radius:6px; }
   .frame{width:100%; max-width:680px;}
   .frame.wide{max-width:1020px; min-width:0; justify-self:center; width:100%;}
 
@@ -99,68 +228,110 @@ overflow-x:auto;
     width:100%;
   }
 
+  /* ---- App shell header: a real application header rather than a
+     floating title card — small brand mark + name on the left,
+     nav/utilities on the right, wrapping to a stacked layout on narrow
+     screens. The greeting line lives above it as a soft, low-emphasis
+     eyebrow so the header itself stays compact (section 1 of the brief:
+     header should not be excessively tall). ---- */
+  .header{
+    display:flex;
+    flex-direction:row;
+    align-items:center;
+    justify-content:space-between;
+    gap:14px;
+    width:100%;
+    margin-bottom:26px;
+    flex-wrap:wrap;
+  }
+  .header-title{
+    text-align:left;
+    max-width:100%;
+    display:flex;
+    align-items:center;
+    gap:12px;
+  }
+  .header-mark{
+    flex-shrink:0;
+    width:42px; height:42px;
+    border-radius:13px;
+    background:linear-gradient(155deg, var(--tile-blue-deep), var(--tile-blue-mid));
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px;
+    box-shadow:0 4px 14px rgba(0,0,0,.14);
+  }
+  .header-title-text{ min-width:0; }
+  .header .eyebrow{
+    font-family:var(--font);
+    font-size:12.5px;
+    letter-spacing:.01em;
+    color:var(--ink-soft);
+    font-weight:600;
+    display:block;
+  }
+  .header h1{
+    font-family:var(--font-display);
+    font-optical-sizing:auto;
+    font-weight:700;
+    font-size:23px;
+    margin:1px 0 0;
+    color:var(--ink);
+    max-width:100%;
+    overflow-wrap:break-word;
+    line-height:1.15;
+  }
+
   .sidebar-nav{
-    display:flex; flex-direction:row; flex-wrap:wrap; gap:4px;
+    display:flex; flex-direction:row; flex-wrap:wrap; gap:2px;
     justify-content:center;
-    background:rgba(255,255,255,.55);
-    backdrop-filter:blur(10px);
-    -webkit-backdrop-filter:blur(10px);
-    border:1px solid var(--tile-blue-pale);
+    background:var(--surface);
+    border:1px solid var(--border);
     border-radius:16px;
-    padding:5px;
-    box-shadow:0 6px 18px rgba(0,0,0,.06);
+    padding:4px;
+    box-shadow:var(--shadow-sm);
+    transition:background .2s ease, border-color .2s ease;
   }
   .sidebar-nav .stats-toggle{
     display:flex;
     align-items:center;
     justify-content:center;
-    gap:7px;
-    border-radius:11px;
-    padding:9px 16px !important;
+    gap:6px;
+    border-radius:12px;
+    padding:9px 15px !important;
     font-size:13px !important;
+    font-weight:700 !important;
     background:transparent !important;
     border:none !important;
-    backdrop-filter:none !important;
-    -webkit-backdrop-filter:none !important;
-    color:var(--tile-blue-deep);
-    transition:background .15s ease, transform .08s ease;
+    color:var(--text-muted);
+    transition:background .15s ease, color .15s ease, transform .08s ease;
+    min-height:38px;
   }
-  .sidebar-nav .stats-toggle:hover{background:var(--tile-blue-paler) !important;}
+  .sidebar-nav .stats-toggle:hover{background:var(--primary-soft) !important; color:var(--primary);}
   .sidebar-nav .stats-toggle:active{transform:scale(.97);}
+  .sidebar-nav .stats-toggle.active{
+    background:var(--primary) !important;
+    color:#fff !important;
+    box-shadow:0 3px 10px rgba(0,0,0,.18);
+  }
 
-  .header{
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    gap:14px;
-    margin-bottom:28px;
+  .app-greeting{
+    width:100%;
+    font-size:12.5px;
+    font-weight:600;
+    color:var(--text-muted);
+    margin:0 0 4px;
+    letter-spacing:.01em;
   }
-  .header-title{
-    text-align:center;
-    max-width:100%;
-    padding:10px 22px 12px;
-    border-radius:14px;
-    background:#FFFDF6;
-    position:relative;
+  /* Compact top nav on small screens: full-width pill row under the
+     title, icons kept with labels (brief requires nav stay usable with
+     long deck names) rather than switching to icon-only, since a fixed
+     bottom bar risks overlapping the existing zoom/dark-mode toolbar
+     that already anchors the bottom-left corner. */
+  @media (max-width:520px){
+    .header{ flex-direction:column; align-items:stretch; }
+    .sidebar-nav{ width:100%; }
+    .sidebar-nav .stats-toggle{ flex:1; padding:9px 6px !important; font-size:12px !important; }
   }
-  .header .eyebrow{
-font-family:var(--font-mono);
-font-size:11px;
-letter-spacing:.14em;
-text-transform:uppercase;
-color:var(--green);
-font-weight:600;
-}
-  .header h1{
-font-family:var(--font-display);
-font-optical-sizing:auto;
-font-weight:600;
-font-size:30px;
-margin:4px 0 0;
-color:var(--ink);
-max-width:100%;
-overflow-wrap:break-word;
-}
 
   .tile-border{display:none;}
 .tile-border.bottom{display:none;}
@@ -170,12 +341,15 @@ overflow-wrap:break-word;
     max-width:100%;
     background:rgba(255,255,255,var(--card-alpha));
     color:var(--ink);
-    box-shadow:0 8px 28px rgba(0,0,0,.07);
+    box-shadow:var(--shadow);
     position:relative;
-    border-radius:26px;
+    border-radius:var(--radius-lg);
     overflow:hidden;
+    border:1px solid var(--border);
+    transition:background .2s ease, border-color .2s ease, box-shadow .2s ease;
   }
-  .card-inner{padding:40px 44px 36px; position:relative; z-index:1; min-width:0; max-width:100%;}
+  body.theme-midnight .card{ background:rgba(22,30,44,var(--card-alpha)); }
+  .card-inner{padding:32px clamp(20px,4vw,44px) 32px; position:relative; z-index:1; min-width:0; max-width:100%;}
 
   textarea{
     width:100%;
@@ -375,11 +549,13 @@ overflow-wrap:break-word;
     cursor:pointer;
     transition:transform .08s ease;
   }
+  button{ transition:transform .1s ease, background .15s ease, border-color .15s ease, box-shadow .15s ease; }
   button:active{transform:scale(.97);}
-  .btn-primary{background:var(--tile-blue-deep); color:#fff;}
-  .btn-primary:hover{background:var(--ink);}
+  .btn-primary{background:var(--tile-blue-deep); color:#fff; box-shadow:0 4px 14px rgba(0,0,0,.14);}
+  .btn-primary:hover{background:var(--ink); transform:translateY(-1px);}
+  .btn-primary:active{transform:scale(.97);}
   .btn-ghost{background:transparent; color:var(--tile-blue); border:1.5px solid var(--tile-blue-pale);}
-  .btn-ghost:hover{background:#FBF7EC;}
+  .btn-ghost:hover{background:var(--primary-soft); border-color:var(--tile-blue-mid);}
   .btn-sample{background:none; border:none; color:var(--tile-blue-deep); text-decoration:underline; font-weight:600; font-size:13px; padding:0; cursor:pointer;}
 
   .input-tabs{display:flex; gap:4px; background:var(--tile-blue-paler); border:1px solid var(--tile-blue-pale); border-radius:12px; padding:4px; margin-bottom:14px;}
@@ -401,7 +577,7 @@ overflow-wrap:break-word;
     margin-bottom:8px;
   }
   .progress-track{
-    height:6px; background:var(--tile-blue-paler); border-radius:3px; overflow:hidden; margin-bottom:22px;
+    height:8px; background:var(--tile-blue-paler); border-radius:999px; overflow:hidden; margin-bottom:22px;
   }
   .brain-break-countdown{
     position:fixed; left:18px; bottom:18px; z-index:99999;
@@ -421,7 +597,7 @@ overflow-wrap:break-word;
     background:rgba(30,30,35,.95); border-color:#3a3a42; color:#e8e8f0;
   }
   body.dark-mode .brain-break-countdown .bb-step{ background:#2a2a32; border-color:#e8e8f0; }
-  .progress-fill{height:100%; background:var(--green);}
+  .progress-fill{height:100%; background:linear-gradient(90deg, var(--tile-blue-mid), var(--green)); border-radius:999px; transition:width .4s cubic-bezier(.34,1.1,.4,1);}
 
   .index-no{
     font-family:var(--font-mono);
@@ -471,33 +647,37 @@ overflow-wrap:break-word;
   .options{display:flex; flex-direction:column; gap:10px; margin-bottom:6px;}
   .opt{
     text-align:left;
-    background:#FBF7EC;
+    background:var(--primary-soft);
     border:1.5px solid var(--tile-blue-pale);
     color:var(--ink);
-    padding:13px 16px;
-    border-radius:12px;
+    padding:14px 16px;
+    border-radius:14px;
     font-size:14.5px;
     font-family:var(--font);
     font-weight:500;
     cursor:pointer;
     display:flex;
     gap:10px;
+    transition:border-color .12s ease, background .12s ease, transform .1s ease;
   }
-  .opt:hover:not(:disabled){border-color:var(--tile-blue-mid); background:#DDEEF3;}
+  .opt:hover:not(:disabled){border-color:var(--tile-blue-mid); background:var(--surface); transform:translateY(-1px);}
   .opt .letter{
     font-family:var(--font);
     color:var(--tile-blue);
     font-weight:700;
   }
-  .opt.correct{background:var(--green-bg); border-color:var(--green); color:#284D38;}
-  .opt.wrong{background:var(--red-bg); border-color:var(--red); color:#6B2A21;}
+  .opt.correct{background:var(--green-bg); border-color:var(--green); color:#284D38; animation:optPop .25s ease;}
+  .opt.wrong{background:var(--red-bg); border-color:var(--red); color:#6B2A21; animation:optShake .3s ease;}
   .opt:disabled{cursor:default;}
+  @keyframes optPop{ 0%{transform:scale(.98);} 60%{transform:scale(1.01);} 100%{transform:scale(1);} }
+  @keyframes optShake{ 0%,100%{transform:translateX(0);} 25%{transform:translateX(-3px);} 75%{transform:translateX(3px);} }
+  @media (prefers-reduced-motion: reduce){ .opt.correct, .opt.wrong{ animation:none; } }
 
   .tip-box{
     margin-top:18px;
     padding:14px 16px;
-    background:#f8f5e9;
-    border-left:3px solid #d4b25c;
+    background:var(--primary-soft);
+    border-left:3px solid var(--gold);
     border-radius:0 12px 12px 0;
     font-size:13.5px;
     line-height:1.55;
@@ -519,6 +699,11 @@ overflow-wrap:break-word;
   }
   .footer-row{
     display:flex; justify-content:space-between; align-items:center; margin-top:22px;
+    flex-wrap:wrap; gap:10px;
+  }
+  @media (max-width:420px){
+    .footer-row{ flex-direction:column-reverse; align-items:stretch; }
+    .footer-row button{ width:100%; }
   }
   .score-tag{font-family:var(--font); font-weight:600; font-size:12px; color:var(--ink-soft);}
 
@@ -652,7 +837,7 @@ overflow-wrap:break-word;
   }
   .vine-edge{
     position:absolute;
-    opacity:.65;
+    opacity:.5;
   }
   .vine-edge-top, .vine-edge-bottom{
     left:0; right:0; height:18px;
@@ -703,6 +888,24 @@ overflow-wrap:break-word;
      staying purple). */
   body.theme-kawaii #vineGrand circle[fill="#C9A8DE"]{
     fill:#FFD9EC;
+  }
+  /* Midnight border skin: same wave geometry, silvery-teal instead of
+     leaf green so it reads as frost/circuitry rather than clashing with
+     the dark navy surface. */
+  body.theme-midnight .vine-edge-top{
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='76' height='18'><path d='M0,9 Q9.5,2 19,9 T38,9 T57,9 T76,9' stroke='%234FD6C0' stroke-width='2' fill='none'/><circle cx='14' cy='6' r='2.6' fill='%235B9CE8'/><circle cx='52' cy='6' r='2.6' fill='%234FD6C0'/></svg>");
+  }
+  body.theme-midnight .vine-edge-bottom{
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='76' height='18'><path d='M0,9 Q9.5,16 19,9 T38,9 T57,9 T76,9' stroke='%234FD6C0' stroke-width='2' fill='none'/><circle cx='14' cy='12' r='2.6' fill='%234FD6C0'/><circle cx='52' cy='12' r='2.6' fill='%235B9CE8'/></svg>");
+  }
+  body.theme-midnight .vine-edge-left{
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='76'><path d='M8,0 Q1.5,9.5 8,19 T8,38 T8,57 T8,76' stroke='%234FD6C0' stroke-width='2' fill='none'/><circle cx='5' cy='14' r='2.4' fill='%235B9CE8'/><circle cx='5' cy='52' r='2.4' fill='%234FD6C0'/></svg>");
+  }
+  body.theme-midnight .vine-edge-right{
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='76'><path d='M8,0 Q14.5,9.5 8,19 T8,38 T8,57 T8,76' stroke='%234FD6C0' stroke-width='2' fill='none'/><circle cx='11' cy='14' r='2.4' fill='%234FD6C0'/><circle cx='11' cy='52' r='2.4' fill='%235B9CE8'/></svg>");
+  }
+  body.theme-midnight #vineGrand circle[fill="#C9A8DE"]{
+    fill:#8E8FE8;
   }
   .vine-cluster{
     position:absolute;
@@ -1000,6 +1203,41 @@ body.dark-mode .zoom-controls button:hover{
 .num-input:focus{outline:2px solid var(--tile-blue-mid); outline-offset:1px;}
 
 .switch-row{display:flex; align-items:center; gap:10px; cursor:pointer; user-select:none;}
+.theme-preview-row{ display:grid; grid-template-columns:repeat(auto-fit, minmax(120px,1fr)); gap:10px; margin-top:12px; }
+.theme-preview-card{
+  position:relative;
+  display:flex; flex-direction:column; align-items:flex-start; gap:6px;
+  background:var(--surface);
+  border:1.5px solid var(--border);
+  border-radius:var(--radius-sm);
+  padding:12px 12px 14px;
+  cursor:pointer;
+  text-align:left;
+  transition:border-color .15s ease, transform .12s ease, box-shadow .15s ease;
+}
+.theme-preview-card:hover{ transform:translateY(-2px); box-shadow:var(--shadow-sm); }
+.theme-preview-swatch{
+  width:100%; height:30px; border-radius:9px; display:block;
+}
+.swatch-garden{ background:linear-gradient(135deg,#DCD2B4,#3E7A5C,#C9A24E); }
+.swatch-kawaii{ background:linear-gradient(135deg,#FDF1F5,#E8567F,#E3A73B); }
+.swatch-midnight{ background:linear-gradient(135deg,#0D1420,#5B9CE8,#4FD6C0); }
+.swatch-ocean{ background:linear-gradient(135deg,#EAF7FA,#3B9AB0,#245B8F); }
+.swatch-sunset{ background:linear-gradient(135deg,#FFF1E8,#E9785B,#B84A6B); }
+.swatch-lavender{ background:linear-gradient(135deg,#F7F0FF,#9B7FCB,#67539C); }
+.swatch-monochrome{ background:linear-gradient(135deg,#F5F5F5,#888,#222); }
+.swatch-forest{ background:linear-gradient(135deg,#EEF6EF,#4F8A68,#234A38); }
+.theme-preview-name{ font-family:var(--font-display); font-weight:700; font-size:13.5px; color:var(--text); }
+.theme-preview-desc{ font-size:11px; color:var(--text-muted); font-weight:600; }
+.theme-preview-check{
+  position:absolute; top:10px; right:10px;
+  width:20px; height:20px; border-radius:50%;
+  background:var(--tile-blue-deep); color:#fff;
+  font-size:11px; font-weight:700;
+  display:none; align-items:center; justify-content:center;
+}
+.theme-preview-card.active{ border-color:var(--tile-blue-deep); box-shadow:0 0 0 3px var(--primary-soft); }
+.theme-preview-card.active .theme-preview-check{ display:flex; }
 .theme-swatch-btn{
   font-weight:700;
   transition:background .15s ease, border-color .15s ease, color .15s ease;
@@ -1073,20 +1311,29 @@ body.dark-mode .zoom-controls button:hover{
   width:100%;
   font-family:var(--font);
   font-size:14px;
-  padding:13px 42px;
-  border:1.5px solid transparent;
+  padding:13px 42px 13px 42px;
+  border:1.5px solid var(--border);
   border-radius:14px;
-  background:#fff;
+  background:var(--surface);
   color:var(--ink);
-  box-shadow:0 2px 8px rgba(44,90,66,.06);
+  box-shadow:var(--shadow-sm);
+  transition:border-color .12s ease, box-shadow .12s ease, background .2s ease;
 }
-.search-input:focus{outline:2px solid var(--tile-blue-mid); outline-offset:1px;}
+.search-input:focus{outline:none; border-color:var(--tile-blue-mid); box-shadow:0 0 0 3px var(--primary-soft);}
 .landing-toolbar{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:20px; width:100%;}
 .search-wrap{position:relative; flex:1 1 auto; min-width:150px;}
 .search-icon{
   position:absolute; left:14px; top:50%; transform:translateY(-50%);
   font-size:14px; opacity:.5; pointer-events:none;
 }
+.search-kbd-hint{
+  position:absolute; right:10px; top:50%; transform:translateY(-50%);
+  font-family:var(--font-mono); font-size:11px; font-weight:700; color:var(--text-muted);
+  background:var(--primary-soft); border:1px solid var(--border); border-radius:6px;
+  padding:2px 6px; pointer-events:none; letter-spacing:.02em;
+}
+.search-wrap:focus-within .search-kbd-hint,
+.search-wrap:has(.search-clear:not(.hidden)) .search-kbd-hint{ display:none; }
 .search-clear{
   position:absolute; right:8px; top:50%; transform:translateY(-50%);
   width:24px; height:24px; border-radius:50%; border:none;
@@ -1095,6 +1342,17 @@ body.dark-mode .zoom-controls button:hover{
   display:flex; align-items:center; justify-content:center;
 }
 .search-clear:hover{background:var(--tile-blue-pale);}
+#searchResults{
+  display:flex; flex-direction:column; gap:8px;
+  margin-bottom:20px;
+  padding:10px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  box-shadow:var(--shadow-sm);
+  max-height:420px;
+  overflow:auto;
+}
 .folder-tile{position:relative;}
 .folder-tile .paused-dot{
   position:absolute;
@@ -1111,6 +1369,15 @@ body.dark-mode .zoom-controls button:hover{
 }
 .saved-sets-list{display:flex; flex-direction:column; gap:8px; max-height:220px; overflow:auto;}
 .no-sets{font-size:13px; color:var(--ink-soft); padding:6px 2px;}
+.empty-state{
+  display:flex; flex-direction:column; align-items:center; text-align:center;
+  gap:4px; padding:36px 20px !important;
+  border:1.5px dashed var(--border); border-radius:var(--radius-sm);
+  background:var(--primary-soft);
+}
+.empty-state-icon{ font-size:28px; margin-bottom:4px; }
+.empty-state-line{ font-family:var(--font-display); font-weight:700; font-size:15px; color:var(--text); }
+.empty-state-sub{ font-size:12.5px; color:var(--text-muted); max-width:320px; }
 .set-item, .set-stat-row{
   display:flex; justify-content:space-between; align-items:center;
   gap:10px;
@@ -1153,22 +1420,24 @@ body.dark-mode .zoom-controls button:hover{
   margin:10px 0 22px;
 }
 .stat-tile{
-  background:var(--tile-blue-paler);
+  background:var(--primary-soft);
   border:1px solid var(--tile-blue-pale);
-  border-radius:16px;
-  padding:14px;
+  border-radius:var(--radius-sm);
+  padding:16px 14px;
   text-align:center;
+  transition:transform .12s ease, box-shadow .12s ease;
 }
-.stat-num{font-family:var(--font-mono); font-weight:700; font-size:25px; color:var(--tile-blue-deep);}
+.stat-tile:hover{ transform:translateY(-2px); box-shadow:var(--shadow-sm); }
+.stat-num{font-family:var(--font-display); font-weight:700; font-size:26px; color:var(--tile-blue-deep);}
 .stat-label{font-size:11.5px; color:var(--ink-soft); font-weight:600; margin-top:2px; text-transform:uppercase; letter-spacing:.05em;}
 .stats-section-title{
-  font-family:var(--font-mono); font-weight:600; font-size:12px;
-  letter-spacing:.07em; text-transform:uppercase; color:var(--tile-blue);
-  margin:22px 0 10px;
+  font-family:var(--font); font-weight:700; font-size:13px;
+  letter-spacing:.02em; color:var(--ink);
+  margin:24px 0 10px;
 }
 .set-stat-row{flex-direction:column; align-items:stretch; gap:8px;}
-.acc-bar-wrap{height:6px; background:#F3EDDC; border-radius:3px; overflow:hidden;}
-.acc-bar-fill{height:100%; background:var(--tile-blue-mid);}
+.acc-bar-wrap{height:6px; background:var(--tile-blue-paler); border-radius:3px; overflow:hidden;}
+.acc-bar-fill{height:100%; background:linear-gradient(90deg, var(--tile-blue-mid), var(--tile-blue-deep)); border-radius:3px; transition:width .4s ease;}
 
 /* --- Landing & folders --- */
 .landing-intro{font-size:12.5px; color:var(--ink-soft); line-height:1.5; margin:0 0 16px;}
@@ -1180,29 +1449,43 @@ body.dark-mode .zoom-controls button:hover{
   margin-bottom:8px;
 }
 .folder-tile{
-  background:#fff;
-  border:none;
-  border-top:4px solid var(--tab-color, var(--tile-blue-pale));
-  border-radius:6px 6px 16px 16px;
-  box-shadow:0 2px 10px rgba(0,0,0,.05);
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  box-shadow:var(--shadow-sm);
   padding:16px 16px 18px;
   cursor:pointer;
   text-align:left;
   display:flex;
   flex-direction:column;
-  gap:6px;
-  transition:box-shadow .12s ease, background .12s ease, transform .12s ease;
+  gap:8px;
+  position:relative;
+  overflow:hidden;
+  transition:box-shadow .15s ease, background .15s ease, transform .15s ease, border-color .15s ease;
 }
-.folder-tile:hover{background:#FAF6EA; transform:translateY(-1px); box-shadow:0 4px 14px rgba(0,0,0,.08);}
-.folder-tile .folder-icon{font-size:22px;}
+.folder-tile::before{
+  content:'';
+  position:absolute; top:0; left:0; right:0; height:4px;
+  background:var(--tab-color, var(--tile-blue-pale));
+  border-radius:var(--radius-sm) var(--radius-sm) 0 0;
+}
+.folder-tile:hover{transform:translateY(-3px); box-shadow:var(--shadow); border-color:var(--tab-color, var(--tile-blue-pale));}
+.folder-tile:active{transform:translateY(-1px) scale(.99);}
+.folder-tile .folder-icon{
+  font-size:19px;
+  width:36px; height:36px;
+  border-radius:11px;
+  display:flex; align-items:center; justify-content:center;
+  background:color-mix(in srgb, var(--tab-color, var(--tile-blue)) 16%, var(--surface));
+}
 .folder-tile .folder-tab-chip{
   display:flex; align-items:center; gap:5px;
   font-family:var(--font-mono); font-weight:700; font-size:10px; letter-spacing:.08em;
   color:var(--tab-color, var(--tile-blue)); text-transform:uppercase;
 }
 .folder-tile .tab-dot{width:7px; height:7px; border-radius:50%; background:var(--tab-color, var(--tile-blue));}
-.folder-tile .folder-name{font-family:var(--font-display); font-weight:600; font-size:16px; color:var(--ink); word-break:break-word;}
-.folder-tile .folder-meta{font-size:11.5px; color:var(--ink-soft); font-weight:600; font-family:var(--font-mono);}
+.folder-tile .folder-name{font-family:var(--font-display); font-weight:700; font-size:16px; color:var(--ink); word-break:break-word;}
+.folder-tile .folder-meta{font-size:11.5px; color:var(--ink-soft); font-weight:600; font-family:var(--font);}
 .folder-tile.new-folder{
   border-style:dashed;
   align-items:center;
@@ -1210,9 +1493,11 @@ body.dark-mode .zoom-controls button:hover{
   text-align:center;
   color:var(--tile-blue);
   background:transparent;
+  box-shadow:none;
 }
+.folder-tile.new-folder::before{ display:none; }
 .folder-tile.new-folder .folder-name{color:var(--tile-blue);}
-.folder-tile.unfiled{background:var(--tile-blue-paler);}
+.folder-tile.unfiled{background:var(--primary-soft);}
 
 /* --- Landing: Continue studying + Your sets side-by-side ---
    Single column (stacked) by default so the phone layout keeps working
@@ -1228,7 +1513,7 @@ body.dark-mode .zoom-controls button:hover{
 }
 .landing-columns.no-recent{grid-template-columns:minmax(0,1fr);}
 @media (min-width:720px){
-  .landing-columns{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:44px;}
+  .landing-columns{grid-template-columns:minmax(0,1.08fr) minmax(0,1fr); gap:28px;}
 }
 /* Grid/flex children must be allowed to shrink. Without this, a long set
    title can contribute its min-content width all the way up to the landing
@@ -1253,6 +1538,7 @@ body.dark-mode .zoom-controls button:hover{
 .recent-activity-list{
   display:flex;
   flex-direction:column;
+  gap:10px;
 }
 .recent-item{
   display:flex;
@@ -1261,7 +1547,7 @@ body.dark-mode .zoom-controls button:hover{
   width:100%;
   border-bottom:1px solid var(--tile-blue-paler);
 }
-.recent-item:last-child{border-bottom:none;}
+.recent-item:not(.recent-item-hero):last-child{border-bottom:none;}
 .recent-item-btn{
   display:flex;
   min-width:0;
@@ -1280,6 +1566,128 @@ body.dark-mode .zoom-controls button:hover{
 }
 .recent-item-btn:hover{background:var(--tile-blue-paler);}
 .recent-item-btn:hover .recent-item-icon{background:#fff;}
+
+/* Hero treatment: the first "continue studying" item is the dominant
+   action on the home screen (brief section 3) — a full card with its
+   own progress bar and CTA, rather than being visually equal to the
+   compact rows underneath it. */
+.recent-item-hero{
+  border-bottom:none;
+  display:block;
+  border-radius:var(--radius-sm);
+  background:linear-gradient(155deg, var(--tile-blue-deep), color-mix(in srgb, var(--tile-blue-deep) 65%, var(--tile-blue-mid)));
+  box-shadow:var(--shadow);
+  overflow:hidden;
+  margin-bottom:2px;
+}
+.recent-item-hero .recent-item-btn{
+  width:100%;
+  flex-direction:column;
+  align-items:stretch;
+  gap:10px;
+  padding:16px 18px 15px;
+  border-radius:0;
+}
+.recent-item-hero .recent-item-btn:hover{ background:rgba(255,255,255,.08); }
+.recent-item-hero .recent-item-top{ display:flex; align-items:center; gap:12px; }
+.recent-item-hero .recent-item-icon{ background:rgba(255,255,255,.16); width:40px; height:40px; font-size:18px; }
+.recent-item-hero .recent-item-name{ color:#fff; font-size:16px; -webkit-line-clamp:2; }
+.recent-item-hero .recent-item-meta{ color:rgba(255,255,255,.78); }
+.recent-item-hero .recent-item-time{ color:rgba(255,255,255,.65); }
+.continue-heading{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:5px;
+}
+.continue-heading .field-label{margin-bottom:0;}
+.streak-pill{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:6px 10px;
+  border-radius:999px;
+  background:var(--surface);
+  border:1px solid var(--border);
+  color:var(--ink);
+  box-shadow:var(--shadow-sm);
+  font-size:11px;
+  font-weight:800;
+  white-space:nowrap;
+}
+.streak-pill .streak-flame{font-size:13px; line-height:1;}
+.streak-pill .streak-count{color:var(--tile-blue-deep);}
+.continue-hero-bottom{
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:10px;
+  margin-top:0;
+}
+.streak-mini{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:7px 10px;
+  border-radius:12px;
+  background:rgba(255,255,255,.11);
+  border:1px solid rgba(255,255,255,.15);
+  color:#fff;
+}
+.streak-mini-icon{
+  width:26px;
+  height:26px;
+  border-radius:9px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:rgba(255,255,255,.14);
+  font-size:15px;
+}
+.streak-mini-copy{display:flex;flex-direction:column;gap:1px;}
+.streak-mini-label{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:800;color:rgba(255,255,255,.68);}
+.streak-mini-value{font-size:12.5px;font-weight:800;color:#fff;}
+.streak-mini-sub{font-size:9.5px;color:rgba(255,255,255,.62);font-weight:600;}
+@media (max-width:520px){
+  .continue-hero-bottom{align-items:stretch; flex-direction:column;}
+  .streak-mini{width:100%;}
+}
+.recent-item-hero .hero-progress-track{
+  height:7px; border-radius:999px; background:rgba(255,255,255,.22); overflow:hidden; margin-top:2px;
+}
+.recent-item-hero .hero-progress-fill{
+  height:100%; border-radius:999px; background:#fff; transition:width .4s ease;
+}
+.recent-item-hero .hero-progress-label{
+  display:flex; justify-content:space-between; font-size:11px; font-weight:700;
+  color:rgba(255,255,255,.85); text-transform:uppercase; letter-spacing:.05em;
+}
+.recent-item-hero .recent-item-cta{
+  align-self:auto;
+  color:#fff;
+  font-size:13px;
+  background:rgba(255,255,255,.16);
+  padding:7px 14px;
+  border-radius:999px;
+}
+.streak-status-line{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin:2px 2px 0;
+  font-size:10.5px;
+  font-weight:700;
+  color:var(--ink-soft);
+}
+.streak-status-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex:0 0 auto;}
+@media (max-width:520px){
+  .recent-item-hero .recent-item-btn{padding:14px;}
+  .continue-hero-bottom{flex-direction:row; align-items:center;}
+  .streak-mini{flex:1; min-width:0;}
+  .recent-item-hero .recent-item-cta{flex:0 0 auto;}
+}
+body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--tile-blue-deep), #223554); }
 .recent-item-discard{
   flex-shrink:0;
   width:28px;
@@ -1361,7 +1769,8 @@ body.dark-mode .zoom-controls button:hover{
 .folder-header-row{
   display:flex; justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:16px;
 }
-.landing-col-folders .folder-header-row{ margin-bottom:2px; align-items:center; }
+.landing-col-folders .folder-header-row{ margin-bottom:6px; align-items:center; }
+.landing-col-folders .landing-intro{margin-bottom:14px;}
 .sort-select{
   font-family:var(--font);
   font-weight:600;
@@ -1444,13 +1853,16 @@ body.dark-mode .zoom-controls button:hover{
   <div class="frame wide">
   <div class="header">
     <div class="header-title">
-      <div class="eyebrow">Study set</div>
-      <h1>Topic Review</h1>
+      <span class="header-mark" aria-hidden="true">🌱</span>
+      <div class="header-title-text">
+        <span class="eyebrow" id="headerGreeting">Good morning 👋</span>
+        <h1>Topic Review</h1>
+      </div>
     </div>
-    <nav class="sidebar-nav">
-      <button class="btn-ghost stats-toggle" id="homeBtn" title="Home">🏠 Home</button>
-      <button class="btn-ghost stats-toggle" id="statsToggleBtn" title="Stats">📊 Stats</button>
-      <button class="btn-ghost stats-toggle" id="settingsToggleBtn" title="Settings">⚙️ Settings</button>
+    <nav class="sidebar-nav" aria-label="Main navigation">
+      <button class="btn-ghost stats-toggle" id="homeBtn" title="Home" aria-label="Home">🏠 <span>Home</span></button>
+      <button class="btn-ghost stats-toggle" id="statsToggleBtn" title="Stats" aria-label="Stats">📊 <span>Stats</span></button>
+      <button class="btn-ghost stats-toggle" id="settingsToggleBtn" title="Settings" aria-label="Settings">⚙️ <span>Settings</span></button>
     </nav>
   </div>
 
@@ -1525,7 +1937,8 @@ body.dark-mode .zoom-controls button:hover{
         <div class="landing-toolbar">
           <div class="search-wrap">
             <span class="search-icon">🔍</span>
-            <input type="text" id="deckSearchInput" class="search-input" placeholder="Search all your sets by name…">
+            <input type="text" id="deckSearchInput" class="search-input" placeholder="Search sets, subjects, topics…">
+            <span class="search-kbd-hint" id="searchKbdHint" aria-hidden="true">⌘K</span>
             <button type="button" class="search-clear hidden" id="searchClearBtn" title="Clear search">✕</button>
           </div>
           <div class="landing-actions">
@@ -1536,7 +1949,13 @@ body.dark-mode .zoom-controls button:hover{
         <div id="searchResults" class="hidden"></div>
         <div id="landingColumns" class="landing-columns">
           <div id="recentActivityWrap" class="landing-col-recent hidden">
-            <label class="field-label">Continue studying</label>
+            <div class="continue-heading">
+              <label class="field-label">Continue studying</label>
+              <div class="streak-pill" id="dailyStreakPill" aria-label="Daily study streak">
+                <span class="streak-flame">🔥</span>
+                <span><span class="streak-count" id="dailyStreakCount">0</span> day streak</span>
+              </div>
+            </div>
             <p class="landing-intro">Pick up where you left off.</p>
             <div class="recent-activity-list" id="recentActivityList"></div>
           </div>
@@ -1883,9 +2302,55 @@ OUTCOME: NEG
         <div class="backup-block">
           <label class="field-label">Appearance theme</label>
           <div class="hint" style="margin-top:0;">Switch the app's whole look — colors, border, and headline font. Your sets, stats, and progress aren't affected either way.</div>
-          <div class="row" id="themeSwatchRow" style="gap:10px; margin-top:10px;">
-            <button type="button" class="btn-ghost theme-swatch-btn" id="themeGardenBtn" data-theme="garden">🌿 Garden</button>
-            <button type="button" class="btn-ghost theme-swatch-btn" id="themeKawaiiBtn" data-theme="kawaii">🎀 Kawaii</button>
+          <div class="theme-preview-row" id="themeSwatchRow">
+            <button type="button" class="theme-preview-card" id="themeGardenBtn" data-theme="garden">
+              <span class="theme-preview-swatch swatch-garden" aria-hidden="true"></span>
+              <span class="theme-preview-name">🌿 Garden</span>
+              <span class="theme-preview-desc">sage &amp; gold</span>
+              <span class="theme-preview-check">✓</span>
+            </button>
+            <button type="button" class="theme-preview-card" id="themeKawaiiBtn" data-theme="kawaii">
+              <span class="theme-preview-swatch swatch-kawaii" aria-hidden="true"></span>
+              <span class="theme-preview-name">🎀 Kawaii</span>
+              <span class="theme-preview-desc">pink &amp; cream</span>
+              <span class="theme-preview-check">✓</span>
+            </button>
+            <button type="button" class="theme-preview-card" id="themeMidnightBtn" data-theme="midnight">
+              <span class="theme-preview-swatch swatch-midnight" aria-hidden="true"></span>
+              <span class="theme-preview-name">🌌 Midnight</span>
+              <span class="theme-preview-desc">navy &amp; blue</span>
+              <span class="theme-preview-check">✓</span>
+            </button>
+            <button type="button" class="theme-preview-card" id="themeOceanBtn" data-theme="ocean">
+              <span class="theme-preview-swatch swatch-ocean" aria-hidden="true"></span>
+              <span class="theme-preview-name">🌊 Ocean</span>
+              <span class="theme-preview-desc">teal &amp; blue</span>
+              <span class="theme-preview-check">✓</span>
+            </button>
+            <button type="button" class="theme-preview-card" id="themeSunsetBtn" data-theme="sunset">
+              <span class="theme-preview-swatch swatch-sunset" aria-hidden="true"></span>
+              <span class="theme-preview-name">🌅 Sunset</span>
+              <span class="theme-preview-desc">coral &amp; rose</span>
+              <span class="theme-preview-check">✓</span>
+            </button>
+            <button type="button" class="theme-preview-card" id="themeLavenderBtn" data-theme="lavender">
+              <span class="theme-preview-swatch swatch-lavender" aria-hidden="true"></span>
+              <span class="theme-preview-name">💜 Lavender</span>
+              <span class="theme-preview-desc">soft violet</span>
+              <span class="theme-preview-check">✓</span>
+            </button>
+            <button type="button" class="theme-preview-card" id="themeMonochromeBtn" data-theme="monochrome">
+              <span class="theme-preview-swatch swatch-monochrome" aria-hidden="true"></span>
+              <span class="theme-preview-name">⚫ Monochrome</span>
+              <span class="theme-preview-desc">clean grayscale</span>
+              <span class="theme-preview-check">✓</span>
+            </button>
+            <button type="button" class="theme-preview-card" id="themeForestBtn" data-theme="forest">
+              <span class="theme-preview-swatch swatch-forest" aria-hidden="true"></span>
+              <span class="theme-preview-name">🌲 Forest</span>
+              <span class="theme-preview-desc">deep green</span>
+              <span class="theme-preview-check">✓</span>
+            </button>
           </div>
         </div>
 
@@ -2293,6 +2758,76 @@ function loadGlobalStats(){
   catch(e){ return {totalSeen:0, totalCorrect:0, currentStreak:0, bestStreak:0}; }
 }
 function saveGlobalStats(obj){ lsSet(GLOBAL_KEY, JSON.stringify(obj)); }
+
+function studyDateKey(ts = Date.now()){
+  const d = new Date(ts);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function shiftStudyDate(key, delta){
+  const d = new Date(`${key}T12:00:00`);
+  d.setDate(d.getDate() + delta);
+  return studyDateKey(d.getTime());
+}
+function getStudyStreakSummary(){
+  const g = loadGlobalStats();
+  const dates = new Set(Object.keys(g.studyDays || {}));
+
+  // Backfill older users from already-recorded sessions/card attempts.
+  const statsAll = loadStatsData();
+  Object.values(statsAll).forEach(st => {
+    (st.sessions || []).forEach(s => { if(s && s.date) dates.add(studyDateKey(s.date)); });
+    Object.values(st.cardStats || {}).forEach(c => { if(c && c.lastSeen) dates.add(studyDateKey(c.lastSeen)); });
+  });
+
+  const today = studyDateKey();
+  const yesterday = shiftStudyDate(today, -1);
+  let current = 0;
+  let cursor = dates.has(today) ? today : (dates.has(yesterday) ? yesterday : null);
+  while(cursor && dates.has(cursor)){
+    current++;
+    cursor = shiftStudyDate(cursor, -1);
+  }
+
+  const sorted = Array.from(dates).sort();
+  let best = 0, run = 0, prev = null;
+  sorted.forEach(key => {
+    if(prev && shiftStudyDate(prev, 1) === key) run++;
+    else run = 1;
+    best = Math.max(best, run);
+    prev = key;
+  });
+
+  // studyDays is the authoritative count. The old cardStats fallback used
+  // lifetime `seen` totals whenever a card was last seen today, which could
+  // make "329 cards today" appear after only a handful of answers. For
+  // legacy data, session totals are a safer approximation.
+  let todayCount = Number((g.studyDays || {})[today] || 0);
+  if(!todayCount){
+    Object.values(statsAll).forEach(st => {
+      (st.sessions || []).forEach(session => {
+        if(session && session.date && studyDateKey(session.date) === today){
+          todayCount += Number(session.total || 0);
+        }
+      });
+    });
+  }
+  return {current, best, todayCount, studiedToday: dates.has(today)};
+}
+
+function updateDailyStreakUI(){
+  const pill = $('dailyStreakPill');
+  const countEl = $('dailyStreakCount');
+  if(!pill || !countEl) return;
+  const streak = getStudyStreakSummary();
+  countEl.textContent = streak.current;
+  pill.title = streak.studiedToday
+    ? `${streak.todayCount} card${streak.todayCount === 1 ? '' : 's'} studied today`
+    : 'Study today to keep your streak going';
+}
+
 function genSetId(){ return 'set_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function cardKey(card){ return card.front.trim().toLowerCase(); }
 function fmtDate(ts){
@@ -2411,6 +2946,11 @@ function renderLanding(){
   }
 
   const chipLabel = groupMode === 'le' ? 'LE' : 'Subject';
+  const FOLDER_ICONS = ['🧠','📗','🩻','🧬','💊','🫀','🦴','🔬','🩺','📘','🧪','🫁'];
+  function folderIcon(key){
+    let h = 0; for(let i=0;i<String(key).length;i++) h = (h*31 + String(key).charCodeAt(i)) >>> 0;
+    return FOLDER_ICONS[h % FOLDER_ICONS.length];
+  }
   folderIds.forEach(id => {
     const count = setsInFolder(id, groupMode).length;
     const tile = document.createElement('button');
@@ -2418,7 +2958,7 @@ function renderLanding(){
     tile.className = 'folder-tile';
     tile.style.setProperty('--tab-color', groupMode === 'le' ? subjectColor('le' + id) : subjectColor(id));
     const name = groupMode === 'le' ? `LE ${id}` : id;
-    tile.innerHTML = `${hasPausedSet(id) ? '<span class="paused-dot" title="A set in here is paused mid-quiz"></span>' : ''}<div class="folder-tab-chip"><span class="tab-dot"></span>${chipLabel}</div><div class="folder-name">${escapeHtml(name)}</div><div class="folder-meta">${count} set${count===1?'':'s'}</div>`;
+    tile.innerHTML = `${hasPausedSet(id) ? '<span class="paused-dot" title="A set in here is paused mid-quiz"></span>' : ''}<div class="folder-icon">${folderIcon(id)}</div><div class="folder-tab-chip"><span class="tab-dot"></span>${chipLabel}</div><div class="folder-name">${escapeHtml(name)}</div><div class="folder-meta">${count} set${count===1?'':'s'}</div>`;
     tile.onclick = () => showFolder(id, groupMode);
     grid.appendChild(tile);
   });
@@ -2429,18 +2969,23 @@ function renderLanding(){
     unfiledTile.type = 'button';
     unfiledTile.className = 'folder-tile unfiled';
     const unfiledLabel = groupMode === 'le' ? 'No LE tagged' : 'Unfiled';
-    unfiledTile.innerHTML = `${hasPausedSet(UNFILED) ? '<span class="paused-dot" title="A set in here is paused mid-quiz"></span>' : ''}<div class="folder-tab-chip"><span class="tab-dot"></span>Folder</div><div class="folder-name">${unfiledLabel}</div><div class="folder-meta">${unfiledCount} set${unfiledCount===1?'':'s'}</div>`;
+    unfiledTile.innerHTML = `${hasPausedSet(UNFILED) ? '<span class="paused-dot" title="A set in here is paused mid-quiz"></span>' : ''}<div class="folder-icon">🗂️</div><div class="folder-tab-chip"><span class="tab-dot"></span>Folder</div><div class="folder-name">${unfiledLabel}</div><div class="folder-meta">${unfiledCount} set${unfiledCount===1?'':'s'}</div>`;
     unfiledTile.onclick = () => showFolder(UNFILED, groupMode);
     grid.appendChild(unfiledTile);
   }
 
   if(folderIds.length === 0 && unfiledCount === 0){
     const hint = document.createElement('div');
-    hint.className = 'no-sets';
+    hint.className = 'no-sets empty-state';
     hint.style.gridColumn = '1 / -1';
-    hint.textContent = groupMode === 'le'
-      ? 'Nothing saved yet — start a new set below and give it an LE to file it automatically.'
-      : 'Nothing saved yet — start a new set below and give it a Subject to file it automatically.';
+    const theme = document.body.classList.contains('theme-kawaii') ? 'kawaii' : document.body.classList.contains('theme-midnight') ? 'midnight' : 'garden';
+    const copy = {
+      garden: {icon:'🌱', line:'Your study garden is waiting.'},
+      kawaii: {icon:'🎀', line:'Your study shelf is empty.'},
+      midnight: {icon:'✨', line:'Nothing here yet.'}
+    }[theme];
+    const filedBy = groupMode === 'le' ? 'an LE' : 'a Subject';
+    hint.innerHTML = `<span class="empty-state-icon">${copy.icon}</span><span class="empty-state-line">${copy.line}</span><span class="empty-state-sub">Start a new set below and give it ${filedBy} to file it automatically.</span>`;
     grid.appendChild(hint);
   }
 }
@@ -2618,16 +3163,47 @@ function renderRecentActivity(){
   }
   wrap.classList.remove('hidden');
   if(cols) cols.classList.remove('no-recent');
-  items.forEach(item => {
+  updateDailyStreakUI();
+  items.forEach((item, idx) => {
     const {s, isCase, status, isScratch} = item;
+    const isHero = idx === 0;
     const subjectPrefix = s.subject ? `${escapeHtml(s.subject)} · ` : '';
     let metaStr = `${s.cards.length} cards`;
-    if(status.type === 'quiz') metaStr = `Card ${status.asked} of ${status.total}`;
+    let pct = null;
+    if(status.type === 'quiz'){
+      metaStr = `Card ${status.asked} of ${status.total}`;
+      if(status.total > 0) pct = Math.round(Math.min(100, (status.asked / status.total) * 100));
+    }
     else if(status.type === 'case') metaStr = `Score ${status.score}`;
-    else if(status.type === 'completed') metaStr = `Completed · ${fmtDate(s.completedAt)}`;
+    else if(status.type === 'completed'){ metaStr = `Completed · ${fmtDate(s.completedAt)}`; pct = 100; }
     const row = document.createElement('div');
-    row.className = 'recent-item';
-    row.innerHTML = `
+    row.className = isHero ? 'recent-item recent-item-hero' : 'recent-item';
+    const heroProgress = (isHero && pct !== null) ? `
+        <span class="hero-progress-label"><span>${status.type === 'completed' ? 'Completed' : 'In progress'}</span><span>${pct}%</span></span>
+        <span class="hero-progress-track"><span class="hero-progress-fill" style="width:${pct}%"></span></span>` : '';
+    const streak = getStudyStreakSummary();
+    row.innerHTML = isHero ? `
+      <button type="button" class="recent-item-btn">
+        <span class="recent-item-top">
+          <span class="recent-item-icon">${isCase ? '🩺' : '📘'}</span>
+          <span class="recent-item-main">
+            <span class="recent-item-name">${escapeHtml(s.name)}</span>
+            <span class="recent-item-meta">${subjectPrefix}${metaStr}</span>
+          </span>
+        </span>
+        ${heroProgress}
+        <span class="continue-hero-bottom">
+          <span class="streak-mini">
+            <span class="streak-mini-icon">🔥</span>
+            <span class="streak-mini-copy">
+              <span class="streak-mini-label">Daily streak</span>
+              <span class="streak-mini-value">${streak.current} day${streak.current === 1 ? '' : 's'}</span>
+              <span class="streak-mini-sub">${streak.studiedToday ? `${streak.todayCount} card${streak.todayCount === 1 ? '' : 's'} today` : 'Study today to keep it going'}</span>
+            </span>
+          </span>
+          <span class="recent-item-cta">Continue →</span>
+        </span>
+      </button>` : `
       <button type="button" class="recent-item-btn">
         <span class="recent-item-icon">${isCase ? '🩺' : '📘'}</span>
         <span class="recent-item-main">
@@ -2924,14 +3500,25 @@ function hideUndoToast(){
 
 function recordAnswer(card, isCorrect){
   const g = loadGlobalStats();
+  g.studyDays = g.studyDays || {};
+  const today = studyDateKey();
+  g.studyDays[today] = (g.studyDays[today] || 0) + 1;
   g.totalSeen++;
-  if(isCorrect){
-    g.totalCorrect++;
-    g.currentStreak++;
-    g.bestStreak = Math.max(g.bestStreak, g.currentStreak);
-  } else {
-    g.currentStreak = 0;
+  if(isCorrect) g.totalCorrect++;
+
+  // A daily streak means "you studied on consecutive calendar days".
+  // A wrong answer still counts as studying; accuracy should never break a
+  // consistency streak. Keep the legacy fields synchronized for old builds.
+  const dates = new Set(Object.keys(g.studyDays));
+  const yesterday = shiftStudyDate(today, -1);
+  let run = 1;
+  let cursor = dates.has(yesterday) ? yesterday : null;
+  while(cursor && dates.has(cursor)){
+    run++;
+    cursor = shiftStudyDate(cursor, -1);
   }
+  g.currentStreak = run;
+  g.bestStreak = Math.max(Number(g.bestStreak || 0), run);
   saveGlobalStats(g);
 
   const statsAll = loadStatsData();
@@ -2976,7 +3563,8 @@ function renderStatsScreen(){
   $('statsOverview').innerHTML = `
     <div class="stat-tile"><div class="stat-num">${g.totalSeen}</div><div class="stat-label">Questions answered</div></div>
     <div class="stat-tile"><div class="stat-num">${overallAcc}%</div><div class="stat-label">Overall accuracy</div></div>
-    <div class="stat-tile"><div class="stat-num">${g.bestStreak}</div><div class="stat-label">Best streak</div></div>
+    <div class="stat-tile"><div class="stat-num">${getStudyStreakSummary().current}</div><div class="stat-label">Daily streak</div></div>
+    <div class="stat-tile"><div class="stat-num">${getStudyStreakSummary().best}</div><div class="stat-label">Best daily streak</div></div>
     <div class="stat-tile"><div class="stat-num">${Object.keys(sets).length}</div><div class="stat-label">Saved sets</div></div>
   `;
 
@@ -5924,16 +6512,23 @@ document.addEventListener('DOMContentLoaded',function(){
    applyDarkMode(on);
  };
 
- /* ---- Appearance theme: garden (default) vs kawaii. Just a body class
-    plus a persisted key — the CSS variable overrides do the rest, so
-    this never touches sets/stats data. ---- */
+ /* ---- Appearance theme: garden (default), kawaii, or midnight. Just a
+    body class plus a persisted key — the CSS variable overrides do the
+    rest, so this never touches sets/stats data. ---- */
  const THEME_KEY = 'topicReviewTheme';
- const themeBtns = {garden: document.getElementById('themeGardenBtn'), kawaii: document.getElementById('themeKawaiiBtn')};
+ const themeBtns = {
+   garden: document.getElementById('themeGardenBtn'), kawaii: document.getElementById('themeKawaiiBtn'), midnight: document.getElementById('themeMidnightBtn'),
+   ocean: document.getElementById('themeOceanBtn'), sunset: document.getElementById('themeSunsetBtn'), lavender: document.getElementById('themeLavenderBtn'),
+   monochrome: document.getElementById('themeMonochromeBtn'), forest: document.getElementById('themeForestBtn')
+ };
+ const themeNames = Object.keys(themeBtns);
  function applyTheme(theme){
-   document.body.classList.toggle('theme-kawaii', theme === 'kawaii');
+   themeNames.forEach(name => document.body.classList.toggle('theme-' + name, name !== 'garden' && name === theme));
    Object.entries(themeBtns).forEach(([name, btn]) => { if(btn) btn.classList.toggle('active', name === theme); });
+   updateGreeting();
  }
- let currentTheme = lsGet(THEME_KEY) === 'kawaii' ? 'kawaii' : 'garden';
+ let savedTheme = lsGet(THEME_KEY);
+ let currentTheme = themeNames.includes(savedTheme) ? savedTheme : 'garden';
  applyTheme(currentTheme);
  Object.entries(themeBtns).forEach(([name, btn]) => {
    if(!btn) return;
@@ -5943,6 +6538,45 @@ document.addEventListener('DOMContentLoaded',function(){
      applyTheme(name);
    };
  });
+
+ /* ---- Header greeting: time-of-day + theme-flavored, purely cosmetic
+    text above the app name. ---- */
+ function updateGreeting(){
+   const el = document.getElementById('headerGreeting');
+   if(!el) return;
+   const h = new Date().getHours();
+   const timeGreeting = h < 5 ? 'Still up? 🌙' : h < 12 ? 'Good morning 👋' : h < 18 ? 'Good afternoon 👋' : 'Good evening 👋';
+   el.textContent = timeGreeting;
+ }
+ updateGreeting();
+
+ /* ---- Cmd/Ctrl+K: focuses the search field like a command palette,
+    from anywhere the search input itself is present on screen. ---- */
+ document.addEventListener('keydown', function(e){
+   if((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')){
+     const input = document.getElementById('deckSearchInput');
+     if(input && !document.getElementById('landing').classList.contains('hidden')){
+       e.preventDefault();
+       input.focus();
+       input.select();
+     }
+   }
+ });
+
+ /* ---- Nav active-state: reflects which top-level screen is showing so
+    the pill nav's current position is obvious at a glance. Runs after
+    every screen-switching click already wired below, plus once on load. ---- */
+ function updateNavActiveState(){
+   const onStats = !document.getElementById('statsView').classList.contains('hidden');
+   const onSettings = !document.getElementById('settingsView').classList.contains('hidden');
+   document.getElementById('homeBtn')?.classList.toggle('active', !onStats && !onSettings);
+   document.getElementById('statsToggleBtn')?.classList.toggle('active', onStats);
+   document.getElementById('settingsToggleBtn')?.classList.toggle('active', onSettings);
+ }
+ ['homeBtn','statsToggleBtn','settingsToggleBtn'].forEach(id => {
+   document.getElementById(id)?.addEventListener('click', () => setTimeout(updateNavActiveState, 0));
+ });
+ updateNavActiveState();
 
  /* ---- Full screen mode ----
     iOS Safari (regular tabs, not installed-to-homescreen) doesn't
