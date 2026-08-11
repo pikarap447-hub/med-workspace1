@@ -1985,11 +1985,6 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
         <button class="back-link" id="folderBackBtn">← All folders</button>
         <div class="folder-header-row">
           <div class="folder-title" id="folderViewTitle"></div>
-          <select id="setSortSelect" class="sort-select">
-            <option value="le">Sort: LE number</option>
-            <option value="recent">Sort: Last played</option>
-            <option value="az">Sort: A–Z</option>
-          </select>
           <select id="topicSortDirSelect" class="sort-select hidden">
             <option value="asc">Topic #: Ascending</option>
             <option value="desc">Topic #: Descending</option>
@@ -2035,7 +2030,7 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
             </select>
           </div>
           <div class="row">
-            <span class="hint" style="margin:0;">Sets are filed automatically by Subject, and sorted by LE inside each folder. Switch the landing page to "Folders: By LE" to browse by LE instead — each LE folder splits into its own Topic Cards and Samplex sub-folders.</span>
+            <span class="hint" style="margin:0;">Sets are filed automatically by Subject. Every folder splits into its own Topic Cards and Samplex sub-folders, sortable by Topic #. Switch the landing page to "Folders: By LE" to browse by LE instead.</span>
           </div>
           <div class="row">
             <button class="btn-ghost" id="saveSetBtn">💾 Save current set</button>
@@ -2599,7 +2594,6 @@ const tableBody = document.getElementById('tableBody');
 const SETS_KEY = 'topicReview_sets_v1';
 const FOLDER_SORT_KEY = 'topicReview_folderSort_v1';
 const FOLDER_GROUP_KEY = 'topicReview_folderGroup_v1'; // 'subject' | 'le' — which dimension the landing folder grid is grouped by
-const SET_SORT_KEY = 'topicReview_setSort_v1';
 const SET_SORT_LE_KEY = 'topicReview_setSortLE_v1'; // sort mode used inside an LE folder (Topic number / Last played / A–Z)
 const TOPIC_CARD_SORT_DIR_KEY = 'topicReview_topicCardSortDir_v1'; // 'asc' | 'desc' — Topic # direction inside a Topic Cards sub-folder
 const STATS_KEY = 'topicReview_stats_v1';
@@ -2624,7 +2618,7 @@ let currentOptions = [];
 const UNFILED = '__unfiled__';
 let currentFolderId = null;      // folder currently open in folderView ('__unfiled__' or a real folder id)
 let currentFolderMode = 'subject'; // 'subject' | 'le' — which dimension currentFolderId is keyed by
-let currentFolderCardType = null; // null | 'topic' | 'samplex' — which cardType sub-folder is open inside an LE folder
+let currentFolderCardType = null; // null | 'topic' | 'samplex' — which cardType sub-folder is open inside the current folder
 // Folder ids are either a Subject code (e.g. "PED2", never purely numeric) or
 // an LE number (e.g. "1", always numeric) or UNFILED. So when we're not told
 // explicitly which dimension we're navigating back into (e.g. the setup
@@ -2858,8 +2852,9 @@ function fmtRelative(ts){
 }
 
 /* ---- Folders (auto-derived from each set's Subject tag, or from its LE tag
-   when the landing grid is switched to "By LE"; Topic # sorts within an LE,
-   and Samplex/Topic-card kind splits an LE folder into two sections.) ---- */
+   when the landing grid is switched to "By LE". Every folder, in either
+   dimension, splits into a Topic Cards and a Samplex sub-folder first;
+   Topic # (asc/desc) is the sort inside those sub-folders.) ---- */
 function subjectKey(s){ return (s.subject && s.subject.trim()) ? s.subject : UNFILED; }
 function leKey(s){ return (s.le && String(s.le).trim()) ? String(s.le).trim() : UNFILED; }
 function folderKeyFn(mode){ return mode === 'le' ? leKey : subjectKey; }
@@ -3282,8 +3277,8 @@ function duplicateSetById(id){
 
 // Sorts by Topic # numerically (blank/non-numeric topics always sort after
 // numeric ones, regardless of direction), falling back to set name. Used
-// inside an LE folder's Topic Cards / Samplex sub-folders, where Topic # is
-// the meaningful ordering (LE and cardType are already fixed by the folder).
+// inside a Topic Cards / Samplex sub-folder (of either a Subject or an LE
+// folder), where Topic # is the meaningful ordering once cardType is fixed.
 // dir: 'asc' (default) or 'desc'.
 function topicSortCompare(a, b, dir){
   const ta = (a[1].topic || '').trim();
@@ -3300,9 +3295,9 @@ function topicSortCompare(a, b, dir){
 }
 
 // Renders the "Topic Cards" / "Samplex" sub-folder tiles shown at the top of
-// an LE folder, so quiz sets and practice-exam sets get their own separate
-// folder to browse instead of being mixed in one list.
-function renderCardTypeFolders(list, entries, folderId){
+// every folder (Subject or LE), so quiz sets and practice-exam sets get
+// their own separate folder to browse instead of being mixed in one list.
+function renderCardTypeFolders(list, entries, folderId, mode){
   const wrap = document.createElement('div');
   wrap.className = 'folder-grid';
   wrap.style.marginBottom = '4px';
@@ -3315,7 +3310,7 @@ function renderCardTypeFolders(list, entries, folderId){
     const tile = document.createElement('button');
     tile.type = 'button';
     tile.className = 'folder-tile';
-    tile.style.setProperty('--tab-color', subjectColor('le' + folderId + t.type));
+    tile.style.setProperty('--tab-color', subjectColor(mode + folderId + t.type));
     tile.innerHTML = `<div class="folder-icon">${t.icon}</div><div class="folder-tab-chip"><span class="tab-dot"></span>Folder</div><div class="folder-name">${t.label}</div><div class="folder-meta">${count} set${count===1?'':'s'}</div>`;
     tile.onclick = () => { currentFolderCardType = t.type; renderFolderView(); };
     wrap.appendChild(tile);
@@ -3326,8 +3321,8 @@ function renderCardTypeFolders(list, entries, folderId){
 function renderFolderView(){
   const id = currentFolderId;
   const mode = currentFolderMode;
-  const inTopicCardsFolder = mode === 'le' && currentFolderCardType === 'topic';
-  const inSamplexFolder = mode === 'le' && currentFolderCardType === 'samplex';
+  const inTopicCardsFolder = currentFolderCardType === 'topic';
+  const inSamplexFolder = currentFolderCardType === 'samplex';
   const inCardTypeFolder = inTopicCardsFolder || inSamplexFolder;
 
   $('folderViewTitle').textContent = inCardTypeFolder
@@ -3335,16 +3330,8 @@ function renderFolderView(){
     : folderDisplayName(id, mode);
 
   // The Topic Cards sub-folder gets its own ascending/descending Topic #
-  // toggle instead of the general sort dropdown, since topic order is the
-  // only thing worth sorting by once LE and cardType are both fixed.
-  $('setSortSelect').classList.toggle('hidden', inTopicCardsFolder);
+  // toggle; it's the only sort that applies once cardType is fixed.
   $('topicSortDirSelect').classList.toggle('hidden', !inTopicCardsFolder);
-
-  // Relabel the default sort option to match what it actually does in this
-  // folder: inside an LE folder there's no LE to sort by (it's already
-  // fixed), so the default groups by Topic # instead.
-  const defaultSortOpt = $('setSortSelect').querySelector('option[value="le"]');
-  if(defaultSortOpt) defaultSortOpt.textContent = mode === 'le' ? 'Sort: Topic #' : 'Sort: LE number';
 
   const list = $('folderSetsList');
   list.innerHTML = '';
@@ -3357,84 +3344,32 @@ function renderFolderView(){
     return;
   }
 
-  // Top level of an LE folder: show the "Topic Cards" / "Samplex" sub-folder
-  // tiles instead of a flat set list.
-  if(mode === 'le' && !currentFolderCardType){
-    renderCardTypeFolders(list, entries, id);
+  // Top level of any folder (Subject or LE): show the "Topic Cards" /
+  // "Samplex" sub-folder tiles instead of a flat set list.
+  if(!currentFolderCardType){
+    renderCardTypeFolders(list, entries, id, mode);
     return;
   }
 
   // Inside a Topic Cards / Samplex sub-folder: everything here already
-  // shares one LE and one cardType, so sort purely by Topic # (with a
-  // user-chosen direction for Topic Cards).
-  if(inCardTypeFolder){
-    const filtered = entries.filter(([, s]) => cardTypeOf(s) === currentFolderCardType);
-    if(filtered.length === 0){
-      const p = document.createElement('div');
-      p.className = 'no-sets';
-      p.textContent = `No ${inSamplexFolder ? 'Samplex' : 'Topic Card'} sets here yet.`;
-      list.appendChild(p);
-      return;
-    }
-    const dir = inTopicCardsFolder ? (lsGet(TOPIC_CARD_SORT_DIR_KEY) || 'asc') : 'asc';
-    filtered.sort((a,b) => topicSortCompare(a, b, dir));
-    filtered.forEach(([sid, s]) => list.appendChild(buildSetRow(sid, s, {showFolderTag:false})));
+  // shares one cardType, so sort purely by Topic # (with a user-chosen
+  // direction for Topic Cards; Samplex sets are less numbered so they just
+  // sort ascending).
+  const filtered = entries.filter(([, s]) => cardTypeOf(s) === currentFolderCardType);
+  if(filtered.length === 0){
+    const p = document.createElement('div');
+    p.className = 'no-sets';
+    p.textContent = `No ${inSamplexFolder ? 'Samplex' : 'Topic Card'} sets here yet.`;
+    list.appendChild(p);
     return;
   }
-
-  const sortMode = lsGet(SET_SORT_KEY) || 'le';
-
-  if(sortMode === 'recent'){
-    const allSessions = loadAllSessions();
-    const allCaseProgress = loadCaseProgressAll();
-    entries.sort((a,b) => {
-      const diff = trueLastPlayedAt(b[0], b[1], allSessions, allCaseProgress) - trueLastPlayedAt(a[0], a[1], allSessions, allCaseProgress);
-      return diff !== 0 ? diff : a[1].name.localeCompare(b[1].name);
-    });
-    entries.forEach(([sid, s]) => list.appendChild(buildSetRow(sid, s, {showFolderTag:false})));
-    return;
-  }
-  if(sortMode === 'az'){
-    entries.sort((a,b) => a[1].name.localeCompare(b[1].name));
-    entries.forEach(([sid, s]) => list.appendChild(buildSetRow(sid, s, {showFolderTag:false})));
-    return;
-  }
-
-  // Inside a Subject folder: group by LE tag (numeric ascending, untagged
-  // last); sort within a group by most recently updated.
-  const groups = new Map();
-  entries.forEach(entry => {
-    const le = entry[1].le || '';
-    if(!groups.has(le)) groups.set(le, []);
-    groups.get(le).push(entry);
-  });
-  const leKeys = Array.from(groups.keys()).sort((a,b) => {
-    if(a === '' ) return 1;
-    if(b === '') return -1;
-    return Number(a) - Number(b);
-  });
-  const multipleGroups = leKeys.length > 1;
-
-  leKeys.forEach(le => {
-    const group = groups.get(le).sort((a,b) => (b[1].updatedAt||0) - (a[1].updatedAt||0));
-    if(multipleGroups){
-      const header = document.createElement('div');
-      header.className = 'stats-section-title';
-      header.style.margin = '14px 0 8px';
-      header.textContent = le ? `LE ${le}` : 'No LE tagged';
-      list.appendChild(header);
-    }
-    group.forEach(([sid, s]) => list.appendChild(buildSetRow(sid, s, {showFolderTag:false})));
-  });
+  const dir = inTopicCardsFolder ? (lsGet(TOPIC_CARD_SORT_DIR_KEY) || 'asc') : 'asc';
+  filtered.sort((a,b) => topicSortCompare(a, b, dir));
+  filtered.forEach(([sid, s]) => list.appendChild(buildSetRow(sid, s, {showFolderTag:false})));
 }
 $('topicSortDirSelect').value = lsGet(TOPIC_CARD_SORT_DIR_KEY) || 'asc';
 $('topicSortDirSelect').onchange = e => {
   try{ lsSet(TOPIC_CARD_SORT_DIR_KEY, e.target.value); }catch(err){}
-  renderFolderView();
-};
-$('setSortSelect').value = lsGet(SET_SORT_KEY) || 'le';
-$('setSortSelect').onchange = e => {
-  try{ lsSet(SET_SORT_KEY, e.target.value); }catch(err){}
   renderFolderView();
 };
 
