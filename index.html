@@ -2469,11 +2469,36 @@ try{ _rawLS = window.localStorage; }catch(e){ _lsBlocked = true; }
 function lsGet(key){
   try{ return _rawLS.getItem(key); }catch(e){ _lsBlocked = true; return null; }
 }
+// A failed save used to be completely silent (button worked, nothing was
+// actually written, no clue why). Now any write failure surfaces a visible
+// toast — quota-exceeded and "storage blocked" get distinct messages since
+// they need different fixes from the user (free up space vs. leave private
+// browsing / an in-app browser).
 function lsSet(key, val){
-  try{ _rawLS.setItem(key, val); return true; }catch(e){ _lsBlocked = true; return false; }
+  try{ _rawLS.setItem(key, val); return true; }
+  catch(e){
+    _lsBlocked = true;
+    const isQuota = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
+    showSaveErrorToast(isQuota
+      ? 'Could not save — storage is full. Try deleting an old set under Settings.'
+      : 'Could not save — this browser is blocking storage here (private/incognito mode or an in-app browser can cause this). Try opening in your regular browser.');
+    return false;
+  }
 }
 function lsRemove(key){
   try{ _rawLS.removeItem(key); }catch(e){ _lsBlocked = true; }
+}
+let _saveErrorToastEl = null;
+function showSaveErrorToast(message){
+  if(!_saveErrorToastEl){
+    _saveErrorToastEl = document.createElement('div');
+    _saveErrorToastEl.style.cssText = 'position:fixed;left:50%;bottom:90px;transform:translateX(-50%);max-width:min(92vw,420px);background:var(--danger,#B5493E);color:#fff;padding:12px 16px;border-radius:12px;font:500 14px var(--font,sans-serif);box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:99999;text-align:center;';
+    document.body.appendChild(_saveErrorToastEl);
+  }
+  _saveErrorToastEl.textContent = message;
+  _saveErrorToastEl.style.display = 'block';
+  clearTimeout(_saveErrorToastEl._hideTimer);
+  _saveErrorToastEl._hideTimer = setTimeout(() => { _saveErrorToastEl.style.display = 'none'; }, 6000);
 }
 const sample = `Term infant delivered via elective CS develops tachypnea within the first few hours of life. CXR shows prominent pulmonary vascular markings with fluid in the fissures. Diagnosis?|Transient Tachypnea of the Newborn (TTN)|C-section + early tachypnea + wet CXR = TTN. Most common neonatal respiratory question.
 Classic chest X-ray finding in TTN|Perihilar vascular markings with fluid in the interlobar fissures|Don't confuse with ground-glass appearance of RDS.
