@@ -16,7 +16,7 @@
 <meta http-equiv="Expires" content="0">
 <title>Topic Review</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Baloo+2:wght@500;600;700&display=swap');
 
   /* ---- Study-garden palette: the vine growth metaphor (still present
      in the vine border around the card) is promoted here to be the
@@ -44,6 +44,34 @@
     --font-display:'Quicksand', sans-serif;
     --font-mono:'Quicksand', sans-serif;
   }
+
+  /* ---- Kawaii theme: an alternate palette+font+border skin, toggled in
+     Settings and stored separately from the study-garden default. Every
+     value below is a straight swap for the variable of the same name
+     above, so every existing call site (buttons, text, the vine-cluster
+     SVG fills, the correct/wrong states) repaints automatically — no
+     component-level changes needed beyond the vine-edge border tiles,
+     which are raw data-URI SVGs below since they can't reference CSS
+     vars. Scoped to body so it composes with dark mode's filter-invert
+     the same way the garden theme already does. ---- */
+  body.theme-kawaii{
+    --tile-white:#FFF7FB;
+    --tile-blue-deep:#FF6FA5;   /* bubblegum pink — primary actions */
+    --tile-blue:#C5789E;        /* muted rose — labels, secondary emphasis */
+    --tile-blue-mid:#FFC94A;    /* candy-gold — focus rings, highlights */
+    --tile-blue-pale:#FBD6E4;   /* pale pink — borders */
+    --tile-blue-paler:#FFF0F6;  /* blush — subtle fills */
+    --ink:#5A3A5E;
+    --ink-soft:#A186A8;
+    --gold:#FFC94A;
+    --green:#5FBF95;
+    --green-bg:#E1F7ED;
+    --red:#FF6F91;
+    --red-bg:#FFE3EA;
+    --grape:#FF8FC7;
+    --font-display:'Baloo 2', 'Quicksand', sans-serif;
+  }
+  body.theme-kawaii{ background:#FFF3F8; }
   *{box-sizing:border-box;}
   html{-webkit-text-size-adjust:100%; text-size-adjust:100%;}
   body{
@@ -652,6 +680,30 @@ overflow-wrap:break-word;
     right:0;
     background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='76'><path d='M8,0 Q14.5,9.5 8,19 T8,38 T8,57 T8,76' stroke='%233E7A5C' stroke-width='2' fill='none'/><path d='M8,14 C14,9 14,3 9,1 C7,6 7.5,11 8,14 Z' fill='%233E7A5C'/><path d='M8,52 C14,57 14,63 9,65 C7,60 7.5,55 8,52 Z' fill='%233E7A5C'/></svg>");
   }
+
+  /* Kawaii border skin: same repeating-tile geometry as the vine edges
+     above (so it lines up identically), just a pastel wave with candy
+     dots instead of leaf blobs — these are raw data-URI SVGs so they
+     can't pick up the --grape/--green vars the way the vine-cluster
+     <svg> elements below do. */
+  body.theme-kawaii .vine-edge-top{
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='76' height='18'><path d='M0,9 Q9.5,2 19,9 T38,9 T57,9 T76,9' stroke='%23FF9EC4' stroke-width='2' fill='none'/><circle cx='14' cy='6' r='3.4' fill='%23FF6FA5'/><circle cx='52' cy='6' r='3.4' fill='%23FFC94A'/></svg>");
+  }
+  body.theme-kawaii .vine-edge-bottom{
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='76' height='18'><path d='M0,9 Q9.5,16 19,9 T38,9 T57,9 T76,9' stroke='%23FF9EC4' stroke-width='2' fill='none'/><circle cx='14' cy='12' r='3.4' fill='%23B892E8'/><circle cx='52' cy='12' r='3.4' fill='%23FF6FA5'/></svg>");
+  }
+  body.theme-kawaii .vine-edge-left{
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='76'><path d='M8,0 Q1.5,9.5 8,19 T8,38 T8,57 T8,76' stroke='%23FF9EC4' stroke-width='2' fill='none'/><circle cx='5' cy='14' r='3.2' fill='%23FFC94A'/><circle cx='5' cy='52' r='3.2' fill='%23B892E8'/></svg>");
+  }
+  body.theme-kawaii .vine-edge-right{
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='76'><path d='M8,0 Q14.5,9.5 8,19 T8,38 T8,57 T8,76' stroke='%23FF9EC4' stroke-width='2' fill='none'/><circle cx='11' cy='14' r='3.2' fill='%23FF6FA5'/><circle cx='11' cy='52' r='3.2' fill='%23FFC94A'/></svg>");
+  }
+  /* The grand bunch's one hardcoded highlight dot (not a themed var, so
+     it needs its own override to match the pink cluster rather than
+     staying purple). */
+  body.theme-kawaii #vineGrand circle[fill="#C9A8DE"]{
+    fill:#FFD9EC;
+  }
   .vine-cluster{
     position:absolute;
     width:30px;
@@ -948,6 +1000,15 @@ body.dark-mode .zoom-controls button:hover{
 .num-input:focus{outline:2px solid var(--tile-blue-mid); outline-offset:1px;}
 
 .switch-row{display:flex; align-items:center; gap:10px; cursor:pointer; user-select:none;}
+.theme-swatch-btn{
+  font-weight:700;
+  transition:background .15s ease, border-color .15s ease, color .15s ease;
+}
+.theme-swatch-btn.active{
+  background:var(--tile-blue-deep) !important;
+  border-color:var(--tile-blue-deep) !important;
+  color:#fff !important;
+}
 .switch{position:relative; display:inline-block; width:42px; height:24px; flex-shrink:0;}
 .switch input{position:absolute; opacity:0; width:100%; height:100%; margin:0; cursor:pointer;}
 .switch-track{
@@ -1818,6 +1879,15 @@ OUTCOME: NEG
       <div id="settingsView" class="hidden">
         <label class="field-label">Settings</label>
         <div class="hint" style="margin-top:0;">Background, display, and related-image options for this app.</div>
+
+        <div class="backup-block">
+          <label class="field-label">Appearance theme</label>
+          <div class="hint" style="margin-top:0;">Switch the app's whole look — colors, border, and headline font. Your sets, stats, and progress aren't affected either way.</div>
+          <div class="row" id="themeSwatchRow" style="gap:10px; margin-top:10px;">
+            <button type="button" class="btn-ghost theme-swatch-btn" id="themeGardenBtn" data-theme="garden">🌿 Garden</button>
+            <button type="button" class="btn-ghost theme-swatch-btn" id="themeKawaiiBtn" data-theme="kawaii">🎀 Kawaii</button>
+          </div>
+        </div>
 
         <div class="backup-block">
           <label class="field-label">Background</label>
@@ -4916,17 +4986,25 @@ function startWeakPracticeForSet(sid){
 }
 
 /* ---- Backup & restore: export everything to a downloadable JSON file, or restore from one ---- */
-function collectBackupData(){
-  const keys = [SETS_KEY, STATS_KEY, GLOBAL_KEY, SESSIONS_KEY, CASE_PROGRESS_KEY, BG_KEY, BG_TYPE_KEY, PALETTE_KEY, BG_BLUR_KEY, BRAINBREAK_ENABLED_KEY, BRAINBREAK_INTERVAL_KEY];
+// Background image/video data lives in IndexedDB, not localStorage
+// (localStorage can't hold multi-MB files), so it has to be fetched
+// separately here and folded into the same backup payload — otherwise
+// a backup silently has no background in it at all.
+async function collectBackupData(){
+  const keys = [SETS_KEY, STATS_KEY, GLOBAL_KEY, SESSIONS_KEY, CASE_PROGRESS_KEY, BG_TYPE_KEY, PALETTE_KEY, BG_BLUR_KEY, BRAINBREAK_ENABLED_KEY, BRAINBREAK_INTERVAL_KEY];
   const data = {};
   keys.forEach(k => {
     const v = lsGet(k);
     if(v !== null && v !== undefined) data[k] = v;
   });
+  try{
+    const bg = await idbGet(BG_KEY);
+    if(bg) data[BG_KEY] = bg;
+  }catch(err){}
   return {app: 'topicReview', version: 1, exportedAt: new Date().toISOString(), data};
 }
-$('exportDataBtn').onclick = () => {
-  const payload = JSON.stringify(collectBackupData(), null, 2);
+$('exportDataBtn').onclick = async () => {
+  const payload = JSON.stringify(await collectBackupData(), null, 2);
   const blob = new Blob([payload], {type: 'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -4943,7 +5021,7 @@ $('importDataFile').onchange = e => {
   const file = e.target.files && e.target.files[0];
   if(!file) return;
   const reader = new FileReader();
-  reader.onload = evt => {
+  reader.onload = async evt => {
     let parsed;
     try{ parsed = JSON.parse(evt.target.result); }
     catch(err){ alert('That file doesn\'t look like a valid backup (couldn\'t parse JSON).'); e.target.value = ''; return; }
@@ -4956,7 +5034,8 @@ $('importDataFile').onchange = e => {
       e.target.value = '';
       return;
     }
-    const entries = Object.entries(parsed.data);
+    const hasBg = Object.prototype.hasOwnProperty.call(parsed.data, BG_KEY);
+    const entries = Object.entries(parsed.data).filter(([k]) => k !== BG_KEY);
     const failedKeys = [];
     entries.forEach(([k, v]) => {
       let ok = false;
@@ -4969,7 +5048,21 @@ $('importDataFile').onchange = e => {
     activeSetId = null;
     initBrainBreakToggle();
     try{
-      const bg = lsGet(BG_KEY);
+      // Background lives in IndexedDB, so it's restored separately from
+      // the localStorage keys above. If this backup carries a background,
+      // apply it (a full restore is expected to replace whatever's
+      // currently loaded). If it doesn't — e.g. an older backup made
+      // before this fix, or one exported with no background set — leave
+      // whatever background is already on this device alone instead of
+      // wiping it, since a sets/stats restore shouldn't strip an
+      // unrelated cosmetic setting the backup never mentioned.
+      let bg;
+      if(hasBg){
+        bg = parsed.data[BG_KEY];
+        await idbSet(BG_KEY, bg);
+      } else {
+        bg = await idbGet(BG_KEY);
+      }
       if(bg){
         const type = lsGet(BG_TYPE_KEY);
         if(type === 'video') applyBackgroundVideo(bg); else applyBackgroundImage(bg);
@@ -5830,6 +5923,26 @@ document.addEventListener('DOMContentLoaded',function(){
    lsSet('topicReviewDark', on ? '1' : '0');
    applyDarkMode(on);
  };
+
+ /* ---- Appearance theme: garden (default) vs kawaii. Just a body class
+    plus a persisted key — the CSS variable overrides do the rest, so
+    this never touches sets/stats data. ---- */
+ const THEME_KEY = 'topicReviewTheme';
+ const themeBtns = {garden: document.getElementById('themeGardenBtn'), kawaii: document.getElementById('themeKawaiiBtn')};
+ function applyTheme(theme){
+   document.body.classList.toggle('theme-kawaii', theme === 'kawaii');
+   Object.entries(themeBtns).forEach(([name, btn]) => { if(btn) btn.classList.toggle('active', name === theme); });
+ }
+ let currentTheme = lsGet(THEME_KEY) === 'kawaii' ? 'kawaii' : 'garden';
+ applyTheme(currentTheme);
+ Object.entries(themeBtns).forEach(([name, btn]) => {
+   if(!btn) return;
+   btn.onclick = function(){
+     currentTheme = name;
+     lsSet(THEME_KEY, name);
+     applyTheme(name);
+   };
+ });
 
  /* ---- Full screen mode ----
     iOS Safari (regular tabs, not installed-to-homescreen) doesn't
