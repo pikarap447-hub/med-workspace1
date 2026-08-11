@@ -2688,37 +2688,66 @@ function appDataSet(key, value){
 async function initAppDataStorage(){
   try{
     const db = await openAppDataDB();
-    const tx = db.transaction(APP_DATA_STORE,'readwrite');
-    const store = tx.objectStore(APP_DATA_STORE);
+
+    // IMPORTANT: IndexedDB transactions auto-commit once the current event
+    // loop is idle. Do all reads in a readonly transaction first, then open
+    // a separate write transaction for migration. The previous version kept
+    // a readwrite transaction open while awaiting multiple requests, which
+    // could leave the transaction inactive before store.put() and prevent the
+    // app data from loading/saving correctly.
     const existing = {};
-    await Promise.all(APP_DATA_KEYS.map(key => new Promise(resolve => {
-      const req = store.get(key);
-      req.onsuccess = () => { existing[key] = req.result; resolve(); };
-      req.onerror = () => { existing[key] = null; resolve(); };
-    })));
+    await new Promise(resolve => {
+      const tx = db.transaction(APP_DATA_STORE,'readonly');
+      const store = tx.objectStore(APP_DATA_STORE);
+      let remaining = APP_DATA_KEYS.length;
+      if(!remaining){ resolve(); return; }
+      APP_DATA_KEYS.forEach(key => {
+        const req = store.get(key);
+        req.onsuccess = () => { existing[key] = req.result; if(--remaining === 0) resolve(); };
+        req.onerror = () => { existing[key] = null; if(--remaining === 0) resolve(); };
+      });
+    });
+
     // Prefer the IndexedDB copy when present; otherwise migrate the old
-    // localStorage copy into IndexedDB.
+    // localStorage copy into IndexedDB. Build a list first so we only write
+    // keys that actually need migration.
+    const writes = [];
     for(const key of APP_DATA_KEYS){
       if(existing[key] !== undefined && existing[key] !== null){
         appDataCache[key] = existing[key];
       } else if(appDataCache[key] !== undefined){
-        store.put(appDataCache[key], key);
+        writes.push([key, appDataCache[key]]);
       }
     }
-    await new Promise(resolve => { tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve; });
-    // Remove only the large app-data buckets from localStorage. Settings and
-    // cosmetic preferences remain there. This is what actually frees the
-    // old ~5 MB localStorage bucket after migration.
+
+    if(writes.length){
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(APP_DATA_STORE,'readwrite');
+        const store = tx.objectStore(APP_DATA_STORE);
+        for(const [key, value] of writes) store.put(value, key);
+        tx.oncomplete = resolve;
+        tx.onerror = () => reject(tx.error || new Error('IndexedDB write failed'));
+        tx.onabort = () => reject(tx.error || new Error('IndexedDB transaction aborted'));
+      });
+    }
+
+    // Only remove the old localStorage buckets after the IndexedDB migration
+    // has successfully completed. If anything fails, the localStorage copy
+    // remains available as a fallback and the app does not lose user data.
     APP_DATA_KEYS.forEach(key => lsRemove(key));
     appDataReady = true;
+
     try{ migrateSetTypes(); }catch(e){}
     try{ renderLanding(); renderRecentActivity(); }catch(e){}
   }catch(e){
-    // If IndexedDB is unavailable, the in-memory/localStorage fallback still
-    // keeps the app usable rather than breaking the page.
+    console.error('App data storage initialization failed:', e);
+    // Keep the localStorage-backed cache intact as a fallback. Nothing is
+    // deleted when IndexedDB initialization/migration fails.
     appDataReady = false;
+    try{ renderLanding(); renderRecentActivity(); }catch(err){}
   }
-} // bucket for an in-progress quiz that was never saved as a named set
+}
+// bucket for an in-progress quiz that was never saved as a named set
 const PRACTICE_ID = '__practice__'; // bucket for an ad-hoc "weak cards" practice session
 let currentOptions = [];
 
