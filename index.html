@@ -823,6 +823,21 @@ font-size:16px;
   }
 }
 
+/* Below this: pseudo-fullscreen fallback for browsers (iOS Safari) that
+   don't implement the real Fullscreen API. Setting min-height taller
+   than the viewport is what allows the scroll(0,1) trick to actually
+   push Safari's address/toolbar bar off-screen; app-shell then gets
+   pinned to fill exactly the space that frees up. */
+html.pseudo-fullscreen, html.pseudo-fullscreen body{
+  min-height:calc(100vh + 1px);
+}
+html.pseudo-fullscreen body{
+  padding-top:8px;
+}
+html.pseudo-fullscreen .app-shell{
+  transform-origin:top center;
+}
+
 /* --- Dark mode: filter-invert the whole page so every existing color
    relationship (contrast, hierarchy) is preserved automatically, then
    invert images/icons back so they read normally. --- */
@@ -5816,20 +5831,57 @@ document.addEventListener('DOMContentLoaded',function(){
    applyDarkMode(on);
  };
 
- /* ---- Full screen mode ---- */
+ /* ---- Full screen mode ----
+    iOS Safari (regular tabs, not installed-to-homescreen) doesn't
+    implement the Fullscreen API for arbitrary elements at all — Apple
+    limits requestFullscreen to <video>. Calling it there is a silent
+    no-op, which is why the button did nothing. Where the real API is
+    missing, fall back to a "pseudo fullscreen" that hides Safari's
+    address/toolbar chrome via the standard scroll trick and pins the
+    app to fill the freed space instead. */
  const fsBtn = document.getElementById('fullscreenToggle');
- function isFullscreen(){ return !!(document.fullscreenElement || document.webkitFullscreenElement); }
- function updateFsBtn(){ fsBtn.textContent = isFullscreen() ? '⤢' : '⛶'; fsBtn.title = isFullscreen() ? 'Exit full screen' : 'Enter full screen'; }
+ const nativeFsSupported = !!(document.documentElement.requestFullscreen || document.documentElement.webkitRequestFullscreen);
+ let pseudoFsOn = false;
+ function isFullscreen(){
+   return nativeFsSupported ? !!(document.fullscreenElement || document.webkitFullscreenElement) : pseudoFsOn;
+ }
+ function updateFsBtn(){
+   fsBtn.textContent = isFullscreen() ? '⤢' : '⛶';
+   fsBtn.title = isFullscreen() ? 'Exit full screen' : 'Enter full screen';
+ }
+ function enterPseudoFullscreen(){
+   document.documentElement.classList.add('pseudo-fullscreen');
+   pseudoFsOn = true;
+   // Needs a frame for the taller layout to lay out before the scroll
+   // trick can push the address bar off-screen.
+   requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, 1)));
+   updateFsBtn();
+ }
+ function exitPseudoFullscreen(){
+   document.documentElement.classList.remove('pseudo-fullscreen');
+   pseudoFsOn = false;
+   window.scrollTo(0, 0);
+   updateFsBtn();
+ }
  fsBtn.onclick = function(){
-   const el = document.documentElement;
-   if(!isFullscreen()){
-     (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el);
+   if(nativeFsSupported){
+     const el = document.documentElement;
+     if(!isFullscreen()) (el.requestFullscreen || el.webkitRequestFullscreen)?.call(el);
+     else (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
    } else {
-     (document.exitFullscreen || document.webkitExitFullscreen)?.call(document);
+     isFullscreen() ? exitPseudoFullscreen() : enterPseudoFullscreen();
    }
  };
  document.addEventListener('fullscreenchange', updateFsBtn);
  document.addEventListener('webkitfullscreenchange', updateFsBtn);
+ // The address bar can reappear on its own (scroll-up gesture, rotation),
+ // so re-run the hide trick whenever that happens while pseudo mode is on.
+ window.addEventListener('scroll', () => {
+   if(pseudoFsOn && window.scrollY < 1) window.scrollTo(0, 1);
+ }, {passive:true});
+ window.addEventListener('orientationchange', () => {
+   if(pseudoFsOn) requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, 1)));
+ });
  updateFsBtn();
 });
 </script>
