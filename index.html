@@ -2415,12 +2415,18 @@ OUTCOME: NEG
 
         <div class="backup-block">
           <label class="field-label">Backup &amp; restore</label>
-          <div class="hint" style="margin-top:0;">Everything lives only in this browser. Download a backup file now and then to keep your sets and stats safe, or move them to another device.</div>
+          <div class="hint" style="margin-top:0;">Your study data and your background are backed up separately. Importing a study backup will <strong>never change your current background</strong>.</div>
           <div class="row">
-            <button class="btn-ghost" id="exportDataBtn">⬇ Export backup</button>
-            <button class="btn-ghost" id="importDataBtn">⬆ Import backup</button>
+            <button class="btn-ghost" id="exportDataBtn">⬇ Export study data</button>
+            <button class="btn-ghost" id="importDataBtn">⬆ Import study data</button>
             <input type="file" id="importDataFile" accept="application/json" class="hidden">
           </div>
+          <div class="row" style="margin-top:10px;">
+            <button class="btn-ghost" id="exportBgBtn">🖼 Export background</button>
+            <button class="btn-ghost" id="importBgBtn">🖼 Import background</button>
+            <input type="file" id="importBgFile" accept="application/json" class="hidden">
+          </div>
+          <div class="hint" style="margin:10px 0 0; font-size:12px;">Use the background backup only when you actually want to move or restore your wallpaper, video, palette, and blur settings.</div>
         </div>
 
         <div class="backup-block">
@@ -2635,7 +2641,84 @@ function applyCardOpacity(pct){
 }
 const SESSIONS_KEY = 'topicReview_sessions_v1';
 const CASE_PROGRESS_KEY = 'topicReview_caseProgress_v1';
-const SCRATCH_ID = '__scratch__'; // bucket for an in-progress quiz that was never saved as a named set
+const APP_DATA_KEYS = [SETS_KEY, STATS_KEY, GLOBAL_KEY, SESSIONS_KEY, CASE_PROGRESS_KEY];
+
+/* Large app data is stored in IndexedDB instead of localStorage.
+   A small in-memory cache keeps the rest of the app synchronous, so the
+   existing quiz/deck code does not need to await every read. Existing
+   localStorage data is migrated automatically on first load. */
+const APP_DATA_DB = 'TopicReviewDB';
+const APP_DATA_STORE = 'appStore';
+const appDataCache = {};
+let appDataReady = false;
+APP_DATA_KEYS.forEach(k => { const v = lsGet(k); if(v !== null) appDataCache[k] = v; });
+
+function openAppDataDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(APP_DATA_DB, 2);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains('bgStore')) db.createObjectStore('bgStore');
+      if(!db.objectStoreNames.contains(APP_DATA_STORE)) db.createObjectStore(APP_DATA_STORE);
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function appDataGet(key){
+  if(Object.prototype.hasOwnProperty.call(appDataCache,key)) return appDataCache[key];
+  try{
+    const db = await openAppDataDB();
+    const value = await new Promise(resolve => {
+      const req = db.transaction(APP_DATA_STORE,'readonly').objectStore(APP_DATA_STORE).get(key);
+      req.onsuccess = () => resolve(req.result); req.onerror = () => resolve(null);
+    });
+    if(value !== undefined && value !== null) appDataCache[key] = value;
+    return value ?? null;
+  }catch(e){ return null; }
+}
+function appDataSet(key, value){
+  appDataCache[key] = value;
+  return openAppDataDB().then(db => new Promise(resolve => {
+    const tx = db.transaction(APP_DATA_STORE,'readwrite');
+    tx.objectStore(APP_DATA_STORE).put(value,key);
+    tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
+  })).catch(() => false);
+}
+async function initAppDataStorage(){
+  try{
+    const db = await openAppDataDB();
+    const tx = db.transaction(APP_DATA_STORE,'readwrite');
+    const store = tx.objectStore(APP_DATA_STORE);
+    const existing = {};
+    await Promise.all(APP_DATA_KEYS.map(key => new Promise(resolve => {
+      const req = store.get(key);
+      req.onsuccess = () => { existing[key] = req.result; resolve(); };
+      req.onerror = () => { existing[key] = null; resolve(); };
+    })));
+    // Prefer the IndexedDB copy when present; otherwise migrate the old
+    // localStorage copy into IndexedDB.
+    for(const key of APP_DATA_KEYS){
+      if(existing[key] !== undefined && existing[key] !== null){
+        appDataCache[key] = existing[key];
+      } else if(appDataCache[key] !== undefined){
+        store.put(appDataCache[key], key);
+      }
+    }
+    await new Promise(resolve => { tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve; });
+    // Remove only the large app-data buckets from localStorage. Settings and
+    // cosmetic preferences remain there. This is what actually frees the
+    // old ~5 MB localStorage bucket after migration.
+    APP_DATA_KEYS.forEach(key => lsRemove(key));
+    appDataReady = true;
+    try{ migrateSetTypes(); }catch(e){}
+    try{ renderLanding(); renderRecentActivity(); }catch(e){}
+  }catch(e){
+    // If IndexedDB is unavailable, the in-memory/localStorage fallback still
+    // keeps the app usable rather than breaking the page.
+    appDataReady = false;
+  }
+} // bucket for an in-progress quiz that was never saved as a named set
 const PRACTICE_ID = '__practice__'; // bucket for an ad-hoc "weak cards" practice session
 let currentOptions = [];
 
@@ -2708,16 +2791,16 @@ function showSetupScreen(){
 // unsaved set) so pausing one deck never overwrites another deck's
 // in-progress quiz. All buckets live under one localStorage key.
 function loadAllSessions(){
-  try{ return JSON.parse(lsGet(SESSIONS_KEY)) || {}; }catch(e){ return {}; }
+  try{ return JSON.parse(appDataCache[SESSIONS_KEY] || 'null') || {}; }catch(e){ return {}; }
 }
-function saveAllSessions(obj){ lsSet(SESSIONS_KEY, JSON.stringify(obj)); }
+function saveAllSessions(obj){ appDataSet(SESSIONS_KEY, JSON.stringify(obj)); }
 
 /* ---- Case game progress: lets a played-but-unfinished case be resumed
    later instead of restarting from N01. Keyed by set id; one saved
    checkpoint per case, cleared automatically on reaching an END node
    or on an explicit restart. ---- */
-function loadCaseProgressAll(){ try{ return JSON.parse(lsGet(CASE_PROGRESS_KEY)) || {}; }catch(e){ return {}; } }
-function saveCaseProgressAll(obj){ lsSet(CASE_PROGRESS_KEY, JSON.stringify(obj)); }
+function loadCaseProgressAll(){ try{ return JSON.parse(appDataCache[CASE_PROGRESS_KEY] || 'null') || {}; }catch(e){ return {}; } }
+function saveCaseProgressAll(obj){ appDataSet(CASE_PROGRESS_KEY, JSON.stringify(obj)); }
 function getCaseProgress(setId){ if(!setId) return null; return loadCaseProgressAll()[setId] || null; }
 function clearCaseProgress(setId){
   if(!setId) return;
@@ -2776,10 +2859,10 @@ function clearSession(id){
   saveAllSessions(all);
 }
 
-function loadSets(){ try{ return JSON.parse(lsGet(SETS_KEY)) || {}; }catch(e){ return {}; } }
-function saveSetsData(obj){ lsSet(SETS_KEY, JSON.stringify(obj)); }
-function loadStatsData(){ try{ return JSON.parse(lsGet(STATS_KEY)) || {}; }catch(e){ return {}; } }
-function saveStatsData(obj){ lsSet(STATS_KEY, JSON.stringify(obj)); }
+function loadSets(){ try{ return JSON.parse(appDataCache[SETS_KEY] || 'null') || {}; }catch(e){ return {}; } }
+function saveSetsData(obj){ appDataSet(SETS_KEY, JSON.stringify(obj)); }
+function loadStatsData(){ try{ return JSON.parse(appDataCache[STATS_KEY] || 'null') || {}; }catch(e){ return {}; } }
+function saveStatsData(obj){ appDataSet(STATS_KEY, JSON.stringify(obj)); }
 function loadGlobalStats(){
   try{ return JSON.parse(lsGet(GLOBAL_KEY)) || {totalSeen:0, totalCorrect:0, currentStreak:0, bestStreak:0}; }
   catch(e){ return {totalSeen:0, totalCorrect:0, currentStreak:0, bestStreak:0}; }
@@ -3638,8 +3721,12 @@ function renderStatsScreen(){
 const DB_NAME = 'TopicReviewDB';
 function getDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = e => e.target.result.createObjectStore('bgStore');
+    const req = indexedDB.open(DB_NAME, 2);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if(!db.objectStoreNames.contains('bgStore')) db.createObjectStore('bgStore');
+      if(!db.objectStoreNames.contains(APP_DATA_STORE)) db.createObjectStore(APP_DATA_STORE);
+    };
     req.onsuccess = e => resolve(e.target.result);
     req.onerror = e => reject(e.target.error);
   });
@@ -5098,6 +5185,9 @@ $('setupBackBtn').onclick = () => {
 
 migrateSetTypes();
 showLanding();
+// Migrate large deck/progress data out of localStorage after the first paint.
+// The cache makes this transparent to the rest of the synchronous app code.
+initAppDataStorage();
 
 $('homeBtn').onclick = () => {
   // Home pauses the quiz; never discard its in-progress session.
@@ -5599,18 +5689,34 @@ function startWeakPracticeForSet(sid){
 // separately here and folded into the same backup payload — otherwise
 // a backup silently has no background in it at all.
 async function collectBackupData(){
-  const keys = [SETS_KEY, STATS_KEY, GLOBAL_KEY, SESSIONS_KEY, CASE_PROGRESS_KEY, BG_TYPE_KEY, PALETTE_KEY, BG_BLUR_KEY, BRAINBREAK_ENABLED_KEY, BRAINBREAK_INTERVAL_KEY];
   const data = {};
-  keys.forEach(k => {
+  // Study data only. Cosmetic background state is deliberately excluded so
+  // importing a study backup never changes the user's current background.
+  for(const k of APP_DATA_KEYS){
+    const v = await appDataGet(k);
+    if(v !== null && v !== undefined) data[k] = v;
+  }
+  // Small non-background app settings that belong to the study experience.
+  [BRAINBREAK_ENABLED_KEY, BRAINBREAK_INTERVAL_KEY].forEach(k => {
     const v = lsGet(k);
     if(v !== null && v !== undefined) data[k] = v;
   });
+  return {app: 'topicReview', version: 3, type: 'study-data', exportedAt: new Date().toISOString(), data};
+}
+
+async function collectBackgroundBackup(){
+  const data = {};
   try{
     const bg = await idbGet(BG_KEY);
     if(bg) data[BG_KEY] = bg;
   }catch(err){}
-  return {app: 'topicReview', version: 1, exportedAt: new Date().toISOString(), data};
+  [BG_TYPE_KEY, PALETTE_KEY, BG_BLUR_KEY].forEach(k => {
+    const v = lsGet(k);
+    if(v !== null && v !== undefined) data[k] = v;
+  });
+  return {app: 'topicReview', version: 1, type: 'background', exportedAt: new Date().toISOString(), data};
 }
+
 $('exportDataBtn').onclick = async () => {
   const payload = JSON.stringify(await collectBackupData(), null, 2);
   const blob = new Blob([payload], {type: 'application/json'});
@@ -5618,12 +5724,13 @@ $('exportDataBtn').onclick = async () => {
   const a = document.createElement('a');
   const stamp = new Date().toISOString().slice(0,10);
   a.href = url;
-  a.download = `topic-review-backup-${stamp}.json`;
+  a.download = `topic-review-study-data-${stamp}.json`;
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
 };
+
 $('importDataBtn').onclick = () => $('importDataFile').click();
 $('importDataFile').onchange = e => {
   const file = e.target.files && e.target.files[0];
@@ -5638,63 +5745,110 @@ $('importDataFile').onchange = e => {
       e.target.value = '';
       return;
     }
-    if(!confirm('Import this backup? It will overwrite your current sets, stats, and paused quizzes on this device.')){
+    if(parsed.type === 'background'){
+      alert('That is a background backup. Use “Import background” instead.');
       e.target.value = '';
       return;
     }
-    const hasBg = Object.prototype.hasOwnProperty.call(parsed.data, BG_KEY);
-    const entries = Object.entries(parsed.data).filter(([k]) => k !== BG_KEY);
+    if(!confirm('Import this study backup? It will overwrite your current sets, stats, and paused quizzes. Your current background will NOT be changed.')){
+      e.target.value = '';
+      return;
+    }
+
+    // Intentionally ignore all background keys, including them in old v2
+    // backups. This preserves the background already installed on this device.
+    const backgroundKeys = new Set([BG_KEY, BG_TYPE_KEY, PALETTE_KEY, BG_BLUR_KEY]);
+    const entries = Object.entries(parsed.data).filter(([k]) => !backgroundKeys.has(k));
     const failedKeys = [];
-    entries.forEach(([k, v]) => {
-      let ok = false;
-      try{ ok = lsSet(k, v); }catch(err){ ok = false; }
-      // A write can "succeed" (no thrown error) yet still not actually persist
-      // in some restricted iOS contexts, so read it back to be sure.
-      if(!ok || lsGet(k) !== v) failedKeys.push(k);
-    });
+    const appWrites = [];
+    for(const [k, v] of entries){
+      if(APP_DATA_KEYS.includes(k)) appWrites.push(appDataSet(k, v));
+      else {
+        const ok = lsSet(k, v);
+        if(!ok || lsGet(k) !== v) failedKeys.push(k);
+      }
+    }
+    await Promise.all(appWrites);
+    appDataReady = true;
     e.target.value = '';
     activeSetId = null;
     initBrainBreakToggle();
+    showLanding();
+    renderStatsScreen();
+
+    if(failedKeys.length){
+      alert(
+        `Imported, but ${failedKeys.length} study setting(s) didn't actually save to this device. Your background was left untouched.`
+      );
+    } else {
+      alert('Study data imported. Your current background was kept.');
+    }
+  };
+  reader.readAsText(file);
+};
+
+$('exportBgBtn').onclick = async () => {
+  const backup = await collectBackgroundBackup();
+  if(!backup.data[BG_KEY]){
+    alert('No background is currently saved to export.');
+    return;
+  }
+  const payload = JSON.stringify(backup, null, 2);
+  const blob = new Blob([payload], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0,10);
+  a.href = url;
+  a.download = `topic-review-background-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+};
+
+$('importBgBtn').onclick = () => $('importBgFile').click();
+$('importBgFile').onchange = e => {
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = async evt => {
+    let parsed;
+    try{ parsed = JSON.parse(evt.target.result); }
+    catch(err){ alert('That background file could not be read.'); e.target.value = ''; return; }
+    if(!parsed || parsed.app !== 'topicReview' || !parsed.data){
+      alert('That file doesn\'t look like a Topic Review backup.');
+      e.target.value = '';
+      return;
+    }
+    if(!parsed.data[BG_KEY]){
+      alert('No background was found in that file.');
+      e.target.value = '';
+      return;
+    }
+    if(!confirm('Replace your current background with this background backup?')){
+      e.target.value = '';
+      return;
+    }
     try{
-      // Background lives in IndexedDB, so it's restored separately from
-      // the localStorage keys above. If this backup carries a background,
-      // apply it (a full restore is expected to replace whatever's
-      // currently loaded). If it doesn't — e.g. an older backup made
-      // before this fix, or one exported with no background set — leave
-      // whatever background is already on this device alone instead of
-      // wiping it, since a sets/stats restore shouldn't strip an
-      // unrelated cosmetic setting the backup never mentioned.
-      let bg;
-      if(hasBg){
-        bg = parsed.data[BG_KEY];
-        await idbSet(BG_KEY, bg);
-      } else {
-        bg = await idbGet(BG_KEY);
+      await idbSet(BG_KEY, parsed.data[BG_KEY]);
+      for(const k of [BG_TYPE_KEY, PALETTE_KEY, BG_BLUR_KEY]){
+        if(Object.prototype.hasOwnProperty.call(parsed.data, k)) lsSet(k, parsed.data[k]);
       }
-      if(bg){
-        const type = lsGet(BG_TYPE_KEY);
-        if(type === 'video') applyBackgroundVideo(bg); else applyBackgroundImage(bg);
-      } else {
-        resetBackground();
-      }
+      const bg = parsed.data[BG_KEY];
+      const type = lsGet(BG_TYPE_KEY);
+      if(type === 'video') applyBackgroundVideo(bg); else applyBackgroundImage(bg);
       const pal = lsGet(PALETTE_KEY);
       if(pal){ const p = JSON.parse(pal); applyPaletteFromHue(p.h, p.s); }
       const blur = lsGet(BG_BLUR_KEY);
       const blurPx = blur !== null ? blur : 9;
       applyBgBlur(blurPx);
-      if($('bgBlurSlider')){ $('bgBlurSlider').value = blurPx; }
-      if($('bgBlurValue')){ $('bgBlurValue').textContent = blurPx + 'px'; }
-    }catch(err){}
-    showLanding();
-    renderStatsScreen();
-    if(failedKeys.length){
-      alert(
-        `Imported, but ${failedKeys.length} of ${entries.length} item(s) didn't actually save to this device's storage, so the import is incomplete.\n\n` +
-        `This usually means this browser/view either has storage blocked (Private Browsing, or the page was opened somewhere other than Safari directly — e.g. a Files app preview or another app's in-app browser) or your data plus this backup is larger than this browser allows (Safari on iOS caps local storage per site at roughly 5MB total).\n\n` +
-        `Open Settings → Storage check below to see current usage, and try again from Safari directly if you haven't already.`
-      );
-    } else {
-      alert('Backup imported.');
+      if($('bgBlurSlider')) $('bgBlurSlider').value = blurPx;
+      if($('bgBlurValue')) $('bgBlurValue').textContent = blurPx + 'px';
+      e.target.value = '';
+      alert('Background imported.');
+    }catch(err){
+      e.target.value = '';
+      alert('The background could not be imported.');
     }
   };
   reader.readAsText(file);
