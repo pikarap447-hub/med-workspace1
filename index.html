@@ -5298,11 +5298,12 @@ $('saveSetBtn').onclick = () => {
   const topic = $('setTopicInput').value.trim();
   const cardType = $('setTypeSelect').value === 'samplex' ? 'samplex' : 'topic';
   const sets = loadSets();
-  let id = (activeSetId && sets[activeSetId]) ? activeSetId : null;
-  if(!id){
-    const existing = Object.entries(sets).find(([_, s]) => s.name.toLowerCase() === name.toLowerCase());
-    id = existing ? existing[0] : genSetId();
-  }
+  // New sets always get a brand-new id — never silently match an existing
+  // set by name and overwrite it. (This used to look for any existing set
+  // with the same name, case-insensitive, and reuse its id — which meant
+  // saving a new set with the same title as an unrelated one, even in a
+  // different folder, would silently replace that set's content.)
+  let id = (activeSetId && sets[activeSetId]) ? activeSetId : genSetId();
   const now = Date.now();
   sets[id] = {
     name,
