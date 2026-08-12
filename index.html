@@ -2521,8 +2521,8 @@ OUTCOME: NEG
           <label class="field-label">Backup &amp; restore</label>
           <div class="hint" style="margin-top:0;">Your study data and your background are backed up separately. Importing a study backup will <strong>never change your current background</strong>.</div>
           <div class="row">
-            <button class="btn-ghost" id="exportDataBtn">⬇ Export study data</button>
-            <button class="btn-ghost" id="importDataBtn">⬆ Import study data</button>
+            <button class="btn-ghost" id="exportDataBtn">⬆ Export study data</button>
+            <button class="btn-ghost" id="importDataBtn">⬇ Import study data</button>
             <input type="file" id="importDataFile" accept="application/json" class="hidden">
           </div>
           <div class="row" style="margin-top:10px;">
@@ -2531,6 +2531,15 @@ OUTCOME: NEG
             <input type="file" id="importBgFile" accept="application/json" class="hidden">
           </div>
           <div class="hint" style="margin:10px 0 0; font-size:12px;">Use the background backup only when you actually want to move or restore your wallpaper, video, palette, and blur settings.</div>
+        </div>
+
+        <div class="backup-block">
+          <label class="field-label">Share sets with someone else</label>
+          <div class="hint" style="margin-top:0;">Export just the sets themselves — none of your stats, streaks, session history, or "completed" marks come along. The other person imports it with the same "Import study data" button above, and it's added as new sets without touching anything already on their device.</div>
+          <div class="row">
+            <button class="btn-ghost" id="shareSetsBtn">📤 Choose sets to share…</button>
+          </div>
+          <div id="shareSetsPicker" class="hidden" style="margin-top:12px;"></div>
         </div>
 
         <div class="backup-block">
@@ -3340,6 +3349,7 @@ function buildSetRow(sid, s, opts){
       <button class="btn-ghost sm" data-act="load" data-id="${sid}">${isCase ? 'Edit' : 'Load'}</button>
       <button class="btn-ghost sm icon-only" data-act="rename" data-id="${sid}" title="Rename">✎</button>
       <button class="btn-ghost sm icon-only" data-act="dup" data-id="${sid}" title="Duplicate">⧉</button>
+      <button class="btn-ghost sm icon-only" data-act="share" data-id="${sid}" title="Share this set (cards only — no stats or progress)">📤</button>
       <button class="btn-ghost sm" data-act="del" data-id="${sid}">Delete</button>
     </div>`;
   row.querySelector('[data-act="play"]')?.addEventListener('click', () => {
@@ -3359,6 +3369,7 @@ function buildSetRow(sid, s, opts){
   row.querySelector('[data-act="load"]').addEventListener('click', () => { setupReturnTo = resolveReturnTarget(opts.returnTo); loadSetById(sid); });
   row.querySelector('[data-act="rename"]').addEventListener('click', () => renameSetById(sid));
   row.querySelector('[data-act="dup"]').addEventListener('click', () => duplicateSetById(sid));
+  row.querySelector('[data-act="share"]').addEventListener('click', () => shareSetById(sid));
   row.querySelector('[data-act="del"]').addEventListener('click', () => deleteSetById(sid));
   return row;
 }
@@ -5895,6 +5906,47 @@ async function collectBackupData(){
   return {app: 'topicReview', version: 3, type: 'study-data', exportedAt: new Date().toISOString(), data};
 }
 
+/* ---- Set sharing: export just the chosen set(s), with none of this
+   device's stats/streaks/"completed" progress attached ---- */
+function slugify(str){
+  return (String(str || 'set').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40)) || 'set';
+}
+function downloadJSON(obj, filenamePrefix){
+  const payload = JSON.stringify(obj, null, 2);
+  const blob = new Blob([payload], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const stamp = new Date().toISOString().slice(0, 10);
+  a.href = url;
+  a.download = `${filenamePrefix}-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+// Stats, sessions, and case-progress all live in separate keyed stores
+// (STATS_KEY/SESSIONS_KEY/CASE_PROGRESS_KEY) and are never touched here, so
+// they're already excluded by construction. `completed`/`completedAt`,
+// though, are saved directly on the set object itself — those get stripped
+// so a shared set doesn't silently reveal "you finished this quiz."
+function collectSetShareData(ids){
+  const sets = loadSets();
+  const shared = {};
+  ids.forEach(id => {
+    const s = sets[id];
+    if(!s) return;
+    const {completed, completedAt, ...rest} = s;
+    shared[id] = rest;
+  });
+  return {app: 'topicReview', version: 1, type: 'set-share', exportedAt: new Date().toISOString(), data: {sets: shared}};
+}
+function shareSetById(id){
+  const sets = loadSets();
+  const s = sets[id];
+  if(!s) return;
+  downloadJSON(collectSetShareData([id]), `topic-review-set-${slugify(s.name)}`);
+}
+
 async function collectBackgroundBackup(){
   const data = {};
   try{
@@ -5941,6 +5993,32 @@ $('importDataFile').onchange = e => {
       e.target.value = '';
       return;
     }
+    if(parsed.type === 'set-share'){
+      const incoming = (parsed.data && parsed.data.sets) || {};
+      const names = Object.values(incoming).map(s => s.name).filter(Boolean);
+      const count = names.length;
+      if(!count){
+        alert('That file doesn\'t contain any sets.');
+        e.target.value = '';
+        return;
+      }
+      const preview = names.slice(0, 5).join(', ') + (names.length > 5 ? `, +${names.length - 5} more` : '');
+      if(!confirm(`Add ${count} shared set${count === 1 ? '' : 's'} to your library?\n\n${preview}\n\nThese are added as new sets alongside what you already have — your existing sets, stats, and progress are left untouched.`)){
+        e.target.value = '';
+        return;
+      }
+      const sets = loadSets();
+      const now = Date.now();
+      Object.values(incoming).forEach(s => {
+        sets[genSetId()] = {...s, completed: false, completedAt: undefined, createdAt: now, updatedAt: now};
+      });
+      saveSetsData(sets);
+      e.target.value = '';
+      activeSetId = null;
+      showLanding();
+      alert(`Added ${count} shared set${count === 1 ? '' : 's'} to your library.`);
+      return;
+    }
     if(!confirm('Import this study backup? It will overwrite your current sets, stats, and paused quizzes. Your current background will NOT be changed.')){
       e.target.value = '';
       return;
@@ -5976,6 +6054,64 @@ $('importDataFile').onchange = e => {
     }
   };
   reader.readAsText(file);
+};
+
+function renderShareSetsPicker(){
+  const box = $('shareSetsPicker');
+  if(!box) return;
+  const sets = loadSets();
+  const entries = Object.entries(sets).sort((a, b) =>
+    (a[1].subject || '').localeCompare(b[1].subject || '') || a[1].name.localeCompare(b[1].name)
+  );
+  if(!entries.length){
+    box.innerHTML = '<div class="hint" style="margin-top:0;">No sets yet.</div>';
+    return;
+  }
+  box.innerHTML = `
+    <label class="switch-row" style="margin:4px 0 10px;">
+      <span class="switch"><input type="checkbox" id="shareSelectAll"><span class="switch-track"><span class="switch-thumb"></span></span></span>
+      <span class="switch-label">Select all</span>
+    </label>
+    <div id="shareSetsList" style="max-height:260px; overflow-y:auto; display:flex; flex-direction:column; gap:8px;">
+      ${entries.map(([id, s]) => `
+        <label style="display:flex; align-items:flex-start; gap:8px; font-size:13.5px;">
+          <input type="checkbox" class="share-set-check" data-id="${id}" style="margin-top:3px;">
+          <span>${escapeHtml(s.name)}${s.subject ? ` <span class="set-tag">${escapeHtml(s.subject)}</span>` : ''}<br><span style="color:var(--ink-soft); font-size:12px;">${(s.cards || []).length} cards</span></span>
+        </label>
+      `).join('')}
+    </div>
+    <div class="row" style="margin-top:12px;">
+      <button class="btn-primary sm" id="shareSetsExportBtn" disabled>Export selected (0)</button>
+    </div>
+  `;
+  const checks = () => Array.from(box.querySelectorAll('.share-set-check'));
+  const updateCount = () => {
+    const n = checks().filter(c => c.checked).length;
+    const btn = $('shareSetsExportBtn');
+    btn.textContent = `Export selected (${n})`;
+    btn.disabled = n === 0;
+  };
+  checks().forEach(c => c.addEventListener('change', () => {
+    updateCount();
+    $('shareSelectAll').checked = checks().every(c2 => c2.checked);
+  }));
+  $('shareSelectAll').addEventListener('change', e => {
+    checks().forEach(c => { c.checked = e.target.checked; });
+    updateCount();
+  });
+  $('shareSetsExportBtn').addEventListener('click', () => {
+    const ids = checks().filter(c => c.checked).map(c => c.dataset.id);
+    if(!ids.length) return;
+    const filename = ids.length === 1 ? `topic-review-set-${slugify(sets[ids[0]].name)}` : `topic-review-shared-sets-${ids.length}`;
+    downloadJSON(collectSetShareData(ids), filename);
+  });
+}
+$('shareSetsBtn').onclick = () => {
+  const box = $('shareSetsPicker');
+  const opening = box.classList.contains('hidden');
+  if(opening) renderShareSetsPicker();
+  box.classList.toggle('hidden', !opening);
+  $('shareSetsBtn').textContent = opening ? '📤 Hide set picker' : '📤 Choose sets to share…';
 };
 
 $('exportBgBtn').onclick = async () => {
