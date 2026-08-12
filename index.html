@@ -3118,6 +3118,20 @@ function updateDailyStreakUI(){
 
 function genSetId(){ return 'set_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function cardKey(card){ return card.front.trim().toLowerCase(); }
+// Cards can be edited, replaced, or removed after being studied, but the old
+// cardStats entries for their old fronts are never deleted from that set's
+// bucket. Left unfiltered, a set's shown "average" mixes in stats from cards
+// that aren't even in the set anymore — so an edited set can show an average
+// for cards that were, from the current set's perspective, never touched.
+// Filtering to the set's current cards keeps the number honest.
+function liveCardStats(s, st){
+  if(!st || !st.cardStats) return [];
+  // No matching saved set (e.g. an unsaved practice/scratch bucket) — nothing
+  // to filter against, so just return everything as before.
+  if(!s || !Array.isArray(s.cards)) return Object.values(st.cardStats);
+  const liveKeys = new Set(s.cards.map(c => cardKey(c)));
+  return Object.values(st.cardStats).filter(cs => liveKeys.has(cardKey({front: cs.front})));
+}
 function fmtDate(ts){
   return new Date(ts).toLocaleDateString(undefined, {month:'short', day:'numeric'});
 }
@@ -3304,7 +3318,7 @@ function buildSetRow(sid, s, opts){
   let accStr = '';
   let weakCardCount = 0;
   if(st && st.cardStats){
-    const vals = Object.values(st.cardStats);
+    const vals = liveCardStats(s, st);
     const seen = vals.reduce((a,c) => a + c.seen, 0);
     const correct = vals.reduce((a,c) => a + c.correct, 0);
     if(seen) accStr = ' · ' + Math.round(correct / seen * 100) + '% avg';
@@ -3848,7 +3862,7 @@ function renderStatsScreen(){
   ids.forEach(id => {
     const s = sets[id];
     const st = statsAll[id];
-    const entries = st ? Object.values(st.cardStats) : [];
+    const entries = st ? liveCardStats(s, st) : [];
     const seen = entries.reduce((a,c) => a + c.seen, 0);
     const correct = entries.reduce((a,c) => a + c.correct, 0);
     const acc = seen ? Math.round(correct / seen * 100) : 0;
@@ -3874,7 +3888,7 @@ function renderStatsScreen(){
   let allCards = [];
   Object.entries(statsAll).forEach(([id, st]) => {
     const setName = sets[id] ? sets[id].name : 'Unsaved session';
-    Object.values(st.cardStats || {}).forEach(c => {
+    liveCardStats(sets[id], st).forEach(c => {
       if(c.seen >= 2) allCards.push({...c, setName, acc: c.correct / c.seen});
     });
   });
@@ -5386,10 +5400,16 @@ $('setupBackBtn').onclick = () => {
 };
 
 migrateSetTypes();
-showLanding();
-// Migrate large deck/progress data out of localStorage after the first paint.
-// The cache makes this transparent to the rest of the synchronous app code.
-initAppDataStorage();
+// Wait for the IndexedDB-backed cache to finish loading before the app
+// becomes interactive. Rendering (and letting the user create/save sets)
+// before this resolved used to run against a cache that could still be
+// missing data that only lived in IndexedDB — so a set created in that
+// window could vanish the moment migration finished and overwrote the
+// cache with the (older, pre-new-set) IndexedDB snapshot underneath it.
+initAppDataStorage().then(() => {
+  migrateSetTypes();
+  showLanding();
+});
 
 $('homeBtn').onclick = () => {
   // Home pauses the quiz; never discard its in-progress session.
