@@ -2501,6 +2501,13 @@ OUTCOME: NEG
           </p>
           <div id="gpStatus" class="hint" style="margin-top:0;">No controller detected yet — press any button on it to connect.</div>
           <div id="gpLastPress" class="hint" style="margin-top:2px; font-family:var(--font-mono); font-size:11.5px;"></div>
+          <div id="gpMacBtHint" class="hint hidden" style="margin-top:8px; line-height:1.55;">
+            <strong>Bluetooth controller not showing up, but USB-C works?</strong> That's a known limitation in Chrome and other Chromium-based browsers (Edge, Brave, Opera) on macOS — they talk to Bluetooth controllers through a less reliable system path than wired ones, so this isn't something a website can fix. A few things that sometimes help:<br>
+            • Fully pair the controller in System Settings → Bluetooth first (not just its own pairing button), then press a face button on it.<br>
+            • Quit and reopen Chrome after pairing — a stuck Bluetooth handle sometimes needs a full relaunch, not just a page reload.<br>
+            • Try Safari — its Bluetooth controller support on macOS tends to be more reliable than Chrome's.<br>
+            • Otherwise, USB-C is the dependable fallback.
+          </div>
           <div id="gpMapRows" class="gp-map-rows"></div>
           <div class="row" style="margin-top:14px;">
             <button class="btn-ghost" id="gpResetMapBtn">⟲ Reset to defaults</button>
@@ -2742,7 +2749,14 @@ function applyCardOpacity(pct){
 }
 const SESSIONS_KEY = 'topicReview_sessions_v1';
 const CASE_PROGRESS_KEY = 'topicReview_caseProgress_v1';
-const APP_DATA_KEYS = [SETS_KEY, STATS_KEY, GLOBAL_KEY, SESSIONS_KEY, CASE_PROGRESS_KEY];
+const APP_DATA_KEYS = [SETS_KEY, STATS_KEY, SESSIONS_KEY, CASE_PROGRESS_KEY];
+// GLOBAL_KEY (daily streak / study-day history) deliberately stays out of
+// this list. loadGlobalStats/saveGlobalStats read and write it with plain
+// lsGet/lsSet, and nothing anywhere reads it back out of the IndexedDB
+// layer — so if it were migrated like the others, the cleanup step below
+// would delete its real localStorage copy on every app load (since nothing
+// restores it from IndexedDB afterward), silently erasing the streak's
+// day-by-day history each time the app reopened.
 
 /* Large app data is stored in IndexedDB instead of localStorage.
    A small in-memory cache keeps the rest of the app synchronous, so the
@@ -6548,6 +6562,20 @@ document.addEventListener('keydown', e => {
 (function(){
   const GP_FOCUSABLE_SELECTOR = 'button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
 
+  // Chromium's Bluetooth-gamepad handling on macOS (shared by Chrome, Edge,
+  // Brave, Opera — they're all built on the same engine) has long been far
+  // less reliable than its USB path; Safari uses Apple's own GameController
+  // framework instead and doesn't have this issue. Used to show a hint only
+  // where it's actually relevant, instead of guessing from "no controller
+  // detected yet" alone (which also just means "not connected at all").
+  function isMacChromium(){
+    const ua = navigator.userAgent || '';
+    const isMac = /Macintosh|Mac OS X/.test(ua) && !/iPhone|iPad/.test(ua);
+    const isChromiumFamily = /Chrome|Chromium|Edg\/|OPR\/|Brave/.test(ua);
+    const isSafari = /Safari/.test(ua) && !isChromiumFamily;
+    return isMac && isChromiumFamily && !isSafari;
+  }
+
   /* Visible focus ring for whatever the controller (or keyboard Tab) has
      focused, since some buttons in this app don't otherwise show one. */
   document.addEventListener('focusin', e => {
@@ -6694,6 +6722,8 @@ document.addEventListener('keydown', e => {
         ? `Connected: ${connectedName}`
         : 'No controller detected yet — press any button on it to connect.';
     }
+    const macBtHint = $('gpMacBtHint');
+    if(macBtHint) macBtHint.classList.toggle('hidden', !!connectedName || !isMacChromium());
     updateLastPress();
   }
   const resetBtn = $('gpResetMapBtn');
