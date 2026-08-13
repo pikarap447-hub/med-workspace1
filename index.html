@@ -3988,10 +3988,13 @@ function recordAnswer(card, isCorrect){
   // point, and grinding a weak-card practice round (PRACTICE_ID bucket)
   // earns a bonus point on top — it's harder material, so it should feed
   // the pet faster than a normal pass.
-  if(typeof awardCarePoints === 'function'){
+  // The pet module is inside a separate DOMContentLoaded closure, so
+  // awardCarePoints() is not directly visible from the quiz code.
+  // Use the explicit window bridge exposed by the pet module.
+  if(typeof window.awardPetCarePoints === 'function'){
     const isWeakPractice = activeSetId === PRACTICE_ID;
     const base = isCorrect ? 3 : 1;
-    awardCarePoints(base + (isWeakPractice ? 1 : 0));
+    window.awardPetCarePoints(base + (isWeakPractice ? 1 : 0));
   }
 
   // A daily streak means "you studied on consecutive calendar days".
@@ -7936,9 +7939,16 @@ document.addEventListener('DOMContentLoaded',function(){
   }
 
   function awardCarePoints(amount){
-    pet.carePoints=Math.max(0,(Number(pet.carePoints)||0)+amount);
-    if(!$('petView').classList.contains('hidden'))renderPetPanel(); else savePet();
+    const earned=Math.max(0,Number(amount)||0);
+    pet.carePoints=Math.max(0,(Number(pet.carePoints)||0)+earned);
+    // Persist rewards immediately so they survive quiz/screen changes.
+    savePet();
+    if($('petView') && !$('petView').classList.contains('hidden'))renderPetPanel();
   }
+
+  // Quiz code is outside this closure; expose a narrow bridge for rewards.
+  window.awardPetCarePoints=awardCarePoints;
+
   function spendCarePoints(cost){
     if((Number(pet.carePoints)||0)<cost){
       $('petLog').textContent=`You need ${cost} care points. Answer more quizzes to earn them.`;
