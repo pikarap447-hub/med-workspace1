@@ -7474,6 +7474,47 @@ document.addEventListener('DOMContentLoaded',function(){
   function clampPet(n){return Math.max(0,Math.min(100,Math.round(n)))}
   function petMood(){const a=(pet.hunger+pet.happy+pet.energy+pet.clean)/4;if(pet.energy<20)return['Sleepy','😴'];if(pet.hunger<20)return['Hungry','🍖'];if(pet.clean<20)return['Messy','🫧'];if(a>=80)return['Thriving','✨'];if(a>=60)return['Happy','😊'];if(a>=40)return['Okay','🙂'];return['Needy','🥺']}
   function showPetBubble(msg,ms=1400){petBubble.textContent=msg;petBubble.classList.add('show');clearTimeout(petBubbleTimer);petBubbleTimer=setTimeout(()=>petBubble.classList.remove('show'),ms)}
+
+  // Small per-context dialogue pools. Kept short and low-stakes on purpose —
+  // this is flavor text for a study companion, not a chat feature — but
+  // several lines per context so the pet doesn't repeat the exact same
+  // caption every single time you feed/play/pick it up, which reads as
+  // scripted rather than alive. `lastLine` avoids an immediate repeat.
+  const PET_LINES={
+    pickup:['Whee!','Up we go!','Hi there!','Oop—','Carry me!'],
+    drop:['Home again.','Thanks for the lift.','Back on my feet.','Phew.'],
+    tap:['Hehe!','That tickles!','Pet me more?','Hi!','Yes?'],
+    feed:['Yum!','My favorite!','More please?','So good!'],
+    play:['Best. Day. Ever.','Again, again!','Wheee!','Catch me!'],
+    clean:['Squeaky clean!','So fresh!','Bubbles!','Much better.'],
+    sleep:['Zzz...','So cozy.','Just five more minutes...','Nap time.'],
+    correct:['Nice! 🎉','You got it!','Smart cookie!','Yes!!'],
+    incorrect:['Keep going 💪','So close!','Next one!','You got this.'],
+    hungry:['My tummy...','Got a snack?','Feed me?'],
+    sleepy:['So... tired...','*yaaawn*','Need a nap.'],
+    messy:['I need a bath.','Kinda grubby.','Bleh, sticky.'],
+    lonely:['Miss you.','Study with me?','Bored...']
+  };
+  const petLineHistory={};
+  function petPickLine(context){
+    const pool=PET_LINES[context];
+    if(!pool||!pool.length)return null;
+    if(pool.length===1)return pool[0];
+    let line=pool[Math.floor(Math.random()*pool.length)];
+    let guard=0;
+    while(line===petLineHistory[context]&&guard++<6) line=pool[Math.floor(Math.random()*pool.length)];
+    petLineHistory[context]=line;
+    return line;
+  }
+  // Fires a short speech-bubble reaction over the on-screen pet. Silently a
+  // no-op when the pet isn't adopted yet or isn't currently visible, so it's
+  // always safe to call from any interaction handler.
+  function petSay(context,ms){
+    if(!isPetAdopted())return;
+    const line=petPickLine(context);
+    if(!line)return;
+    showPetBubble(line,ms||1300);
+  }
   function currentScreen(){if(!$('quiz').classList.contains('hidden'))return'quiz';if(!$('landing').classList.contains('hidden'))return'home';return'other'}
 
   // Dogz save-file icon library. All supplied icons remain embedded here so additional breeds can be enabled later without re-importing the sheet.
@@ -7788,14 +7829,43 @@ document.addEventListener('DOMContentLoaded',function(){
     if(petBaseBottom==null) petBaseBottom=parseFloat(getComputedStyle(petOverlay).bottom)||76;
     return petBaseBottom;
   }
+  // The horizontal clamp used to be a flat 78vw, which left a dead strip of
+  // screen on the right on anything wider than a small phone (78vw plus the
+  // sprite's own ~112px width overshoots on narrow screens but undershoots
+  // badly on wide ones, so the drag felt "blocked" well before the actual
+  // edge). Compute the true right-hand limit from the sprite's real pixel
+  // width instead, so it can be dragged flush to the right edge on any
+  // screen size. Read live (not cached) since it also depends on window
+  // width, which can change on rotation/resize.
+  function getPetMaxX(){
+    const w=petOverlay.offsetWidth||112;
+    const marginPx=6;
+    return Math.max(50,100-((w+marginPx)/window.innerWidth*100));
+  }
+  // Likewise, the top-of-screen limit depends on the sprite's actual pixel
+  // height and the live viewport height, not an arbitrary constant — so it
+  // can be carried right up near the top edge without clipping off-screen
+  // or stopping far short of it.
+  function getPetTopCeiling(){
+    const h=petOverlay.offsetHeight||112;
+    const topMargin=8;
+    return window.innerHeight-h-topMargin;
+  }
   let petY=null;
-  function positionPet(x,duration=0,y=null){
-    petX=Math.max(3,Math.min(78,x));
+  // `reach` is how far above its resting shelf the pet is allowed to go —
+  // small during ambient wandering (96px "hop" height) but effectively
+  // unlimited while it's being carried by the pointer, so a drag doesn't
+  // feel like it's fighting a short leash. Always re-clamped against the
+  // real viewport height (getPetTopCeiling) so it can never be dragged
+  // off-screen past the top, regardless of how large `reach` is.
+  function positionPet(x,duration=0,y=null,reach=96){
+    petX=Math.max(3,Math.min(getPetMaxX(),x));
     const transitions=['opacity .35s ease'];
     if(duration) transitions.push(`left ${duration}ms linear`);
     if(y!=null){
       const base=getPetBaseBottom();
-      petY=Math.max(base,Math.min(base+96,y));
+      const ceiling=Math.min(base+reach,getPetTopCeiling());
+      petY=Math.max(base,Math.min(Math.max(base,ceiling),y));
       if(duration) transitions.push(`bottom ${duration}ms ease-in-out`);
     }
     petOverlay.style.transition=transitions.join(',');
@@ -7803,13 +7873,25 @@ document.addEventListener('DOMContentLoaded',function(){
     if(y!=null) petOverlay.style.bottom=petY+'px';
   }
 
+  let lastAmbientChoice=null;
   function playAmbientBehavior(done){
     if(petMode!=='home'){if(done)done();return;}
     const pool=pet.energy<30
       ? [['idle','rest',3],['idle','look',1]]
       : [['actions','sniff',4],['actions','lick',2],['actions','roll',1],['social','curious',2],['vocal','bark',1],['social','beg',1]];
-    const total=pool.reduce((n,x)=>n+x[2],0);let roll=Math.random()*total, choice=pool[0];
-    for(const item of pool){roll-=item[2];if(roll<=0){choice=item;break;}}
+    // Weighted pick, but reroll once if it lands on whatever just played —
+    // a real animal doesn't sniff, sniff, sniff on a loop, and seeing the
+    // exact same beat twice in a row is what makes ambient behavior read
+    // as a fixed cycle instead of something organic.
+    const pick=()=>{
+      const total=pool.reduce((n,x)=>n+x[2],0);let roll=Math.random()*total, choice=pool[0];
+      for(const item of pool){roll-=item[2];if(roll<=0){choice=item;break;}}
+      return choice;
+    };
+    let choice=pick();
+    const key=choice[0]+':'+choice[1];
+    if(key===lastAmbientChoice && pool.length>1) choice=pick();
+    lastAmbientChoice=choice[0]+':'+choice[1];
     setPetAction(choice[0],choice[1],true,done);
   }
 
@@ -7899,13 +7981,23 @@ document.addEventListener('DOMContentLoaded',function(){
     setPetAction('reactions',kind==='correct'?'celebrate':'encourage',true,()=>{
       if(token===petActionToken&&petMode==='quiz')setPetAction('idle','stand');
     });
-    showPetBubble(kind==='correct'?'Nice! 🎉':'Keep going 💪',1200);
+    petSay(kind==='correct'?'correct':'incorrect',1200);
     // The reaction itself owns its completion; do not interrupt it on a timer.
   }
 
+  let petNeedBubbleAt=0;
   function petTick(){
     const now=Date.now(),steps=Math.floor(Math.max(0,now-(pet.lastTick||now))/30000);
     if(steps>0){pet.hunger=clampPet(pet.hunger-2*steps);pet.happy=clampPet(pet.happy-1*steps);pet.energy=clampPet(pet.energy-1*steps);pet.clean=clampPet(pet.clean-1*steps);pet.lastTick=now;savePet()}
+    // Occasionally let a low stat speak up on its own, instead of the pet
+    // only ever reacting to something the person just did — a bit of
+    // unprompted personality is what makes it feel alive rather than a
+    // static status display. Heavily throttled (~once a minute at most) and
+    // only when the pet is actually on screen and not mid-carry.
+    if(!carryDrag && (petMode==='home'||petMode==='quiz') && now-petNeedBubbleAt>55000 && Math.random()<0.5){
+      const need=pet.hunger<25?'hungry':pet.energy<25?'sleepy':pet.clean<25?'messy':pet.happy<25?'lonely':null;
+      if(need){petNeedBubbleAt=now;petSay(need,1600);}
+    }
   }
   function isPetAdopted(){return lsGet('topicReviewPetRescueIntroSeen')==='1'}
   // Exposed so the study-data import handler (defined outside this
@@ -8127,7 +8219,9 @@ document.addEventListener('DOMContentLoaded',function(){
     if(a==='sleep'){pet.energy=clampPet(pet.energy+38);pet.hunger=clampPet(pet.hunger-5)}
     const stageCues={feed:['excited',2100],play:['playful',3000],clean:['grooming',2400],sleep:['resting',4200]};
     setPetStageState(...stageCues[a]);
-    $('petLog').textContent=`${pet.name||'Mochi'} loved that. Keep studying to earn more care points.`;
+    const line=petPickLine(a)||'loved that';
+    petSay(a,1600);
+    $('petLog').textContent=`${pet.name||'Mochi'} says: "${line}" — keep studying to earn more care points.`;
     renderPetPanel();
   }));
   syncPetIntroLayout();
@@ -8163,7 +8257,7 @@ document.addEventListener('DOMContentLoaded',function(){
     const targetY=getPetBaseBottom();
     const direction=petDirection>0?1:-1;
     const distance=8;
-    const targetX=Math.max(3,Math.min(78,startX+direction*distance));
+    const targetX=Math.max(3,Math.min(getPetMaxX(),startX+direction*distance));
     const total=seq.delays.reduce((sum,d)=>sum+(d||160),0);
     const started=performance.now();
 
@@ -8242,45 +8336,94 @@ document.addEventListener('DOMContentLoaded',function(){
     petFrameIndex=0;
     petAction='stand';
     petMoving=false;
-    positionPet(dropX);
     drawPetFrame(2,3,petDirection>0);
+    petSay('drop');
 
-    // One synchronized walk, then idle. No CSS movement timer is involved.
-    if(petMode==='home'){
-      playPostDropWalk(()=>{
-        if(petMode!=='home')return;
-        petMoving=false;
-        petAction='stand';
+    // playPostDropWalk's walk-cycle covers its distance in a fixed time
+    // (however many frames the walk animation has), which looks fine for
+    // the small in-place shuffle it was designed for. But when the pet is
+    // released from up near the top of the screen, that same fixed time
+    // now has to cover a much larger vertical drop — so it visibly sprints/
+    // snaps back down instead of walking. Glide it down to the shelf first,
+    // at a speed that scales with distance, then hand off to the normal
+    // small post-drop walk (which becomes a no-op-height, in-place shuffle
+    // again since it's already at ground level by then).
+    settlePetToGround(dropX,()=>{
+      if(petMode==='home'){
+        playPostDropWalk(()=>{
+          if(petMode!=='home')return;
+          petMoving=false;
+          petAction='stand';
+          setPetAction('idle','stand',true);
+          petMoveTimer=setTimeout(()=>{
+            if(petMode==='home'&&!carryDrag)scheduleNextWalk();
+          },7000);
+        });
+      }else{
         setPetAction('idle','stand',true);
-        petMoveTimer=setTimeout(()=>{
-          if(petMode==='home'&&!carryDrag)scheduleNextWalk();
-        },7000);
-      });
-    }else{
-      setPetAction('idle','stand',true);
-    }
+      }
+    });
     requestAnimationFrame(()=>{carryReleaseLock=false});
+  }
+  // Eases the pet down to its resting shelf height at a speed proportional
+  // to how far up it was carried, instead of the fixed-duration walk-cycle
+  // snapping it back. No-ops (calls done immediately) when it's already
+  // close to the ground, so ordinary near-shelf drops keep their original
+  // snappy feel — this only kicks in for drops from well up in the air.
+  function settlePetToGround(dropX,done){
+    const base=getPetBaseBottom();
+    const current=petY!=null?petY:base;
+    const diff=current-base;
+    if(diff<=40){ if(done)done(); return; }
+    const duration=Math.min(1100,Math.max(320,diff*1.1));
+    setPetAction('idle','stand',true);
+    positionPet(dropX,duration,base);
+    setTimeout(()=>{ if(done)done(); },duration);
   }
   function beginPetHold(e){
     if(!isPetAdopted()||!(petMode==='home'||petMode==='quiz'))return;
     e.preventDefault();
     // If a stale hold exists, terminate it before starting another one.
     if(carryDrag) releasePetHold();
+    // A leftover walk in progress (grabbed mid-stride) leaves petMoving
+    // stuck true forever once its own timers are cleared below — nothing
+    // else ever flips it back, which then confuses the next drop/walk
+    // cycle. Reset it up front so every pickup starts from a clean state.
+    petMoving=false;
     carryPointerId=e.pointerId;
-    carryDrag={x:e.clientX,y:e.clientY,left:petX,bottom:parseFloat(petOverlay.style.bottom)||76,pointerId:e.pointerId};
+    carryDrag={x:e.clientX,y:e.clientY,left:petX,bottom:parseFloat(petOverlay.style.bottom)||getPetBaseBottom(),pointerId:e.pointerId};
     try{petCanvas.setPointerCapture(e.pointerId)}catch(err){}
     petOverlay.classList.add('dragging');
     clearTimeout(petMoveTimer);
     clearTimeout(petAnimTimer);
+    if(petWalkRaf){cancelAnimationFrame(petWalkRaf);petWalkRaf=null;}
     setPetAction('utility','carry',true);
+    petSay('pickup');
   }
   petCanvas.addEventListener('pointerdown',beginPetHold);
   petCanvas.addEventListener('pointermove',e=>{
-    if(!carryDrag)return;
-    const nextX=Math.max(2,Math.min(82,carryDrag.left+(e.clientX-carryDrag.x)/window.innerWidth*100));
-    positionPet(nextX);
-    const nextBottom=Math.max(52,Math.min(window.innerHeight-142,carryDrag.bottom-(e.clientY-carryDrag.y)));
-    petOverlay.style.bottom=nextBottom+'px';
+    // Without this guard, a second finger touching the canvas while the
+    // first is already dragging would hijack carryDrag's reference frame
+    // (its clientX/Y jump to the new finger's position but carryDrag.left/
+    // bottom don't), causing the pet to visibly jump. Only the pointer that
+    // started the hold is allowed to move it.
+    if(!carryDrag||e.pointerId!==carryPointerId)return;
+    const dxPx=e.clientX-carryDrag.x;
+    const nextX=Math.max(3,Math.min(getPetMaxX(),carryDrag.left+dxPx/window.innerWidth*100));
+    const nextBottom=carryDrag.bottom-(e.clientY-carryDrag.y);
+    // Face the direction it's actually being dragged — a carried pet that
+    // keeps staring the way it happened to be facing before pickup reads as
+    // stiff/broken rather than organic.
+    if(Math.abs(dxPx)>6){
+      const dir=dxPx>0?1:-1;
+      if(dir!==petDirection){petDirection=dir;setPetAction('utility','carry',true);}
+    }
+    // reach is intentionally huge here (not the small ~96px ambient hop
+    // height) so positionPet's own getPetTopCeiling() clamp — the sprite's
+    // real height against the live viewport — is what limits how high a
+    // drag can go, instead of an arbitrary short leash that stopped well
+    // below the top of the screen.
+    positionPet(nextX,0,nextBottom,window.innerHeight);
   });
   petCanvas.addEventListener('pointerup',releasePetHold);
   petCanvas.addEventListener('pointercancel',releasePetHold);
