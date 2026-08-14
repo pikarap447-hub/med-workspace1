@@ -4115,19 +4115,6 @@ function recordAnswer(card, isCorrect){
   g.bestStreak = Math.max(Number(g.bestStreak || 0), run);
   saveGlobalStats(g);
 
-  // Now that the streak has been recalculated, give the pet the complete
-  // answer context rather than the previous streak value.
-  if(typeof window.recordPetStudyAnswer === 'function'){
-    window.recordPetStudyAnswer({
-      correct:isCorrect,
-      weakPractice:activeSetId===PRACTICE_ID,
-      practice:activeSetId===PRACTICE_ID,
-      streak:g.currentStreak,
-      bestStreak:g.bestStreak,
-      today:g.studyDays[today]
-    });
-  }
-
   const statsAll = loadStatsData();
   const bucketId = activeSetId || 'scratch';
   if(!statsAll[bucketId]) statsAll[bucketId] = {cardStats:{}, sessions:[]};
@@ -4147,9 +4134,6 @@ function recordSession(){
   statsAll[bucketId].sessions.push({date: Date.now(), correct: score, total: askedCount, mastered: masteredCount, totalCards});
   if(statsAll[bucketId].sessions.length > 50) statsAll[bucketId].sessions = statsAll[bucketId].sessions.slice(-50);
   saveStatsData(statsAll);
-  if(typeof window.recordPetStudySession === 'function'){
-    window.recordPetStudySession({correct:score,total:askedCount,accuracy:askedCount?Math.round(score/askedCount*100):0});
-  }
   if(activeSetId){
     const sets = loadSets();
     if(sets[activeSetId]){
@@ -6152,7 +6136,6 @@ $('startBtn').onclick = () => {
 // Shared quiz-launch path used by "Start quiz", and by the weak-cards
 // practice session, so both get the same reset/queue/save behavior.
 function launchQuiz(cardArr, setId){
-  if(typeof window.petStudyStart==='function')window.petStudyStart();
   cards = cardArr;
   activeSetId = setId;
   // Starting a fresh run means it's no longer "done" until it's finished again.
@@ -7584,120 +7567,15 @@ document.addEventListener('DOMContentLoaded',function(){
   const petCtx=petCanvas.getContext('2d');
   const petBubble=document.getElementById('studyPetBubble');
   const PET_KEY='topicReviewVirtualPet_v2';
-  const defaultPet={name:'Mochi',breed:'cavalier',hunger:80,happy:80,energy:80,clean:80,carePoints:0,lastTick:Date.now(),
-    personality:{playful:52,affectionate:50,confident:50,calm:50,curious:50},
-    bond:0,adoptedAt:Date.now(),study:{total:0,correct:0,streak:0,bestStreak:0,today:0,lastStudyAt:0,consecutiveCorrect:0,misses:0,sessions:0,lastAccuracy:0,weakCards:0,practiceAnswers:0},
-    favoriteActivity:null,lastStudyCue:null};
+  const defaultPet={name:'Mochi',breed:'cavalier',hunger:80,happy:80,energy:80,clean:80,carePoints:0,lastTick:Date.now()};
   let pet=loadPet(), petMode='home', petAction='stand', petFrameIndex=0;
   let petAnimTimer=null,petWalkRaf=null,petMoveTimer=null,petBubbleTimer=null,petDecayTimer=null;
   let petX=8,petTargetX=68,petDirection=1,petMoving=false,petActionToken=0,petLastScreen='';
 
-  function loadPet(){
-    try{
-      const raw=JSON.parse(localStorage.getItem(PET_KEY)||'null');
-      const p={...defaultPet,...(raw||{})};
-      p.personality={...defaultPet.personality,...(raw?.personality||{})};
-      p.study={...defaultPet.study,...(raw?.study||{})};
-      if(!p.breed)p.breed='cavalier';
-      if(!p.adoptedAt)p.adoptedAt=Date.now();
-      return p;
-    }catch(e){return{...defaultPet,personality:{...defaultPet.personality},study:{...defaultPet.study}}}
-  }
+  function loadPet(){try{const p={...defaultPet,...JSON.parse(localStorage.getItem(PET_KEY)||'null')};if(!p.breed)p.breed='cavalier';return p}catch(e){return{...defaultPet}}}
   function savePet(){try{localStorage.setItem(PET_KEY,JSON.stringify(pet))}catch(e){}}
   function clampPet(n){return Math.max(0,Math.min(100,Math.round(n)))}
   function petMood(){const a=(pet.hunger+pet.happy+pet.energy+pet.clean)/4;if(pet.energy<20)return['Sleepy','😴'];if(pet.hunger<20)return['Hungry','🍖'];if(pet.clean<20)return['Messy','🫧'];if(a>=80)return['Thriving','✨'];if(a>=60)return['Happy','😊'];if(a>=40)return['Okay','🙂'];return['Needy','🥺']}
-
-  // ---- Living companion layer ------------------------------------------------
-  // The pet remembers how you study, not just its four care meters. These
-  // values deliberately move slowly so the dog develops a recognizable
-  // personality instead of becoming a random mood generator.
-  function petTrait(k,delta){pet.personality[k]=clampPet((pet.personality[k]||50)+delta)}
-  function petBond(delta){pet.bond=Math.max(0,Math.min(1000,Math.round((pet.bond||0)+delta)))}
-  function petDaysTogether(){return Math.max(0,Math.floor((Date.now()-(pet.adoptedAt||Date.now()))/86400000))}
-  function petStudyIdentity(){
-    const s=pet.study||defaultPet.study, p=pet.personality||defaultPet.personality;
-    if((s.streak||0)>=7)return'consistent';
-    if((s.consecutiveCorrect||0)>=8)return'on_fire';
-    if((s.lastAccuracy||0)>=85 && s.total>=12)return'confident';
-    if((s.misses||0)>=5 && (s.consecutiveCorrect||0)<=1)return'encouraging';
-    if(p.playful>68)return'playful';
-    if(p.affectionate>68)return'affectionate';
-    if(p.curious>68)return'curious';
-    return'companion';
-  }
-  function petContextLine(context){
-    const name=pet.name||'Mochi', s=pet.study||defaultPet.study, p=pet.personality||defaultPet.personality;
-    const streak=s.streak||0, acc=s.total?Math.round((s.correct/s.total)*100):0;
-    if(context==='correct'){
-      if((s.consecutiveCorrect||0)>=6)return `${name} is practically bouncing. “${s.consecutiveCorrect} in a row!!”`;
-      if(streak>=3)return `${name} recognizes the routine. “Another one for our ${streak}-day streak!”`;
-      if(acc>=85 && s.total>=8)return `${name} looks smug. “See? You actually know this stuff.”`;
-      return p.affectionate>65?'A proud little tail wag. “That was a good one. I knew you could.”':'“Yes! Keep going!”';
-    }
-    if(context==='incorrect'){
-      if((s.consecutiveCorrect||0)>=5)return `${name} nudges you. “One miss doesn't erase that run.”`;
-      if((s.misses||0)>=4)return `${name} settles beside you. “We can figure this one out.”`;
-      return p.confident>65?'“Nope. Shake it off. Next one.”':'“Close! Let’s get the next one together.”';
-    }
-    if(context==='studyStart'){
-      if(streak>=7)return `${name} is already waiting. “Day ${streak}. We’re really doing this.”`;
-      if(streak>=3)return `${name} perks up. “You came back!”`;
-      if(s.lastStudyAt && Date.now()-s.lastStudyAt>172800000)return `${name} gives you a look. “I missed our study time.”`;
-      return p.curious>65?'“Ooh, what are we learning today?”':'“Okay. I’m ready.”';
-    }
-    if(context==='sessionEnd'){
-      if(acc>=90)return `${name} looks extremely pleased. “${acc}%?! I’m impressed.”`;
-      if(acc>=75)return `${name} gives a satisfied little wiggle. “Solid session.”`;
-      return `${name} stays close. “We’ll get the tricky ones next time.”`;
-    }
-    if(context==='streak')return streak>=7?`“${streak} days. You’re part of the furniture now.”`:`“${streak} days! I like this routine.”`;
-    return null;
-  }
-  function petStudyEvent(kind,data={}){
-    if(!pet.study)pet.study={...defaultPet.study};
-    if(kind==='answer'){
-      const correct=!!data.correct;
-      pet.study.total++;
-      if(correct){
-        pet.study.correct++; pet.study.consecutiveCorrect=(pet.study.consecutiveCorrect||0)+1;
-        petBond(1); petTrait('confident',0.35); petTrait('calm',0.12); petTrait('curious',0.15);
-      }else{
-        pet.study.misses++; pet.study.consecutiveCorrect=0;
-        petBond(0.35); petTrait('affectionate',0.28); petTrait('calm',0.18);
-      }
-      pet.study.lastStudyAt=Date.now();
-      pet.study.lastAccuracy=Math.round((pet.study.correct/pet.study.total)*100);
-      if(data.weakPractice){pet.study.weakCards=(pet.study.weakCards||0)+1;petTrait('curious',0.25)}
-      if(data.practice){pet.study.practiceAnswers=(pet.study.practiceAnswers||0)+1}
-      if(data.streak!=null)pet.study.streak=Number(data.streak)||0;
-      if(data.bestStreak!=null)pet.study.bestStreak=Number(data.bestStreak)||0;
-      if(data.today!=null)pet.study.today=Number(data.today)||0;
-      if(correct)pet.happy=clampPet(pet.happy+1);
-      savePet();
-      if(isPetAdopted() && (petMode==='home'||petMode==='quiz')){
-        const line=petContextLine(correct?'correct':'incorrect');
-        if(line){showPetBubble(line,1700);if($('petLog'))$('petLog').textContent=line;}
-      }
-    }
-    if(kind==='session'){
-      pet.study.sessions=(pet.study.sessions||0)+1;
-      petBond(4); petTrait('affectionate',0.6); petTrait('calm',0.3);
-      pet.favoriteActivity=pet.favoriteActivity||'study';
-      savePet();
-      if(isPetAdopted() && (petMode==='home'||petMode==='quiz')){
-        const line=petContextLine('sessionEnd'); if(line){showPetBubble(line,1900);if($('petLog'))$('petLog').textContent=line;}
-      }
-    }
-  }
-  window.recordPetStudyAnswer=(data)=>petStudyEvent('answer',data);
-  window.recordPetStudySession=(data)=>petStudyEvent('session',data);
-  window.petStudyStart=()=>{ if(!isPetAdopted())return; const line=petContextLine('studyStart'); if(line){showPetBubble(line,1800);if($('petLog'))$('petLog').textContent=line;} };
-  function petPersonalityLabel(){
-    const p=pet.personality||defaultPet.personality;
-    const ranked=Object.entries(p).sort((a,b)=>b[1]-a[1]);
-    const labels={playful:'playful',affectionate:'affectionate',confident:'confident',calm:'calm',curious:'curious'};
-    return labels[ranked[0][0]]||'sweet';
-  }
   function showPetBubble(msg,ms=1400){petBubble.textContent=msg;petBubble.classList.add('show');clearTimeout(petBubbleTimer);petBubbleTimer=setTimeout(()=>petBubble.classList.remove('show'),ms)}
 
   // Small per-context dialogue pools. Kept short and low-stakes on purpose —
@@ -7736,11 +7614,8 @@ document.addEventListener('DOMContentLoaded',function(){
   // always safe to call from any interaction handler.
   function petSay(context,ms){
     if(!isPetAdopted())return;
-    const contextual=['correct','incorrect','studyStart','sessionEnd','streak'].includes(context) ? petContextLine(context) : null;
-    const line=contextual || petPickLine(context);
+    const line=petPickLine(context);
     if(!line)return;
-    pet.lastCueAt=Date.now(); pet.lastStudyCue=line; savePet();
-    if($('petLog'))$('petLog').textContent=line;
     showPetBubble(line,ms||1300);
   }
   function currentScreen(){if(!$('quiz').classList.contains('hidden'))return'quiz';if(!$('landing').classList.contains('hidden'))return'home';return'other'}
@@ -8104,17 +7979,9 @@ document.addEventListener('DOMContentLoaded',function(){
   let lastAmbientChoice=null;
   function playAmbientBehavior(done){
     if(petMode!=='home'){if(done)done();return;}
-    const p=pet.personality||defaultPet.personality;
-    let pool=pet.energy<30
+    const pool=pet.energy<30
       ? [['idle','rest',3],['idle','look',1]]
       : [['actions','sniff',4],['actions','lick',2],['actions','roll',1],['social','curious',2],['vocal','bark',1],['social','beg',1]];
-    // Personality changes what the dog chooses to do when nobody is clicking
-    // anything. It is subtle: traits bias the odds rather than hard-locking
-    // an animation, so the pet still feels like an animal.
-    if(p.playful>65)pool.push(['actions','roll',3],['social','beg',2]);
-    if(p.curious>65)pool.push(['social','curious',4],['actions','sniff',2]);
-    if(p.affectionate>65)pool.push(['social','beg',4],['vocal','bark',1]);
-    if(p.calm>68)pool.push(['idle','look',3],['actions','lick',1]);
     // Weighted pick, but reroll once if it lands on whatever just played —
     // a real animal doesn't sniff, sniff, sniff on a loop, and seeing the
     // exact same beat twice in a row is what makes ambient behavior read
@@ -8153,10 +8020,7 @@ document.addEventListener('DOMContentLoaded',function(){
           playAmbientBehavior(()=>{
             if(petMode!=='home')return;
             setPetAction('idle','stand');
-            const p=pet.personality||defaultPet.personality;
-            const restMin=p.playful>68?1100:(p.calm>68?2600:1800);
-            const restMax=p.playful>68?1900:(p.calm>68?3600:4000);
-            petMoveTimer=setTimeout(scheduleNextWalk,restMin+Math.random()*(restMax-restMin));
+            petMoveTimer=setTimeout(scheduleNextWalk,1800+Math.random()*2200);
           });
         },duration);
       };
@@ -8227,14 +8091,7 @@ document.addEventListener('DOMContentLoaded',function(){
   let petNeedBubbleAt=0;
   function petTick(){
     const now=Date.now(),steps=Math.floor(Math.max(0,now-(pet.lastTick||now))/30000);
-    if(steps>0){
-      pet.hunger=clampPet(pet.hunger-2*steps);pet.happy=clampPet(pet.happy-1*steps);pet.energy=clampPet(pet.energy-1*steps);pet.clean=clampPet(pet.clean-1*steps);
-      // Personality drifts extremely slowly toward the behaviors the user
-      // actually reinforces, so it feels like development rather than stats.
-      if((pet.study?.streak||0)>=3)petTrait('calm',0.03*steps);
-      if((pet.study?.consecutiveCorrect||0)>=4)petTrait('confident',0.04*steps);
-      pet.lastTick=now;savePet();
-    }
+    if(steps>0){pet.hunger=clampPet(pet.hunger-2*steps);pet.happy=clampPet(pet.happy-1*steps);pet.energy=clampPet(pet.energy-1*steps);pet.clean=clampPet(pet.clean-1*steps);pet.lastTick=now;savePet()}
     // Occasionally let a low stat speak up on its own, instead of the pet
     // only ever reacting to something the person just did — a bit of
     // unprompted personality is what makes it feel alive rather than a
@@ -8259,15 +8116,7 @@ document.addEventListener('DOMContentLoaded',function(){
   function renderPetPanel(){
     if(!$('petNameInput'))return;$('petNameInput').value=pet.name||'Mochi';
     [['hunger','petHungerValue','petHungerBar'],['happy','petHappyValue','petHappyBar'],['energy','petEnergyValue','petEnergyBar'],['clean','petCleanValue','petCleanBar']].forEach(([k,v,b])=>{$(v).textContent=pet[k];$(b).style.width=pet[k]+'%'});
-    const[m,ic]=petMood();$('petMood').textContent=ic+' '+m;
-    if($('petLog') && isPetAdopted() && (!pet.lastCueAt || Date.now()-pet.lastCueAt>12000)){
-      const s=pet.study||defaultPet.study;
-      const streak=Number(s.streak)||0;
-      const identity=petPersonalityLabel();
-      const studyNote=streak>=2?` ${streak}-day streak.`:(s.total>=1?` ${s.correct}/${s.total} answers remembered.`:'');
-      $('petLog').textContent=`${pet.name||'Mochi'} is feeling ${identity} today.${studyNote}`;
-    }
-    savePet();
+    const[m,ic]=petMood();$('petMood').textContent=ic+' '+m;savePet();
     // The breed/sprite picker is only for choosing a look before adoption —
     // once you've welcomed a pet home, its breed is locked in.
     const adopted=isPetAdopted();
@@ -8287,8 +8136,6 @@ document.addEventListener('DOMContentLoaded',function(){
   function awardCarePoints(amount){
     const earned=Math.max(0,Number(amount)||0);
     pet.carePoints=Math.max(0,(Number(pet.carePoints)||0)+earned);
-    petBond(Math.min(1.5,earned*0.12));
-    petTrait('playful',Math.min(0.25,earned*0.025));
     // Persist rewards immediately so they survive quiz/screen changes.
     savePet();
     if($('petView') && !$('petView').classList.contains('hidden'))renderPetPanel();
@@ -8488,10 +8335,10 @@ document.addEventListener('DOMContentLoaded',function(){
       if(sourceEl){sourceEl.classList.add('is-busy');setTimeout(()=>sourceEl.classList.remove('is-busy'),450)}
       return;
     }
-    if(a==='feed'){pet.hunger=clampPet(pet.hunger+25);pet.happy=clampPet(pet.happy+4);pet.clean=clampPet(pet.clean-2);petBond(1.5);petTrait('affectionate',0.5);showRandomPetFood()}
-    if(a==='play'){pet.happy=clampPet(pet.happy+25);pet.energy=clampPet(pet.energy-18);pet.hunger=clampPet(pet.hunger-7);pet.clean=clampPet(pet.clean-5);petBond(1.2);petTrait('playful',0.8);pet.favoriteActivity='play'}
-    if(a==='clean'){pet.clean=clampPet(pet.clean+32);pet.happy=clampPet(pet.happy+3);petBond(0.8);petTrait('calm',0.5);pet.favoriteActivity='clean'}
-    if(a==='sleep'){pet.energy=clampPet(pet.energy+38);pet.hunger=clampPet(pet.hunger-5);petBond(0.5);petTrait('calm',0.7);pet.favoriteActivity='sleep'}
+    if(a==='feed'){pet.hunger=clampPet(pet.hunger+25);pet.happy=clampPet(pet.happy+4);pet.clean=clampPet(pet.clean-2);showRandomPetFood()}
+    if(a==='play'){pet.happy=clampPet(pet.happy+25);pet.energy=clampPet(pet.energy-18);pet.hunger=clampPet(pet.hunger-7);pet.clean=clampPet(pet.clean-5)}
+    if(a==='clean'){pet.clean=clampPet(pet.clean+32);pet.happy=clampPet(pet.happy+3)}
+    if(a==='sleep'){pet.energy=clampPet(pet.energy+38);pet.hunger=clampPet(pet.hunger-5)}
     const stageCues={feed:['excited',2100],play:['playful',3000],clean:['grooming',2400],sleep:['resting',4200]};
     setPetStageState(...stageCues[a]);
     const line=petPickLine(a)||'loved that';
