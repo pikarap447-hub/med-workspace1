@@ -597,6 +597,44 @@ transition:background .25s ease, color .25s ease;
     background:rgba(30,30,35,.95); border-color:#3a3a42; color:#e8e8f0;
   }
   body.dark-mode .brain-break-countdown .bb-step{ background:#2a2a32; border-color:#e8e8f0; }
+
+  /* ---- Pomodoro mode: floating focus-timer pill (mirrors the brain-break
+     countdown pill above, opposite corner) plus the big clock on the
+     dedicated break screen. ---- */
+  .pomodoro-pill{
+    position:fixed; right:18px; bottom:18px; z-index:99999;
+    display:flex; align-items:center; gap:8px; width:fit-content;
+    font-family:var(--font); font-weight:600; font-size:13px;
+    color:var(--ink); background:rgba(255,255,255,.95);
+    border:1px solid #d7e2f5; border-radius:999px; padding:6px 12px;
+    box-shadow:0 6px 18px rgba(0,0,0,.15);
+  }
+  .pomodoro-pill .pomo-dot{ width:9px; height:9px; border-radius:50%; background:var(--tile-blue-deep); flex:none; }
+  .pomodoro-pill .pomo-time{ font-family:var(--font-mono); font-variant-numeric:tabular-nums; min-width:38px; text-align:center; }
+  .pomodoro-pill .pomo-btn{
+    width:22px; height:22px; line-height:20px; text-align:center;
+    border:1px solid var(--ink); border-radius:50%; cursor:pointer;
+    font-size:11px; background:#fff;
+  }
+  .pomodoro-pill .pomo-btn:hover{ background:var(--ink); color:#fff; }
+  body.dark-mode .pomodoro-pill{ background:rgba(30,30,35,.95); border-color:#3a3a42; color:#e8e8f0; }
+  body.dark-mode .pomodoro-pill .pomo-btn{ background:#2a2a32; border-color:#e8e8f0; }
+  .pomodoro-pill.pomo-flash{ animation:pomoFlash .9s ease; }
+  @keyframes pomoFlash{
+    0%{ box-shadow:0 6px 18px rgba(0,0,0,.15); }
+    30%{ box-shadow:0 0 0 6px rgba(201,162,78,.45), 0 6px 18px rgba(0,0,0,.15); }
+    100%{ box-shadow:0 6px 18px rgba(0,0,0,.15); }
+  }
+  .pomodoro-break-clock{
+    font-family:var(--font-display); font-weight:700; font-size:52px;
+    color:var(--tile-blue-deep); text-align:center; margin:6px 0 18px;
+    font-variant-numeric:tabular-nums;
+  }
+  .pomodoro-break-clock.pomo-pulse{ animation:pomoPulse 1s ease; }
+  @keyframes pomoPulse{
+    0%{ transform:scale(1.15); color:var(--gold); }
+    100%{ transform:scale(1); color:var(--tile-blue-deep); }
+  }
   .progress-fill{height:100%; background:linear-gradient(90deg, var(--tile-blue-mid), var(--green)); border-radius:999px; transition:width .4s cubic-bezier(.34,1.1,.4,1);}
 
   .index-no{
@@ -2362,6 +2400,34 @@ OUTCOME: NEG
               <span style="font-size:13px; color:var(--ink-soft);">cards</span>
             </label>
           </div>
+          <div class="row" style="justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+            <label class="switch-row" for="pomodoroToggle">
+              <span class="switch">
+                <input type="checkbox" id="pomodoroToggle">
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+              </span>
+              <span class="switch-label" id="pomodoroToggleLabel">Pomodoro mode off</span>
+            </label>
+          </div>
+          <div class="row" id="pomodoroSettingsWrap" style="gap:14px; flex-wrap:wrap; margin-bottom:14px; display:none;">
+            <label class="row" style="gap:6px;">
+              <span style="font-size:13px; color:var(--ink-soft);">Focus</span>
+              <input type="number" id="pomodoroWorkInput" class="num-input" min="1" max="120" value="25">
+              <span style="font-size:13px; color:var(--ink-soft);">min</span>
+            </label>
+            <label class="row" style="gap:6px;">
+              <span style="font-size:13px; color:var(--ink-soft);">Break</span>
+              <input type="number" id="pomodoroBreakInput" class="num-input" min="1" max="60" value="5">
+              <span style="font-size:13px; color:var(--ink-soft);">min</span>
+            </label>
+            <label class="row" style="gap:6px;">
+              <span style="font-size:13px; color:var(--ink-soft);">Long break</span>
+              <input type="number" id="pomodoroLongBreakInput" class="num-input" min="1" max="90" value="15">
+              <span style="font-size:13px; color:var(--ink-soft);">min every</span>
+              <input type="number" id="pomodoroLongBreakEveryInput" class="num-input" min="2" max="12" value="4">
+              <span style="font-size:13px; color:var(--ink-soft);">🍅</span>
+            </label>
+          </div>
           <div class="row">
             <button class="btn-primary" id="startBtn">Start quiz</button>
           </div>
@@ -2447,6 +2513,22 @@ OUTCOME: NEG
         <div class="footer-row" style="margin-top:22px;">
           <button class="btn-ghost" id="quitFromBreakBtn">End quiz</button>
           <button class="btn-primary" id="breakContinueBtn">Back to it →</button>
+        </div>
+      </div>
+
+      <!-- POMODORO BREAK -->
+      <div id="pomodoroBreak" class="hidden">
+        <div class="index-no" id="pomodoroBreakLabel">POMODORO BREAK</div>
+        <div class="question" id="pomodoroBreakHeadline">Nice focus block — take a breather.</div>
+        <div class="hint" id="pomodoroBreakStats" style="margin-bottom:6px;"></div>
+        <div class="pomodoro-break-clock" id="pomodoroBreakClock">05:00</div>
+        <div class="tip-box" style="display:block;">
+          <span class="tip-label">While you're here</span>
+          <span id="pomodoroBreakMessage"></span>
+        </div>
+        <div class="footer-row" style="margin-top:22px;">
+          <button class="btn-ghost" id="quitFromPomodoroBreakBtn">End quiz</button>
+          <button class="btn-primary" id="pomodoroSkipBreakBtn">Skip break →</button>
         </div>
       </div>
 
@@ -3153,6 +3235,21 @@ const UNFILED = '__unfiled__';
 let brainBreakEnabled = false;
 let brainBreakInterval = 10;
 let cardsSinceBreak = 0;
+// ---- Pomodoro mode state (see the module below, near startBtn, for the
+// logic itself — declared up here for the same "before initialization"
+// reason as the brain-break vars above). ----
+let pomodoroEnabled = false;
+let pomodoroWorkMin = 25;
+let pomodoroBreakMin = 5;
+let pomodoroLongBreakMin = 15;
+let pomodoroLongBreakEvery = 4;
+let pomodoroPhase = 'idle';       // 'idle' | 'work' | 'break' | 'longbreak'
+let pomodoroPhaseEndAt = 0;       // ms timestamp the current phase ends at, while actively ticking
+let pomodoroRemainingMs = 0;      // frozen remaining ms while paused/navigated away
+let pomodoroRunning = false;
+let pomodoroUserPaused = false;   // paused via the pill's own pause button
+let pomodoroCompletedInRun = 0;   // completed focus blocks so far this quiz run
+let pomodoroTickHandle = null;
 let currentFolderId = null;      // folder currently open in folderView ('__unfiled__' or a real folder id)
 let currentFolderMode = 'subject'; // 'subject' | 'le' — which dimension currentFolderId is keyed by
 let currentFolderCardType = null; // null | 'topic' | 'samplex' — which cardType sub-folder is open inside the current folder
@@ -3179,12 +3276,19 @@ function isQuizScreenVisible(){
 function isBrainBreakVisible(){
   return !$('brainBreak').classList.contains('hidden');
 }
+function isPomodoroBreakVisible(){
+  return !$('pomodoroBreak').classList.contains('hidden');
+}
 function isCaseScreenVisible(){
   return !$('caseGame').classList.contains('hidden');
 }
 function saveBeforeNavigation(){
-  if(isQuizScreenVisible()) saveSession();
-  else if(isBrainBreakVisible()) saveSession({onBreak:true});
+  // Leaving the quiz context (Home/Stats/Settings, tab close, app switch)
+  // pauses the pomodoro clock along with the quiz itself — same "paused,
+  // not abandoned" behavior as the rest of the session.
+  if(isQuizScreenVisible()){ pausePomodoroForNav(); saveSession(); }
+  else if(isBrainBreakVisible()){ pausePomodoroForNav(); saveSession({onBreak:true}); }
+  else if(isPomodoroBreakVisible()){ pausePomodoroForNav(); saveSession({onPomodoroBreak:true}); }
   // Case progress already autosaves on every node entry and every choice,
   // but this catches the case where the tab closes mid-reveal-click or
   // between those events.
@@ -3204,11 +3308,12 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pagehide', saveBeforeNavigation);
 
 function hideAllScreens(){
-  ['landing','folderView','setup','quiz','caseGame','brainBreak','results','statsView','settingsView','petView'].forEach(id => {
+  ['landing','folderView','setup','quiz','caseGame','brainBreak','pomodoroBreak','results','statsView','settingsView','petView'].forEach(id => {
     const el = $(id);
     if(el) el.classList.add('hidden');
   });
   renderBrainBreakCountdown();
+  updatePomodoroPillVisibility();
 }
 function showLanding(){
   hideAllScreens();
@@ -3317,6 +3422,12 @@ function saveSession(extra){
       activeSetId,
       mode: inputMode,
       cardsSinceBreak,
+      pomodoro: pomodoroEnabled ? {
+        phase: pomodoroPhase,
+        remainingMs: pomodoroRemainingMs,
+        completed: pomodoroCompletedInRun,
+        userPaused: pomodoroUserPaused
+      } : null,
       updatedAt: Date.now()
     }, extra || {});
     const all = loadAllSessions();
@@ -4170,12 +4281,16 @@ function renderStatsScreen(){
   const g = loadGlobalStats();
 
   const overallAcc = g.totalSeen ? Math.round(g.totalCorrect / g.totalSeen * 100) : 0;
+  const pomodorosCompleted = Number(g.pomodorosCompleted) || 0;
+  const pomodoroFocusMinutes = Number(g.pomodoroFocusMinutes) || 0;
   $('statsOverview').innerHTML = `
     <div class="stat-tile"><div class="stat-num">${g.totalSeen}</div><div class="stat-label">Questions answered</div></div>
     <div class="stat-tile"><div class="stat-num">${overallAcc}%</div><div class="stat-label">Overall accuracy</div></div>
     <div class="stat-tile"><div class="stat-num">${getStudyStreakSummary().current}</div><div class="stat-label">Daily streak</div></div>
     <div class="stat-tile"><div class="stat-num">${getStudyStreakSummary().best}</div><div class="stat-label">Best daily streak</div></div>
     <div class="stat-tile"><div class="stat-num">${Object.keys(sets).length}</div><div class="stat-label">Saved sets</div></div>
+    ${pomodorosCompleted ? `<div class="stat-tile"><div class="stat-num">🍅 ${pomodorosCompleted}</div><div class="stat-label">Pomodoros completed</div></div>` : ''}
+    ${pomodoroFocusMinutes ? `<div class="stat-tile"><div class="stat-num">${pomodoroFocusMinutes}</div><div class="stat-label">Focus minutes logged</div></div>` : ''}
   `;
 
   const bySet = $('statsBySet');
@@ -6134,10 +6249,292 @@ $('breakContinueBtn').onclick = () => {
 
 $('quitFromBreakBtn').onclick = () => {
   // Ending from a brain break also saves the paused quiz and returns Home.
+  pausePomodoroForNav();
   saveSession({onBreak: true});
   showLanding();
   renderRecentActivity();
 };
+
+/* ---- Pomodoro mode: a focus/break timer tied to the quiz session.
+   Lives entirely alongside the existing card-count "brain breaks" above —
+   the two are independent and can both be on at once. Time is tracked as
+   an absolute end-timestamp rather than a plain countdown, so it stays
+   accurate across backgrounded tabs; navigating away from the quiz (Home/
+   Stats/Settings/tab close) freezes it the same way the quiz itself pauses,
+   via pausePomodoroForNav(). ---- */
+const POMODORO_ENABLED_KEY = 'topicReview_pomodoroEnabled_v1';
+const POMODORO_WORK_KEY = 'topicReview_pomodoroWork_v1';
+const POMODORO_BREAK_KEY = 'topicReview_pomodoroBreak_v1';
+const POMODORO_LONGBREAK_KEY = 'topicReview_pomodoroLongBreak_v1';
+const POMODORO_LONGBREAK_EVERY_KEY = 'topicReview_pomodoroLongBreakEvery_v1';
+
+const POMODORO_BREAK_MESSAGES = [
+  "Look away from the screen for a bit — focus on something far away.",
+  "Stand up, stretch, or take a short walk if you can.",
+  "Grab a sip of water.",
+  "Roll your shoulders and unclench your jaw.",
+  "Take a few slow, deep breaths.",
+  "Let your mind wander for a minute — no need to think about the material.",
+  "Notice one thing that's gone well this focus block."
+];
+
+function initPomodoroToggle(){
+  try{
+    const storedEnabled = lsGet(POMODORO_ENABLED_KEY);
+    if(storedEnabled !== null) pomodoroEnabled = storedEnabled === '1';
+    const w = parseInt(lsGet(POMODORO_WORK_KEY), 10);
+    if(!isNaN(w) && w >= 1) pomodoroWorkMin = w;
+    const b = parseInt(lsGet(POMODORO_BREAK_KEY), 10);
+    if(!isNaN(b) && b >= 1) pomodoroBreakMin = b;
+    const lb = parseInt(lsGet(POMODORO_LONGBREAK_KEY), 10);
+    if(!isNaN(lb) && lb >= 1) pomodoroLongBreakMin = lb;
+    const lbe = parseInt(lsGet(POMODORO_LONGBREAK_EVERY_KEY), 10);
+    if(!isNaN(lbe) && lbe >= 2) pomodoroLongBreakEvery = lbe;
+  }catch(e){}
+  $('pomodoroToggle').checked = pomodoroEnabled;
+  $('pomodoroWorkInput').value = pomodoroWorkMin;
+  $('pomodoroBreakInput').value = pomodoroBreakMin;
+  $('pomodoroLongBreakInput').value = pomodoroLongBreakMin;
+  $('pomodoroLongBreakEveryInput').value = pomodoroLongBreakEvery;
+  updatePomodoroSetupUI();
+}
+initPomodoroToggle();
+
+function updatePomodoroSetupUI(){
+  $('pomodoroToggleLabel').textContent = pomodoroEnabled
+    ? `Pomodoro mode on (${pomodoroWorkMin}/${pomodoroBreakMin} min)`
+    : 'Pomodoro mode off';
+  $('pomodoroSettingsWrap').style.display = pomodoroEnabled ? 'flex' : 'none';
+}
+
+$('pomodoroToggle').onchange = e => {
+  pomodoroEnabled = e.target.checked;
+  updatePomodoroSetupUI();
+  try{ lsSet(POMODORO_ENABLED_KEY, pomodoroEnabled ? '1' : '0'); }catch(e){}
+};
+function pomodoroNumInputHandler(key, setter, min, max){
+  return e => {
+    let n = parseInt(e.target.value, 10);
+    if(isNaN(n) || n < min) n = min;
+    if(n > max) n = max;
+    setter(n);
+    e.target.value = n;
+    updatePomodoroSetupUI();
+    try{ lsSet(key, String(n)); }catch(e){}
+  };
+}
+$('pomodoroWorkInput').onchange = pomodoroNumInputHandler(POMODORO_WORK_KEY, n => pomodoroWorkMin = n, 1, 120);
+$('pomodoroBreakInput').onchange = pomodoroNumInputHandler(POMODORO_BREAK_KEY, n => pomodoroBreakMin = n, 1, 60);
+$('pomodoroLongBreakInput').onchange = pomodoroNumInputHandler(POMODORO_LONGBREAK_KEY, n => pomodoroLongBreakMin = n, 1, 90);
+$('pomodoroLongBreakEveryInput').onchange = pomodoroNumInputHandler(POMODORO_LONGBREAK_EVERY_KEY, n => pomodoroLongBreakEvery = n, 2, 12);
+
+/* -- Chime: two short WebAudio tones, no sound asset/file needed. -- */
+let _pomodoroAudioCtx = null;
+function playPomodoroChime(){
+  try{
+    if(!_pomodoroAudioCtx) _pomodoroAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _pomodoroAudioCtx;
+    if(ctx.state === 'suspended') ctx.resume();
+    const notes = [880, 1108.73]; // A5 then C#6 — a soft two-note chime
+    notes.forEach((freq, i) => {
+      const t0 = ctx.currentTime + i * 0.16;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, t0);
+      gain.gain.linearRampToValueAtTime(0.18, t0 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.5);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.55);
+    });
+  }catch(e){}
+}
+
+function pomodoroPhaseDurationMs(phase){
+  if(phase === 'work') return pomodoroWorkMin * 60000;
+  if(phase === 'longbreak') return pomodoroLongBreakMin * 60000;
+  return pomodoroBreakMin * 60000;
+}
+
+function startPomodoroRun(){
+  if(!pomodoroEnabled) return;
+  pomodoroCompletedInRun = 0;
+  pomodoroPhase = 'work';
+  pomodoroRemainingMs = pomodoroPhaseDurationMs('work');
+  pomodoroUserPaused = false;
+  startPomodoroTicking();
+}
+
+function startPomodoroTicking(){
+  clearInterval(pomodoroTickHandle);
+  if(!pomodoroEnabled || pomodoroPhase === 'idle' || pomodoroUserPaused){
+    pomodoroRunning = false;
+    updatePomodoroPillVisibility();
+    return;
+  }
+  pomodoroPhaseEndAt = Date.now() + pomodoroRemainingMs;
+  pomodoroRunning = true;
+  pomodoroTickHandle = setInterval(pomodoroTick, 1000);
+  pomodoroTick();
+}
+
+// Freezes the clock (converts the running end-timestamp back into a plain
+// remaining-ms figure) without changing phase — used whenever the quiz
+// context itself pauses (Home/Stats/Settings, tab close, app switch).
+function pausePomodoroForNav(){
+  if(!pomodoroEnabled || pomodoroPhase === 'idle') return;
+  if(pomodoroRunning) pomodoroRemainingMs = Math.max(0, pomodoroPhaseEndAt - Date.now());
+  clearInterval(pomodoroTickHandle);
+  pomodoroRunning = false;
+}
+
+function stopPomodoroRun(){
+  clearInterval(pomodoroTickHandle);
+  pomodoroTickHandle = null;
+  pomodoroRunning = false;
+  pomodoroUserPaused = false;
+  pomodoroPhase = 'idle';
+  pomodoroRemainingMs = 0;
+  pomodoroCompletedInRun = 0;
+  updatePomodoroPillVisibility();
+}
+
+function pomodoroTick(){
+  if(!pomodoroEnabled || pomodoroPhase === 'idle') return;
+  pomodoroRemainingMs = Math.max(0, pomodoroPhaseEndAt - Date.now());
+  if(pomodoroRemainingMs <= 0){
+    advancePomodoroPhase();
+    return;
+  }
+  renderPomodoroPill();
+  renderPomodoroBreakClock();
+}
+
+function fmtPomodoroClock(ms){
+  const totalSec = Math.max(0, Math.round(ms / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+
+function renderPomodoroPill(){
+  if(!$('pomodoroPill')) return;
+  $('pomoTimeLabel').textContent = fmtPomodoroClock(pomodoroRemainingMs);
+  $('pomoPauseBtn').textContent = pomodoroUserPaused ? '▶' : '⏸';
+  $('pomoPauseBtn').title = pomodoroUserPaused ? 'Resume' : 'Pause';
+  updatePomodoroPillVisibility();
+}
+
+// The pill stays visible through card-based brain breaks too (still the
+// same quiz session), and only hides once the user actually leaves the
+// quiz context, or once the pomodoro break screen takes over.
+function updatePomodoroPillVisibility(){
+  const pill = $('pomodoroPill');
+  if(!pill) return;
+  const inQuizContext = isQuizScreenVisible() || isBrainBreakVisible();
+  pill.classList.toggle('hidden', !(pomodoroEnabled && pomodoroPhase === 'work' && inQuizContext));
+}
+
+function renderPomodoroBreakClock(){
+  const clock = $('pomodoroBreakClock');
+  if(clock && isPomodoroBreakVisible()) clock.textContent = fmtPomodoroClock(pomodoroRemainingMs);
+}
+
+function awardPomodoroCompletion(){
+  const g = loadGlobalStats();
+  g.pomodorosCompleted = (Number(g.pomodorosCompleted) || 0) + 1;
+  g.pomodoroFocusMinutes = (Number(g.pomodoroFocusMinutes) || 0) + pomodoroWorkMin;
+  saveGlobalStats(g);
+  // A completed focus block is a nice chunk of sustained studying — worth
+  // noticeably more than a single answered card (see recordAnswer's 1-4
+  // point scale above).
+  if(typeof window.awardPetCarePoints === 'function') window.awardPetCarePoints(8);
+}
+
+function transitionToBreak(awardCredit){
+  clearInterval(pomodoroTickHandle);
+  playPomodoroChime();
+  if(awardCredit){
+    pomodoroCompletedInRun++;
+    awardPomodoroCompletion();
+  }
+  const isLong = awardCredit && pomodoroCompletedInRun > 0 && (pomodoroCompletedInRun % pomodoroLongBreakEvery === 0);
+  pomodoroPhase = isLong ? 'longbreak' : 'break';
+  pomodoroRemainingMs = pomodoroPhaseDurationMs(pomodoroPhase);
+  pomodoroPhaseEndAt = Date.now() + pomodoroRemainingMs;
+  pomodoroRunning = true;
+  pomodoroTickHandle = setInterval(pomodoroTick, 1000);
+  if(isQuizScreenVisible() || isBrainBreakVisible()) showPomodoroBreakScreen();
+  pomodoroTick();
+}
+
+function transitionToWork(){
+  clearInterval(pomodoroTickHandle);
+  playPomodoroChime();
+  pomodoroPhase = 'work';
+  pomodoroRemainingMs = pomodoroPhaseDurationMs('work');
+  pomodoroPhaseEndAt = Date.now() + pomodoroRemainingMs;
+  pomodoroRunning = true;
+  pomodoroTickHandle = setInterval(pomodoroTick, 1000);
+  if(isPomodoroBreakVisible()){
+    $('pomodoroBreak').classList.add('hidden');
+    $('quiz').classList.remove('hidden');
+  }
+  pomodoroTick();
+  const pill = $('pomodoroPill');
+  if(pill){ pill.classList.remove('pomo-flash'); void pill.offsetWidth; pill.classList.add('pomo-flash'); }
+}
+
+function advancePomodoroPhase(){
+  if(pomodoroPhase === 'work') transitionToBreak(true);
+  else transitionToWork();
+  saveSession(isPomodoroBreakVisible() ? {onPomodoroBreak:true} : {});
+}
+
+function showPomodoroBreakScreen(){
+  $('pomodoroBreakLabel').textContent = pomodoroPhase === 'longbreak' ? 'LONG BREAK' : 'POMODORO BREAK';
+  $('pomodoroBreakHeadline').textContent = pomodoroPhase === 'longbreak'
+    ? `Nice work — ${pomodoroCompletedInRun} focus blocks down. Take a longer breather.`
+    : 'Nice focus block — take a breather.';
+  $('pomodoroBreakStats').textContent = `Mastered ${masteredCount} / ${totalCards} so far · ${queue.length + 1} card${queue.length === 0 ? '' : 's'} left`;
+  $('pomodoroBreakMessage').textContent = POMODORO_BREAK_MESSAGES[Math.floor(Math.random() * POMODORO_BREAK_MESSAGES.length)];
+  hideAllScreens();
+  $('pomodoroBreak').classList.remove('hidden');
+  const clockEl = $('pomodoroBreakClock');
+  clockEl.classList.remove('pomo-pulse'); void clockEl.offsetWidth; clockEl.classList.add('pomo-pulse');
+  renderPomodoroBreakClock();
+  saveSession({onPomodoroBreak:true});
+}
+
+$('pomodoroSkipBreakBtn').onclick = () => transitionToWork();
+
+$('quitFromPomodoroBreakBtn').onclick = () => {
+  pausePomodoroForNav();
+  saveSession({onPomodoroBreak:true});
+  showLanding();
+  renderRecentActivity();
+};
+
+$('pomoPauseBtn').onclick = () => {
+  if(pomodoroUserPaused){
+    pomodoroUserPaused = false;
+    startPomodoroTicking();
+  } else {
+    pomodoroRemainingMs = Math.max(0, pomodoroPhaseEndAt - Date.now());
+    clearInterval(pomodoroTickHandle);
+    pomodoroRunning = false;
+    pomodoroUserPaused = true;
+    renderPomodoroPill();
+  }
+};
+
+// Skips the rest of the current focus block early — no completion credit
+// (no pet points, doesn't count toward the long-break tally), just moves
+// straight into an ordinary short break.
+$('pomoSkipBtn').onclick = () => transitionToBreak(false);
 
 $('startBtn').onclick = () => {
   const parsed = collectCardsFromTable();
@@ -6171,6 +6568,7 @@ function launchQuiz(cardArr, setId){
   hideAllScreens();
   $('quiz').classList.remove('hidden');
   nextFromQueue();
+  startPomodoroRun();
 }
 
 // Pulls the lowest-accuracy card (seen at least once, not 100% so far)
@@ -6903,6 +7301,21 @@ function resumeSession(id){
   score = s.score || 0;
   cardsSinceBreak = s.cardsSinceBreak || 0;
 
+  // Pomodoro: pick back up exactly where the timer was left, start a fresh
+  // run if this session predates pomodoro being turned on, or stay stopped
+  // if pomodoro is currently off.
+  if(pomodoroEnabled && s.pomodoro && s.pomodoro.phase && s.pomodoro.phase !== 'idle'){
+    pomodoroPhase = s.pomodoro.phase;
+    pomodoroRemainingMs = s.pomodoro.remainingMs || pomodoroPhaseDurationMs(pomodoroPhase);
+    pomodoroCompletedInRun = s.pomodoro.completed || 0;
+    pomodoroUserPaused = !!s.pomodoro.userPaused;
+    startPomodoroTicking();
+  } else if(pomodoroEnabled){
+    startPomodoroRun();
+  } else {
+    stopPomodoroRun();
+  }
+
   buildSimilarityIndex(cards);
   setInputMode(s.mode || 'classic');
   loadCardsIntoTable(cards);
@@ -6917,8 +7330,14 @@ function resumeSession(id){
     return;
   }
 
+  if(s.onPomodoroBreak && (pomodoroPhase === 'break' || pomodoroPhase === 'longbreak')){
+    showPomodoroBreakScreen();
+    return;
+  }
+
   $('quiz').classList.remove('hidden');
   showCard(s.options);
+  updatePomodoroPillVisibility();
 
   if(s.answered){
     restoreAnsweredView(current, s.chosen, s.isCorrect);
@@ -6938,12 +7357,14 @@ $('nextBtn').onclick = () => nextFromQueue();
 
 $('quitBtn').onclick = () => {
   // "End quiz" pauses the quiz instead of deleting its progress.
+  pausePomodoroForNav();
   saveSession();
   showLanding();
   renderRecentActivity();
 };
 
 function finishQuiz(){
+  stopPomodoroRun();
   recordSession();
   clearSession();
   $('quiz').classList.add('hidden');
@@ -7338,6 +7759,13 @@ document.addEventListener('keydown', e => {
 </script>
 
 <span id="brainBreakCountdown" class="brain-break-countdown hidden"></span>
+<div id="pomodoroPill" class="pomodoro-pill hidden">
+  <span class="pomo-dot" id="pomoDot"></span>
+  <span id="pomoPhaseLabel">Focus</span>
+  <span class="pomo-time" id="pomoTimeLabel">25:00</span>
+  <span class="pomo-btn" id="pomoPauseBtn" title="Pause">⏸</span>
+  <span class="pomo-btn" id="pomoSkipBtn" title="Skip to break">⏭</span>
+</div>
 
 <div class="zoom-controls">
 <button type="button" id="zoomOut" title="Smaller text">A−</button>
