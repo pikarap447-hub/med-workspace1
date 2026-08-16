@@ -1536,6 +1536,41 @@ body.theme-midnight .set-item-menu{background:var(--surface-elevated);}
 .folder-tile.new-folder .folder-name{color:var(--tile-blue);}
 .folder-tile.unfiled{background:var(--primary-soft);}
 
+/* ---- Folder-wide review panel: shown at the top of a Topic Cards /
+   Samplex sub-folder (inside a Subject or LE folder) so every card of that
+   one cardType can be reviewed together instead of set by set. Deliberately
+   styled like a callout rather than another folder-tile, since it's an
+   action, not something to navigate into. ---- */
+.folder-review-panel{
+  background:var(--primary-soft);
+  border:1px solid var(--border);
+  border-radius:var(--radius-sm);
+  box-shadow:var(--shadow-sm);
+  padding:14px 16px;
+  margin-bottom:14px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.folder-review-head{
+  display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap;
+}
+.folder-review-title{font-family:var(--font-display); font-weight:700; font-size:14.5px; color:var(--ink);}
+.folder-review-count{font-size:11.5px; color:var(--ink-soft); font-weight:600;}
+.folder-review-line{font-size:12.5px; color:var(--ink-soft); font-weight:600;}
+.folder-review-actions{display:flex; gap:8px; flex-wrap:wrap; margin-top:2px;}
+.folder-review-actions button:disabled{opacity:.5; cursor:not-allowed;}
+.folder-review-count-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
+.folder-review-count-label{font-size:11.5px; color:var(--ink-soft); font-weight:700; text-transform:uppercase; letter-spacing:.04em;}
+.folder-review-count-chips{display:flex; gap:6px; flex-wrap:wrap;}
+.folder-review-chip{padding:4px 10px !important; font-size:12px !important;}
+.folder-review-chip.active{background:var(--tile-blue-deep); color:#fff; border-color:var(--tile-blue-deep);}
+.folder-review-count-custom{
+  width:78px; padding:4px 8px; border-radius:8px; border:1px solid var(--border);
+  background:var(--surface); color:var(--ink); font-family:var(--font); font-size:12px;
+}
+.folder-review-count-custom:focus{outline:none; border-color:var(--tile-blue-mid); box-shadow:0 0 0 3px var(--primary-soft);}
+
 /* --- Settings: category menu + sub-pages, so Settings opens to a short
    list instead of one long scrolling page. --- */
 .settings-menu-list{display:flex; flex-direction:column; gap:10px; margin-top:14px;}
@@ -4406,6 +4441,9 @@ let brainBreakInterval = 10;
 let cardsSinceBreak = 0;
 let currentFolderId = null;      // folder currently open in folderView ('__unfiled__' or a real folder id)
 let currentFolderMode = 'subject'; // 'subject' | 'le' — which dimension currentFolderId is keyed by
+let currentFolderLE = null;      // null | LE id (or UNFILED) — only meaningful when currentFolderMode === 'subject'.
+                                  // Each Subject is split into its own LE 1-6 sub-folders before reaching
+                                  // Topic Cards/Samplex, since LE numbers are scoped per-subject, not global.
 let currentFolderCardType = null; // null | 'topic' | 'samplex' — which cardType sub-folder is open inside the current folder
 // Folder ids are either a Subject code (e.g. "PED2", never purely numeric) or
 // an LE number (e.g. "1", always numeric) or UNFILED. So when we're not told
@@ -4416,7 +4454,7 @@ function inferFolderMode(id, fallback){
   if(id === UNFILED) return fallback || 'subject';
   return /^\d+$/.test(String(id)) ? 'le' : 'subject';
 }
-let setupReturnTo = null;        // where "← Back" from setup should go: null (landing) or {screen:'folder', id, mode, cardType}
+let setupReturnTo = null;        // where "← Back" from setup should go: null (landing) or {screen:'folder', id, mode, cardType, le}
 let statsReturnTo = {screen:'landing'};
 let settingsReturnTo = {screen:'landing'};
 
@@ -4465,6 +4503,7 @@ function showLanding(){
   hideAllScreens();
   $('landing').classList.remove('hidden');
   currentFolderId = null;
+  currentFolderLE = null;
   currentFolderCardType = null;
   // Landing means the user is just browsing, not actively editing a
   // specific set. Clear activeSetId here so that if the setup screen is
@@ -4479,10 +4518,13 @@ function showLanding(){
   renderLanding();
   renderRecentActivity();
 }
-function showFolder(id, mode, cardType){
+function showFolder(id, mode, cardType, le){
   hideAllScreens();
   currentFolderId = id;
   currentFolderMode = mode || inferFolderMode(id, currentFolderMode);
+  // LE sub-folders only exist one level inside a Subject folder — a
+  // top-level "By LE" browse (currentFolderMode === 'le') never has one.
+  currentFolderLE = (currentFolderMode === 'subject') ? (le || null) : null;
   currentFolderCardType = cardType || null;
   // Same reasoning as showLanding(): entering a folder to browse means no
   // set is actively being edited, so any stale activeSetId from a previous
@@ -4497,7 +4539,7 @@ function showFolder(id, mode, cardType){
 // resetting to the folder's root. Returns null if folder view isn't open.
 function currentFolderReturnTarget(){
   if($('folderView').classList.contains('hidden')) return null;
-  return {screen:'folder', id: currentFolderId, mode: currentFolderMode, cardType: currentFolderCardType};
+  return {screen:'folder', id: currentFolderId, mode: currentFolderMode, cardType: currentFolderCardType, le: currentFolderLE};
 }
 // A row action's return target is usually wherever the user currently is
 // (a folder/sub-folder) — but the search-results list passes an explicit
@@ -5185,6 +5227,38 @@ function topicSortCompare(a, b, dir){
 // Renders the "Topic Cards" / "Samplex" sub-folder tiles shown at the top of
 // every folder (Subject or LE), so quiz sets and practice-exam sets get
 // their own separate folder to browse instead of being mixed in one list.
+// Sub-folder tiles shown at the very top of a Subject folder — LE numbers
+// are scoped per-subject (each subject runs its own LE 1-6), so this level
+// has to sit between "Subject" and "Topic Cards/Samplex", not replace the
+// flat top-level "Folders: By LE" browse (which groups across all subjects
+// at once and still skips straight to Topic Cards/Samplex, unchanged).
+function renderLEFolders(list, entries, subjectId){
+  const wrap = document.createElement('div');
+  wrap.className = 'folder-grid';
+  wrap.style.marginBottom = '4px';
+  const leIds = new Set();
+  entries.forEach(([, s]) => leIds.add(leKey(s)));
+  const sorted = Array.from(leIds).sort((a, b) => {
+    if(a === UNFILED) return 1;
+    if(b === UNFILED) return -1;
+    const na = Number(a), nb = Number(b);
+    if(!Number.isNaN(na) && !Number.isNaN(nb) && na !== nb) return na - nb;
+    return String(a).localeCompare(String(b));
+  });
+  sorted.forEach(leId => {
+    const count = entries.filter(([, s]) => leKey(s) === leId).length;
+    const tile = document.createElement('button');
+    tile.type = 'button';
+    tile.className = 'folder-tile';
+    tile.style.setProperty('--tab-color', subjectColor('subjle' + subjectId + leId));
+    const name = leId === UNFILED ? 'No LE tagged' : `LE ${leId}`;
+    tile.innerHTML = `<div class="folder-icon">🧩</div><div class="folder-tab-chip"><span class="tab-dot"></span>LE</div><div class="folder-name">${escapeHtml(name)}</div><div class="folder-meta">${count} set${count===1?'':'s'}</div>`;
+    tile.onclick = () => { currentFolderLE = leId; renderFolderView(); };
+    wrap.appendChild(tile);
+  });
+  list.appendChild(wrap);
+}
+
 function renderCardTypeFolders(list, entries, folderId, mode){
   const wrap = document.createElement('div');
   wrap.className = 'folder-grid';
@@ -5198,7 +5272,7 @@ function renderCardTypeFolders(list, entries, folderId, mode){
     const tile = document.createElement('button');
     tile.type = 'button';
     tile.className = 'folder-tile';
-    tile.style.setProperty('--tab-color', subjectColor(mode + folderId + t.type));
+    tile.style.setProperty('--tab-color', subjectColor(mode + folderId + (currentFolderLE || '') + t.type));
     tile.innerHTML = `<div class="folder-icon">${t.icon}</div><div class="folder-tab-chip"><span class="tab-dot"></span>Folder</div><div class="folder-name">${t.label}</div><div class="folder-meta">${count} set${count===1?'':'s'}</div>`;
     tile.onclick = () => { currentFolderCardType = t.type; renderFolderView(); };
     wrap.appendChild(tile);
@@ -5206,16 +5280,186 @@ function renderCardTypeFolders(list, entries, folderId, mode){
   list.appendChild(wrap);
 }
 
+// Every set in a folder, narrowed to a specific LE when browsing inside a
+// Subject folder's LE sub-folder (le is ignored for the flat top-level "By
+// LE" browse, and when no LE has been chosen yet).
+function setsInScope(folderId, mode, le){
+  let entries = setsInFolder(folderId, mode);
+  if(mode === 'subject' && le) entries = entries.filter(([, s]) => leKey(s) === le);
+  return entries;
+}
+
+// All unique cards (deduped by cardKey, same rule as startAdaptivePractice/
+// startCramSession) of one cardType across every set in a folder (optionally
+// narrowed to one LE within a Subject) — the pool a folder-wide review round
+// draws from. Topic Cards and Samplex are never mixed into the same pool,
+// per cardType always being an explicit argument.
+function cardsInCardTypeFolder(folderId, mode, cardType, le){
+  const entries = setsInScope(folderId, mode, le).filter(([, s]) => cardTypeOf(s) === cardType);
+  const seenKeys = new Set();
+  const pool = [];
+  entries.forEach(([, s]) => {
+    if(!Array.isArray(s.cards)) return;
+    s.cards.forEach(c => {
+      const k = cardKey(c);
+      if(!seenKeys.has(k)){ seenKeys.add(k); pool.push(c); }
+    });
+  });
+  return pool;
+}
+
+// Learning-engine state counts for a specific card pool (as opposed to
+// getLearningDashboard's global tally), so the folder review panel can show
+// "how am I doing on THIS LE's topic cards" rather than everything tracked.
+// Only counts cards with at least 2 recorded attempts, same threshold the
+// dashboard uses, so a single lucky/unlucky guess doesn't skew the summary.
+function folderReviewStateLine(pool){
+  const learning = loadLearningData();
+  const counts = {KNOWN:0, UNSTABLE:0, WEAK:0, LOW_ROI:0};
+  let tracked = 0;
+  pool.forEach(c => {
+    const rec = learning[cardKey(c)];
+    if(!rec || rec.seen < 2) return;
+    tracked++;
+    counts[rec.state] = (counts[rec.state] || 0) + 1;
+  });
+  if(!tracked) return null;
+  const line = `${counts.KNOWN} known · ${counts.UNSTABLE} shaky · ${counts.WEAK} weak${counts.LOW_ROI ? ` · ${counts.LOW_ROI} tough/low-yield` : ''}`;
+  return {tracked, counts, line};
+}
+
+// Builds the "review this whole folder" callout shown above the set list
+// once inside a Topic Cards / Samplex sub-folder (of either a Subject or an
+// LE folder). This is the requested pattern: study individual sets one at a
+// time as usual, and once enough of them are tracked, review the weakest
+// parts of the *whole folder* together — or do a full weakest-first pass
+// across every card in it. Topic Cards and Samplex always get their own
+// separate panel/pool; a folder-wide round never mixes the two.
+function renderFolderReviewPanel(list, id, mode, cardType, le){
+  if(!cardType) return;
+  const pool = cardsInCardTypeFolder(id, mode, cardType, le);
+  if(pool.length < 4) return; // not enough material yet to justify a dedicated round
+  const summary = folderReviewStateLine(pool);
+  const label = cardType === 'samplex' ? 'Samplex questions' : 'topic cards';
+  const scopeLabel = mode === 'le'
+    ? `LE ${id}`
+    : (le ? `${folderDisplayName(id, mode)} — ${le === UNFILED ? 'No LE tagged' : `LE ${le}`}` : folderDisplayName(id, mode));
+
+  const panel = document.createElement('div');
+  panel.className = 'folder-review-panel';
+  panel.innerHTML = `
+    <div class="folder-review-head">
+      <span class="folder-review-title">🧭 Review all ${label} in ${escapeHtml(scopeLabel)}</span>
+      <span class="folder-review-count">${pool.length} card${pool.length === 1 ? '' : 's'} across this folder</span>
+    </div>
+    <div class="folder-review-line">${summary ? summary.line : "Study a bit here first — once cards are tracked, this'll surface your weak spots."}</div>
+  `;
+
+  // Session-size picker: a folder can easily have hundreds of cards across
+  // an LE, and dumping all of them into one sitting isn't realistic. This
+  // caps whichever round gets launched below to a chosen count — the count
+  // itself doesn't change *how* cards are picked, only *how many* make the
+  // cut off the same weakest-first ranking (see rankFolderPoolForReview),
+  // which already blends mastery, overdue-ness, high-yield tagging,
+  // fixability by state, and recurring-confusion flags rather than just
+  // raw wrongness.
+  let selectedCount = Math.min(20, pool.length);
+  const countRow = document.createElement('div');
+  countRow.className = 'folder-review-count-row';
+  const countLabel = document.createElement('span');
+  countLabel.className = 'folder-review-count-label';
+  countLabel.textContent = 'Session size';
+  countRow.appendChild(countLabel);
+
+  const chipsWrap = document.createElement('div');
+  chipsWrap.className = 'folder-review-count-chips';
+  const chipButtons = [];
+  function setSelectedCount(n, activeChip){
+    selectedCount = Math.max(2, Math.min(n, pool.length));
+    chipButtons.forEach(b => b.classList.remove('active'));
+    if(activeChip) activeChip.classList.add('active');
+    else customInput.value = String(selectedCount);
+  }
+  [10, 20, 30, 50].filter(n => n < pool.length).forEach(n => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'btn-ghost sm folder-review-chip';
+    chip.textContent = String(n);
+    chip.onclick = () => setSelectedCount(n, chip);
+    chipButtons.push(chip);
+    chipsWrap.appendChild(chip);
+  });
+  const allChip = document.createElement('button');
+  allChip.type = 'button';
+  allChip.className = 'btn-ghost sm folder-review-chip';
+  allChip.textContent = `All ${pool.length}`;
+  allChip.onclick = () => setSelectedCount(pool.length, allChip);
+  chipButtons.push(allChip);
+  chipsWrap.appendChild(allChip);
+  countRow.appendChild(chipsWrap);
+
+  const customInput = document.createElement('input');
+  customInput.type = 'number';
+  customInput.min = '2';
+  customInput.max = String(pool.length);
+  customInput.placeholder = 'Custom #';
+  customInput.className = 'folder-review-count-custom';
+  customInput.oninput = () => {
+    const v = parseInt(customInput.value, 10);
+    if(!isNaN(v) && v >= 2){
+      chipButtons.forEach(b => b.classList.remove('active'));
+      selectedCount = Math.min(v, pool.length);
+    }
+  };
+  countRow.appendChild(customInput);
+  panel.appendChild(countRow);
+
+  // Default selection: 20 if the folder has more than that, otherwise
+  // everything — mirrors the chip closest to that value so the UI opens in
+  // a state consistent with selectedCount above.
+  const defaultChip = chipButtons.find(b => b.textContent === String(selectedCount)) || allChip;
+  setSelectedCount(selectedCount, defaultChip);
+
+  const actions = document.createElement('div');
+  actions.className = 'folder-review-actions';
+
+  const weakEligible = summary ? (summary.counts.WEAK + summary.counts.UNSTABLE + summary.counts.LOW_ROI) : 0;
+  const weakBtn = document.createElement('button');
+  weakBtn.type = 'button';
+  weakBtn.className = 'btn-primary sm';
+  weakBtn.textContent = `🎯 Practice weakest${weakEligible ? ` (up to ${Math.min(selectedCount, weakEligible)})` : ''}`;
+  weakBtn.disabled = weakEligible < 2;
+  weakBtn.title = weakEligible < 2 ? 'Not enough tracked weak cards here yet' : `Practice the weakest tracked cards in ${scopeLabel}`;
+  weakBtn.onclick = () => startWeakPracticeForFolder(id, mode, cardType, selectedCount, le);
+  actions.appendChild(weakBtn);
+
+  const allBtn = document.createElement('button');
+  allBtn.type = 'button';
+  allBtn.className = 'btn-ghost sm';
+  allBtn.textContent = '📚 Review this many, weakest first';
+  allBtn.onclick = () => startFullReviewForFolder(id, mode, cardType, selectedCount, le);
+  actions.appendChild(allBtn);
+
+  panel.appendChild(actions);
+  list.appendChild(panel);
+}
+
 function renderFolderView(){
   const id = currentFolderId;
   const mode = currentFolderMode;
+  // LE sub-folders only exist one level inside a Subject folder (LE numbers
+  // are scoped per-subject) — a flat top-level "By LE" browse skips straight
+  // to Topic Cards/Samplex, same as before.
+  const needsLEStep = mode === 'subject';
+  const inLEFolder = needsLEStep && !!currentFolderLE;
   const inTopicCardsFolder = currentFolderCardType === 'topic';
   const inSamplexFolder = currentFolderCardType === 'samplex';
   const inCardTypeFolder = inTopicCardsFolder || inSamplexFolder;
 
-  $('folderViewTitle').textContent = inCardTypeFolder
-    ? `${folderDisplayName(id, mode)} — ${inSamplexFolder ? 'Samplex' : 'Topic Cards'}`
-    : folderDisplayName(id, mode);
+  const titleParts = [folderDisplayName(id, mode)];
+  if(inLEFolder) titleParts.push(currentFolderLE === UNFILED ? 'No LE tagged' : `LE ${currentFolderLE}`);
+  if(inCardTypeFolder) titleParts.push(inSamplexFolder ? 'Samplex' : 'Topic Cards');
+  $('folderViewTitle').textContent = titleParts.join(' — ');
 
   // The Topic Cards sub-folder gets its own ascending/descending Topic #
   // toggle; it's the only sort that applies once cardType is fixed.
@@ -5223,7 +5467,7 @@ function renderFolderView(){
 
   const list = $('folderSetsList');
   list.innerHTML = '';
-  const entries = setsInFolder(id, mode);
+  let entries = setsInFolder(id, mode);
   if(entries.length === 0){
     const p = document.createElement('div');
     p.className = 'no-sets';
@@ -5232,8 +5476,27 @@ function renderFolderView(){
     return;
   }
 
-  // Top level of any folder (Subject or LE): show the "Topic Cards" /
-  // "Samplex" sub-folder tiles instead of a flat set list.
+  // Step 1 for a Subject folder: no LE chosen yet — show its LE 1-6 (etc.)
+  // sub-folder tiles instead of jumping straight to Topic Cards/Samplex.
+  if(needsLEStep && !currentFolderLE){
+    renderLEFolders(list, entries, id);
+    return;
+  }
+
+  // Narrow down to the chosen LE before going any further.
+  if(inLEFolder){
+    entries = entries.filter(([, s]) => leKey(s) === currentFolderLE);
+    if(entries.length === 0){
+      const p = document.createElement('div');
+      p.className = 'no-sets';
+      p.textContent = 'No sets here yet — add one with the button below.';
+      list.appendChild(p);
+      return;
+    }
+  }
+
+  // Next level of any folder (Subject+LE, or a flat LE folder): show the
+  // "Topic Cards" / "Samplex" sub-folder tiles instead of a flat set list.
   if(!currentFolderCardType){
     renderCardTypeFolders(list, entries, id, mode);
     return;
@@ -5251,6 +5514,8 @@ function renderFolderView(){
     list.appendChild(p);
     return;
   }
+  renderFolderReviewPanel(list, id, mode, currentFolderCardType, currentFolderLE);
+
   const dir = inTopicCardsFolder ? (lsGet(TOPIC_CARD_SORT_DIR_KEY) || 'asc') : 'asc';
   filtered.sort((a,b) => topicSortCompare(a, b, dir));
   filtered.forEach(([sid, s]) => list.appendChild(buildSetRow(sid, s, {showFolderTag:false})));
@@ -7281,7 +7546,7 @@ function caseChoose(choice){
 function exitCaseGame(){
   caseData = null;
   if(caseReturnTo && caseReturnTo.screen === 'setup') showSetupScreen();
-  else if(caseReturnTo && caseReturnTo.screen === 'folder') showFolder(caseReturnTo.id, caseReturnTo.mode, caseReturnTo.cardType);
+  else if(caseReturnTo && caseReturnTo.screen === 'folder') showFolder(caseReturnTo.id, caseReturnTo.mode, caseReturnTo.cardType, caseReturnTo.le);
   else showLanding();
 }
 
@@ -7766,7 +8031,7 @@ $('saveSetBtn').onclick = () => {
   saveSetsData(sets);
   activeSetId = id;
   pendingAlgorithm = isCase;
-  setupReturnTo = {screen:'folder', id: subject ? subject : UNFILED, mode:'subject', cardType};
+  setupReturnTo = {screen:'folder', id: subject ? subject : UNFILED, mode:'subject', cardType, le: le ? le : UNFILED};
   $('setupError').textContent = '';
 };
 
@@ -7814,10 +8079,14 @@ $('searchClearBtn').onclick = () => {
 };
 
 $('folderBackBtn').onclick = () => {
-  // Inside a Topic Cards / Samplex sub-folder, back goes up one level to
-  // the folder's sub-folder tiles, not all the way out to the landing grid.
+  // Three possible depths inside a Subject folder now (Subject -> LE ->
+  // Topic Cards/Samplex -> sets); back unwinds one level at a time. A flat
+  // top-level "By LE" browse only ever has the cardType level, unchanged.
   if(currentFolderCardType){
     currentFolderCardType = null;
+    renderFolderView();
+  } else if(currentFolderMode === 'subject' && currentFolderLE){
+    currentFolderLE = null;
     renderFolderView();
   } else {
     showLanding();
@@ -7831,7 +8100,7 @@ $('newSetInFolderBtn').onclick = () => {
   addRow();
   $('setNameInput').value = '';
   $('setSubjectSelect').value = currentFolderId !== UNFILED ? currentFolderId : '';
-  $('setLESelect').value = '';
+  $('setLESelect').value = (currentFolderMode === 'subject' && currentFolderLE && currentFolderLE !== UNFILED) ? currentFolderLE : '';
   $('setTopicInput').value = '';
   $('setTypeSelect').value = currentFolderCardType || 'topic';
   $('setupError').textContent = '';
@@ -7841,7 +8110,7 @@ $('newSetInFolderBtn').onclick = () => {
   showSetupScreen();
 };
 $('setupBackBtn').onclick = () => {
-  if(setupReturnTo) showFolder(setupReturnTo.id, setupReturnTo.mode, setupReturnTo.cardType);
+  if(setupReturnTo) showFolder(setupReturnTo.id, setupReturnTo.mode, setupReturnTo.cardType, setupReturnTo.le);
   else showLanding();
 };
 
@@ -7911,7 +8180,7 @@ $('backFromSettingsBtn').onclick = () => {
     $('brainBreak').classList.remove('hidden');
   }
   else if(settingsReturnTo.screen === 'setup') showSetupScreen();
-  else if(settingsReturnTo.screen === 'folder') showFolder(settingsReturnTo.id, settingsReturnTo.mode, settingsReturnTo.cardType);
+  else if(settingsReturnTo.screen === 'folder') showFolder(settingsReturnTo.id, settingsReturnTo.mode, settingsReturnTo.cardType, settingsReturnTo.le);
   else showLanding();
 };
 
@@ -7922,7 +8191,7 @@ $('backToSetupBtn').onclick = () => {
     $('brainBreak').classList.remove('hidden');
   }
   else if(statsReturnTo.screen === 'setup') showSetupScreen();
-  else if(statsReturnTo.screen === 'folder') showFolder(statsReturnTo.id, statsReturnTo.mode, statsReturnTo.cardType);
+  else if(statsReturnTo.screen === 'folder') showFolder(statsReturnTo.id, statsReturnTo.mode, statsReturnTo.cardType, statsReturnTo.le);
   else showLanding();
 };
 $('resetStatsBtn').onclick = () => {
@@ -8475,6 +8744,64 @@ function startWeakPracticeForSet(sid){
   }
   setInputMode(s.mode || 'classic');
   launchQuiz(JSON.parse(JSON.stringify(weakCards)), PRACTICE_ID);
+}
+
+// Folder-wide version of startWeakPracticeForSet: pools every card of one
+// cardType (Topic Cards or Samplex — never both) across every set in a
+// folder — an LE folder in particular, per the "review everything under
+// this LE" pattern — and pulls out whichever ones the learning engine
+// currently rates WEAK/UNSTABLE/LOW_ROI (i.e. not KNOWN), ranked by the
+// same richer priority score cram mode uses (weakness + high-yield tag +
+// fixability-by-state + overdue-ness, LOW_ROI penalized) rather than plain
+// wrongness — see calculateCramPriority. Launched under PRACTICE_ID so it
+// never overwrites any individual set's own progress/stats — this is a
+// targeted review round layered on top. `count` caps the session size so a
+// large LE doesn't turn into a 500-card sitting; defaults to 30.
+function startWeakPracticeForFolder(folderId, mode, cardType, count, le){
+  const n = count && count > 0 ? count : 30;
+  const pool = cardsInCardTypeFolder(folderId, mode, cardType, le);
+  const learning = loadLearningData();
+  const scored = pool
+    .map(c => ({card: c, rec: learning[cardKey(c)]}))
+    .filter(x => x.rec && x.rec.seen > 0 && x.rec.state !== 'KNOWN')
+    .map(x => ({...x, priority: calculateCramPriority(x.rec, x.card)}));
+  scored.sort((a,b) => b.priority - a.priority);
+  const weakCards = scored.slice(0, n).map(w => w.card);
+  const scopeLabel = mode === 'le' ? `LE ${folderId}` : (le ? `${folderDisplayName(folderId, mode)} — ${le === UNFILED ? 'No LE tagged' : `LE ${le}`}` : folderDisplayName(folderId, mode));
+  if(weakCards.length < 2){
+    alert(`Not enough tracked weak spots in ${scopeLabel} yet — study a bit more here first so there's something to prioritize.`);
+    return;
+  }
+  setInputMode(cardType === 'samplex' ? 'samplex' : 'classic');
+  launchQuiz(JSON.parse(JSON.stringify(weakCards)), PRACTICE_ID);
+}
+
+// Broader companion to startWeakPracticeForFolder: reviews a `count`-sized
+// slice of the folder's cards (not just the ones currently rated weak),
+// ranked by the same cram-style priority score — weakness, high-yield
+// tagging, fixability by knowledge state, and overdue-ness all factor in,
+// so the cards that get cut when count < pool size are the ones actually
+// least worth the time right now, not an arbitrary chunk. Already-KNOWN
+// cards are still eligible (so a full "All N" pass covers everything) but
+// naturally sink toward the bottom of the ranking and get trimmed first
+// once count is smaller than the pool.
+function startFullReviewForFolder(folderId, mode, cardType, count, le){
+  const pool = cardsInCardTypeFolder(folderId, mode, cardType, le);
+  const scopeLabel = mode === 'le' ? `LE ${folderId}` : (le ? `${folderDisplayName(folderId, mode)} — ${le === UNFILED ? 'No LE tagged' : `LE ${le}`}` : folderDisplayName(folderId, mode));
+  if(pool.length < 2){
+    alert(`Not enough cards in ${scopeLabel} yet to start a review round.`);
+    return;
+  }
+  const n = count && count > 0 ? Math.min(count, pool.length) : pool.length;
+  const learning = loadLearningData();
+  const scored = pool.map(c => {
+    const rec = learning[cardKey(c)];
+    return {card: c, priority: calculateCramPriority(rec, c)};
+  });
+  scored.sort((a,b) => b.priority - a.priority);
+  const ordered = scored.slice(0, n).map(s => s.card);
+  setInputMode(cardType === 'samplex' ? 'samplex' : 'classic');
+  launchQuiz(JSON.parse(JSON.stringify(ordered)), PRACTICE_ID);
 }
 
 /* ---- Backup & restore: export everything to a downloadable JSON file, or restore from one ---- */
@@ -9148,6 +9475,14 @@ function renderLearningNotice(rec, attempt, card){
   }
   if(detectPossibleCarelessError(rec, attempt)){
     notes.push('Possible careless error — you usually get this one, and answered unusually fast this time.');
+  }
+  // Plain miss-count callout — separate from the confusion/careless-error
+  // heuristics above (which only fire on a specific pattern), this just
+  // states the raw fact whenever it's happened more than once, so repeat
+  // misses are always visible even when no other pattern is detected.
+  if(rec && !attempt.isCorrect){
+    const missedTimes = rec.seen - rec.correct;
+    if(missedTimes >= 2) notes.push(`You've gotten this one wrong ${missedTimes} times now.`);
   }
   if(notes.length){
     box.textContent = notes.join(' ');
