@@ -3508,6 +3508,7 @@ OUTCOME: NEG
             <div class="row">
               <button class="btn-ghost" id="addRowBtn">+ Add row</button>
               <button class="btn-ghost" id="clearTableBtn">Clear table</button>
+              <button class="btn-ghost" id="tableBoldBtn" title="Bold selected text in an exam-tip cell (click a tip cell, select text, then click B — or Ctrl/Cmd+B)" style="font-weight:700;">B</button>
             </div>
             <button class="btn-sample" id="loadSample">Reload original 100-card set</button>
           </div>
@@ -3594,7 +3595,10 @@ OUTCOME: NEG
           <label class="field-label" style="margin-top:10px;">Answer choices — tap a letter to mark the correct one</label>
           <div id="editOptionsList"></div>
           <button type="button" class="btn-ghost" id="addEditOptionBtn" style="font-size:12px; padding:6px 12px;">+ Add another choice</button>
-          <label class="field-label" style="margin-top:10px;">Exam tip</label>
+          <div class="row" style="justify-content:space-between; align-items:center; margin-top:10px;">
+            <label class="field-label" style="margin:0;">Exam tip</label>
+            <button type="button" class="btn-ghost" id="editTipBoldBtn" title="Bold selected text (Ctrl/Cmd+B)" style="font-size:12px; padding:3px 11px; font-weight:700; line-height:1.4;">B</button>
+          </div>
           <textarea id="editTip" class="edit-textarea" rows="3"></textarea>
           <label class="field-label" style="margin-top:10px;">Optional tags <span style="font-weight:400; color:var(--ink-soft);">(used for topic/type breakdowns in Stats — leave blank to skip)</span></label>
           <div class="row" style="gap:8px; flex-wrap:wrap;">
@@ -7969,6 +7973,93 @@ function onCellPaste(e){
   });
 }
 
+// ---- Bold for exam tips ----------------------------------------------
+// Deliberately minimal: selecting text and clicking B (or Ctrl/Cmd+B)
+// wraps/unwraps it in **markers**, the same plain-text convention a
+// textarea and a plain-text contentEditable cell can both store without
+// any HTML round-tripping through paste/copy. mdBoldToHtml (near
+// escapeHtml) is what turns the markers into real <b> when a tip is shown
+// during the quiz.
+function toggleBoldMarkers(text, start, end){
+  const selected = text.slice(start, end);
+  if(selected.startsWith('**') && selected.endsWith('**') && selected.length >= 4){
+    const inner = selected.slice(2, -2);
+    return {text: text.slice(0, start) + inner + text.slice(end), start, end: start + inner.length};
+  }
+  if(text.slice(Math.max(0, start - 2), start) === '**' && text.slice(end, end + 2) === '**'){
+    return {text: text.slice(0, start - 2) + selected + text.slice(end + 2), start: start - 2, end: end - 2};
+  }
+  const inner = selected || 'bold text';
+  return {text: text.slice(0, start) + '**' + inner + '**' + text.slice(end), start: start + 2, end: start + 2 + inner.length};
+}
+
+function applyBoldToTextarea(ta){
+  if(!ta) return;
+  const res = toggleBoldMarkers(ta.value, ta.selectionStart, ta.selectionEnd);
+  ta.value = res.text;
+  ta.focus();
+  ta.setSelectionRange(res.start, res.end);
+}
+
+// contentEditable table cells hold plain text only (see makeCell), so
+// selection offsets can be read the same way a textarea exposes
+// selectionStart/selectionEnd — just via Range/Selection instead.
+function applyBoldToCell(cell){
+  if(!cell) return;
+  const sel = window.getSelection();
+  let start = cell.textContent.length, end = start;
+  if(sel && sel.rangeCount && cell.contains(sel.anchorNode)){
+    const range = sel.getRangeAt(0);
+    const preStart = range.cloneRange();
+    preStart.selectNodeContents(cell);
+    preStart.setEnd(range.startContainer, range.startOffset);
+    start = preStart.toString().length;
+    const preEnd = range.cloneRange();
+    preEnd.selectNodeContents(cell);
+    preEnd.setEnd(range.endContainer, range.endOffset);
+    end = preEnd.toString().length;
+  }
+  const res = toggleBoldMarkers(cell.textContent, start, end);
+  cell.textContent = res.text;
+  cell.focus();
+  const textNode = cell.firstChild || cell.appendChild(document.createTextNode(''));
+  const newRange = document.createRange();
+  newRange.setStart(textNode, Math.min(res.start, textNode.length));
+  newRange.setEnd(textNode, Math.min(res.end, textNode.length));
+  const sel2 = window.getSelection();
+  sel2.removeAllRanges();
+  sel2.addRange(newRange);
+}
+
+// Only the exam-tip-flavored columns get bold — Front/Back/options/etc
+// stay plain since ** markers would just show up literally on the card.
+const BOLD_TIP_COLS = new Set(['tip', 'tipa', 'tipb', 'tipc', 'tipd', 'rationale']);
+let lastFocusedTipCell = null;
+tableBody.addEventListener('focusin', (e) => {
+  const cell = e.target.closest && e.target.closest('.cell');
+  if(cell && BOLD_TIP_COLS.has(cell.dataset.col)) lastFocusedTipCell = cell;
+});
+tableBody.addEventListener('keydown', (e) => {
+  if((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')){
+    const cell = e.target.closest && e.target.closest('.cell');
+    if(cell && BOLD_TIP_COLS.has(cell.dataset.col)){
+      e.preventDefault();
+      applyBoldToCell(cell);
+    }
+  }
+});
+$('tableBoldBtn')?.addEventListener('click', () => {
+  if(lastFocusedTipCell && document.body.contains(lastFocusedTipCell)) applyBoldToCell(lastFocusedTipCell);
+});
+
+$('editTipBoldBtn')?.addEventListener('click', () => applyBoldToTextarea($('editTip')));
+$('editTip')?.addEventListener('keydown', (e) => {
+  if((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')){
+    e.preventDefault();
+    applyBoldToTextarea(e.target);
+  }
+});
+
 $('modeToggle').onchange = e => {
   const newMode = e.target.checked ? 'full' : 'classic';
   const hasContent = Array.from(tableBody.querySelectorAll('.cell')).some(c => c.textContent.trim());
@@ -8597,9 +8688,13 @@ $('brainBreakInterval').onchange = e => {
 // question (e.g. the floating pomodoro timer ran out mid-card) rather than
 // the normal every-N-cards break, which always lands between cards. In that
 // case "Continue" should redisplay the same question instead of advancing.
+// finishAfterBreak: true when the break was earned by the last card in the
+// queue — there's nothing left to advance to, so Continue should go to
+// results instead of pulling a (nonexistent) next card.
 function showBrainBreak(opts){
   opts = opts || {};
   const resumeSameCard = !!opts.resumeSameCard;
+  const finishAfterBreak = !!opts.finishAfterBreak;
   cardsSinceBreak = 0;
   const cardsLeft = queue.length + 1; // the current card (unfinished either way) plus whatever's queued
   $('brainBreakStats').textContent = `Mastered ${masteredCount} / ${totalCards} so far · ${cardsLeft} card${cardsLeft === 1 ? '' : 's'} left`;
@@ -8607,15 +8702,32 @@ function showBrainBreak(opts){
   hideAllScreens();
   $('brainBreak').classList.remove('hidden');
   $('brainBreak').dataset.resumeSameCard = resumeSameCard ? '1' : '0';
-  saveSession({onBreak: true, resumeSameCard});
+  $('brainBreak').dataset.finishAfterBreak = finishAfterBreak ? '1' : '0';
+  saveSession({onBreak: true, resumeSameCard, finishAfterBreak});
+  // Give the break screen a real countdown sized to the configured break
+  // length, so it lasts exactly "the break time indicated" instead of
+  // sitting there indefinitely until someone notices and taps Continue.
+  if(typeof window.pomodoroStartBreak === 'function') window.pomodoroStartBreak();
 }
 
-$('breakContinueBtn').onclick = () => {
+function leaveBrainBreak(){
   const resumeSameCard = $('brainBreak').dataset.resumeSameCard === '1';
+  const finishAfterBreak = $('brainBreak').dataset.finishAfterBreak === '1';
   $('brainBreak').classList.add('hidden');
+  if(finishAfterBreak){ finishQuiz(); return; }
   $('quiz').classList.remove('hidden');
   if(resumeSameCard) showCard(); else advanceToNextCard();
-};
+}
+
+// Hook the pomodoro module calls when its break segment finishes, so the
+// break screen ends itself the moment the indicated break time is up
+// rather than requiring a manual tap.
+function endBrainBreakIfShowing(){
+  const breakEl = $('brainBreak');
+  if(breakEl && !breakEl.classList.contains('hidden')) leaveBrainBreak();
+}
+
+$('breakContinueBtn').onclick = leaveBrainBreak;
 
 $('quitFromBreakBtn').onclick = () => {
   // Ending from a brain break also saves the paused quiz and returns Home.
@@ -9288,12 +9400,14 @@ function advanceToNextCard(){
 }
 
 function nextFromQueue(){
-  if(queue.length === 0){
-    finishQuiz();
+  if(brainBreakEnabled && cardsSinceBreak >= brainBreakInterval){
+    // A break is due even on the very last card — show it (and finish the
+    // quiz once it's dismissed) rather than skipping straight to results.
+    showBrainBreak({finishAfterBreak: queue.length === 0});
     return;
   }
-  if(brainBreakEnabled && cardsSinceBreak >= brainBreakInterval){
-    showBrainBreak();
+  if(queue.length === 0){
+    finishQuiz();
     return;
   }
   advanceToNextCard();
@@ -9418,6 +9532,7 @@ function openCardEditor(){
   $('questionText').classList.add('hidden');
   $('optionsList').classList.add('hidden');
   $('tipBox').style.display = 'none';
+  if(typeof window.pomodoroPauseForEditing === 'function') window.pomodoroPauseForEditing();
 }
 function renderEditOptions(opts){
   const list = $('editOptionsList');
@@ -9452,6 +9567,7 @@ function closeCardEditor(){
   $('cardEditPanel').classList.add('hidden');
   $('questionText').classList.remove('hidden');
   $('optionsList').classList.remove('hidden');
+  if(typeof window.pomodoroResumeAfterEditing === 'function') window.pomodoroResumeAfterEditing();
 }
 $('editCardBtn').onclick = openCardEditor;
 $('cancelCardEditBtn').onclick = closeCardEditor;
@@ -9556,6 +9672,16 @@ function escapeHtml(s){
   return d.innerHTML;
 }
 
+// Exam tips support a single, deliberately minimal bit of formatting —
+// **bold** — entered via the B button/Ctrl+B in the card editor and the
+// setup-screen table (see applyBoldToTextarea/applyBoldToCell). Text stays
+// plain with ** markers in storage (so it survives clipboard round-trips
+// unscathed); this converts those markers to real <b> at display time only,
+// after escaping everything else so no other markup can sneak through.
+function mdBoldToHtml(s){
+  return escapeHtml(s || '').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+}
+
 // For Samplex cards (per-option tips + rationale), build the feedback text
 // shown after answering: the exam tip for whichever option was chosen,
 // followed by the overall rationale. Falls back to the plain card.tip for
@@ -9600,7 +9726,7 @@ function selectAnswer(btn, chosen, card){
   $('progressFill').style.width = (masteredCount / totalCards * 100) + '%';
   const feedbackText = buildFeedbackText(card, chosen);
   if(feedbackText){
-    $('tipText').textContent = feedbackText;
+    $('tipText').innerHTML = mdBoldToHtml(feedbackText);
     $('tipBox').style.display = 'block';
   } else {
     $('tipBox').style.display = 'none';
@@ -9696,7 +9822,7 @@ function restoreAnsweredView(card, chosen, isCorrect){
   });
   const feedbackText = buildFeedbackText(card, chosen);
   if(feedbackText){
-    $('tipText').textContent = feedbackText;
+    $('tipText').innerHTML = mdBoldToHtml(feedbackText);
     $('tipBox').style.display = 'block';
   } else {
     $('tipBox').style.display = 'none';
@@ -9743,6 +9869,7 @@ function resumeSession(id){
     $('brainBreakStats').textContent = `Mastered ${masteredCount} / ${totalCards} so far · ${cardsLeft} card${cardsLeft === 1 ? '' : 's'} left`;
     $('brainBreakMessage').textContent = BRAIN_BREAK_MESSAGES[Math.floor(Math.random() * BRAIN_BREAK_MESSAGES.length)];
     $('brainBreak').dataset.resumeSameCard = s.resumeSameCard ? '1' : '0';
+    $('brainBreak').dataset.finishAfterBreak = s.finishAfterBreak ? '1' : '0';
     $('brainBreak').classList.remove('hidden');
     return;
   }
@@ -11910,6 +12037,12 @@ updateNavActiveState();
     // keeps running in the background either way and will re-offer the
     // break on its next check if it was skipped.
     if(state.mode === 'break') triggerPomodoroBreak();
+    // The reverse case: a break segment just ended (state.mode has
+    // flipped back to 'focus'). If the brain-break screen is still up —
+    // whichever feature put it there — end the break automatically so it
+    // lasts exactly as long as the configured break time instead of
+    // sitting there until the person notices and taps Continue.
+    else if(typeof endBrainBreakIfShowing === 'function') endBrainBreakIfShowing();
   }
 
   function triggerPomodoroBreak(){
@@ -11987,6 +12120,42 @@ updateNavActiveState();
   // summary phrase for the collapsed pill — empty string when Focus is off.
   window.pomodoroSyncStudySession = function(){
     return state.running ? ('⏱ ' + fmt(state.remaining)) : '';
+  };
+
+  // Called by showBrainBreak() (app-level) whenever the brain-break screen
+  // is shown — whether the trigger was Card Breaks (card count) or this
+  // module's own focus segment finishing. Puts/keeps the widget in a
+  // running 'break' segment sized to the configured break length, so the
+  // break screen always has a real countdown behind it that matches "the
+  // break time indicated" instead of sitting there indefinitely.
+  window.pomodoroStartBreak = function(){
+    stopTicking();
+    tickingPlayed = false;
+    state.mode = 'break';
+    state.remaining = LEN_OPTIONS.break * 60;
+    state.running = true;
+    startInterval();
+    persist();
+    render();
+  };
+
+  // Editing a card (openCardEditor/closeCardEditor) pauses the countdown
+  // entirely rather than just suppressing the brain-break handoff, so no
+  // focus/break time silently elapses while the person is mid-edit. Only
+  // resumes if it was this pause that stopped it (so it doesn't restart a
+  // timer the person had deliberately paused beforehand).
+  let pausedForEditing = false;
+  window.pomodoroPauseForEditing = function(){
+    if(state.running){
+      pausedForEditing = true;
+      setRunning(false);
+    }
+  };
+  window.pomodoroResumeAfterEditing = function(){
+    if(pausedForEditing){
+      pausedForEditing = false;
+      setRunning(true);
+    }
   };
 
   function tick(){
