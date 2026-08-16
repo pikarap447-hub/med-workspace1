@@ -2095,59 +2095,127 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
     .pet-feed-item{width:62px;height:62px;left:54%;top:70%}
   }
 
-  /* --- Floating pomodoro/focus timer: fixed to viewport, toggleable from
-     within a card session, and stays visible across screens once shown.
-     Docked top-right, just clear of the header/nav row, instead of the
-     old bottom-right spot — bottom-right sat directly over the answer
-     area on tall cards. The top strip only ever has the eyebrow/title
-     and nav pills behind it, so nothing interactive gets covered.
-     Mobile (<=520px, where .header stacks title-then-nav) needs a taller
-     clearance since the header itself grows taller. */
-  .pomodoro-widget{
+  /* --- Unified Study Session control -------------------------------
+     Replaces the old top-right floating Pomodoro widget and the old
+     bottom-left brain-break pill with one control docked to the bottom
+     of the study interface. Two independent sections (Card Breaks,
+     Focus Timer) share this one container/collapse mechanism but never
+     share state — see the JS glue in renderBrainBreakCountdown() and
+     the pomodoro module's window.pomodoroSyncStudySession(). */
+  .study-session-widget{
     position:fixed;
-    right:18px;
-    top:100px;
+    left:50%;
+    bottom:16px;
+    transform:translateX(-50%);
     z-index:99999;
     font-family:var(--font);
     user-select:none;
+    width:min(320px, calc(100vw - 24px));
+    display:flex;
+    flex-direction:column;
+    gap:10px;
   }
-  .pomodoro-widget.hidden{display:none}
-  /* Collapsed pill: tomato + time + a small state glyph (⏸ running /
-     ▶ paused) so the state is legible without needing a dot's color to
-     carry all the meaning. Collapsed vs expanded is remembered in
-     state.expanded and persisted, so it reopens the way it was left. */
-  .pomodoro-collapsed{
+  .study-session-widget.hidden{display:none}
+  /* The pill stays visible at all times (open or closed) so it's a
+     persistent, discoverable affordance — same idea as the clock icon
+     next to the pencil/flag buttons on the card itself. The panel pops
+     up above it rather than replacing it. */
+  .ss-collapsed{
     display:flex;
     align-items:center;
-    gap:6px;
+    justify-content:center;
+    gap:7px;
+    width:100%;
     background:var(--surface-elevated);
     border:1.5px solid var(--border);
     box-shadow:var(--shadow);
     border-radius:999px;
-    padding:9px 14px 9px 12px;
+    padding:9px 16px;
     cursor:pointer;
-    font-weight:700;
-    font-size:14px;
+    font-family:var(--font);
     color:var(--text);
     transition:transform .15s ease;
-    min-height:38px;
+    order:2;
   }
-  .pomodoro-collapsed:active{transform:scale(.96)}
-  .pomodoro-widget.expanded .pomodoro-collapsed{display:none}
-  .pomodoro-collapsed-emoji{font-size:15px; line-height:1; flex:none;}
-  .pomodoro-collapsed-time{font-variant-numeric:tabular-nums;}
-  .pomodoro-collapsed-state{font-size:11px; opacity:.65; flex:none;}
-  .pomodoro-widget.on-break .pomodoro-collapsed-time,
-  .pomodoro-widget.on-break .pomodoro-time{color:var(--accent)}
-  .pomodoro-panel{
-    width:196px;
+  .ss-collapsed:active{transform:scale(.97)}
+  .ss-collapsed.ss-collapsed-open{border-color:var(--primary);}
+  .ss-collapsed-label{font-weight:700; font-size:12.5px;}
+  .ss-collapsed-dot{opacity:.5}
+  .ss-collapsed-summary{font-size:12.5px; font-weight:600; color:var(--text-muted); font-variant-numeric:tabular-nums;}
+  .ss-panel{
+    width:100%;
     background:var(--surface-elevated);
     border:1.5px solid var(--border);
     box-shadow:var(--shadow);
     border-radius:var(--radius);
     padding:14px 16px 16px;
+    max-height:min(72vh, 560px);
+    overflow-y:auto;
   }
-  .pomodoro-panel.hidden{display:none}
+  .ss-panel.hidden{display:none}
+  .ss-panel-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    font-size:12px;
+    font-weight:700;
+    letter-spacing:.04em;
+    text-transform:uppercase;
+    color:var(--text-muted);
+    margin-bottom:10px;
+  }
+  .ss-section{margin-bottom:2px;}
+  .ss-section-head{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:8px;
+  }
+  .ss-section-title{font-weight:700; font-size:13.5px; color:var(--text);}
+  .ss-switch{transform:scale(.85); transform-origin:right center;}
+  .ss-section-body{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:13px;
+    color:var(--text-muted);
+    font-weight:600;
+    flex-wrap:wrap;
+    transition:opacity .15s ease;
+  }
+  .ss-section-body-col{
+    display:block;
+  }
+  .ss-breaks-num{
+    font-family:var(--font-mono);
+    font-weight:700;
+    color:var(--text);
+    min-width:16px;
+    text-align:center;
+  }
+  .ss-section-note{
+    font-size:11.5px;
+    color:var(--text-muted);
+    opacity:.8;
+  }
+  .ss-divider{
+    height:1px;
+    background:var(--border);
+    margin:14px 0 12px;
+  }
+  .bb-step{
+    width:22px; height:22px; line-height:20px; text-align:center;
+    border:1.5px solid var(--border); border-radius:50%; cursor:pointer;
+    font-family:var(--font); font-size:13px; font-weight:700;
+    background:var(--surface); color:var(--text); padding:0;
+  }
+  .bb-step:hover{ background:var(--primary-soft); color:var(--primary); border-color:var(--primary); }
+  @media(max-width:600px){
+    .study-session-widget{ width:calc(100vw - 20px); bottom:12px; }
+  }
+
+  /* --- Focus Timer section (nested inside the Study Session panel) --- */
+  .pomodoro-widget.on-break .pomodoro-time{color:var(--accent)}
   .pomodoro-panel-head{
     display:flex;
     align-items:center;
@@ -2171,7 +2239,7 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
   .pomodoro-icon-btn[aria-pressed="true"]{color:var(--danger);}
   .pomodoro-menu-wrap{position:relative;}
   .pomodoro-menu{
-    position:absolute; top:100%; right:0; margin-top:4px;
+    position:absolute; bottom:100%; right:0; margin-bottom:4px;
     background:var(--surface-elevated);
     border:1.5px solid var(--border);
     box-shadow:var(--shadow);
@@ -2193,13 +2261,6 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
     margin-bottom:6px;
   }
   .pomodoro-volume-slider{width:100%; accent-color:var(--primary);}
-  .pomodoro-close{
-    background:none;border:none;cursor:pointer;
-    color:var(--text-muted);font-size:14px;line-height:1;padding:8px;
-    min-width:30px;min-height:30px;
-    display:flex;align-items:center;justify-content:center;
-    margin:-8px -8px -8px 0;
-  }
   .pomodoro-time{
     font-family:var(--font-display);
     font-size:34px;
@@ -2222,11 +2283,10 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
     margin:0 0 12px;
   }
   .pomodoro-context-dot{opacity:.55}
-  /* Final-countdown: subtle pulse on the digits + collapsed pill during
-     the last five seconds, timed to when the ticking audio kicks in. */
+  /* Final-countdown: subtle pulse on the digits during the last five
+     seconds, timed to when the ticking audio kicks in. */
   .pomodoro-widget.final-countdown .pomodoro-time{color:var(--danger)}
-  .pomodoro-widget.final-countdown .pomodoro-time,
-  .pomodoro-widget.final-countdown .pomodoro-collapsed{
+  .pomodoro-widget.final-countdown .pomodoro-time{
     animation:pomodoroFinalPulse 1s ease-in-out infinite;
   }
   @keyframes pomodoroFinalPulse{
@@ -2284,15 +2344,7 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
     border-color:var(--primary);
   }
   @media(max-width:600px){
-    .pomodoro-widget{ right:12px; }
-    .pomodoro-panel{width:176px; padding:12px 14px 14px}
     .pomodoro-time{font-size:30px}
-  }
-  /* .header switches to a stacked title-then-nav layout at this width
-     (see .header rule above), so it's taller — push the widget down to
-     stay clear of the nav pill row instead of overlapping it. */
-  @media(max-width:520px){
-    .pomodoro-widget{ top:152px; }
   }
 
 
@@ -3477,7 +3529,7 @@ OUTCOME: NEG
               <span class="switch-label" id="shuffleToggleLabel">Shuffle questions</span>
             </label>
           </div>
-          <div class="row" style="justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+          <div class="row" style="justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; gap:10px;">
             <label class="switch-row" for="brainBreakToggle">
               <span class="switch">
                 <input type="checkbox" id="brainBreakToggle">
@@ -3490,6 +3542,16 @@ OUTCOME: NEG
               <input type="number" id="brainBreakInterval" class="num-input" min="2" max="50" value="10">
               <span style="font-size:13px; color:var(--ink-soft);">cards</span>
             </label>
+          </div>
+          <div class="row" style="justify-content:space-between; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+            <label class="switch-row" for="pomodoroSetupToggle">
+              <span class="switch">
+                <input type="checkbox" id="pomodoroSetupToggle">
+                <span class="switch-track"><span class="switch-thumb"></span></span>
+              </span>
+              <span class="switch-label" id="pomodoroSetupToggleLabel">Focus timer off</span>
+            </label>
+            <span style="font-size:12.5px; color:var(--ink-soft);">Both can run together — a finished focus block hands off into a brain break.</span>
           </div>
           <div class="row">
             <button class="btn-primary" id="startBtn">Start quiz</button>
@@ -3512,8 +3574,8 @@ OUTCOME: NEG
           <div class="index-no" id="indexNo">CARD 001</div>
           <div class="card-icon-actions">
             <button type="button" class="flag-btn" id="editCardBtn" title="Edit this card">✏️</button>
-            <button type="button" class="flag-btn" id="pomodoroToggleBtn" title="Focus timer">⏱️</button>
             <button type="button" class="flag-btn" id="flagBtn" title="Mark for review">🏳️</button>
+            <button type="button" class="flag-btn" id="ssClockBtn" title="Study session timers">⏱️</button>
           </div>
         </div>
         <div class="question" id="questionText"></div>
@@ -3623,6 +3685,11 @@ OUTCOME: NEG
         <label class="field-label">Results</label>
         <div class="result-score" id="finalScore">0 / 0</div>
         <div class="result-sub" id="finalSub"></div>
+        <div class="result-sub" id="sessionMeta" style="margin-top:2px;"></div>
+        <div id="weakCardsBox" class="hidden" style="margin-top:14px;">
+          <label class="field-label">Weakest cards this session</label>
+          <div id="weakCardsList"></div>
+        </div>
         <div id="missedList"></div>
         <div class="row" style="margin-top:20px;">
           <button class="btn-primary" id="retryAllBtn">Retry all cards</button>
@@ -4610,6 +4677,7 @@ function saveSession(extra){
       activeSetId,
       mode: inputMode,
       cardsSinceBreak,
+      quizStartTime: window.__quizStartTime || Date.now(),
       updatedAt: Date.now()
     }, extra || {});
     const all = loadAllSessions();
@@ -8489,13 +8557,11 @@ initBrainBreakToggle();
 function updateBrainBreakUI(){
   $('brainBreakToggleLabel').textContent = brainBreakEnabled ? `Brain break every ${brainBreakInterval} cards` : 'Brain breaks off';
   $('brainBreakIntervalWrap').style.display = brainBreakEnabled ? 'flex' : 'none';
+  $('brainBreakToggle').checked = brainBreakEnabled;
+  if(typeof renderBrainBreakCountdown === 'function') renderBrainBreakCountdown();
 }
 
-$('brainBreakToggle').onchange = e => {
-  brainBreakEnabled = e.target.checked;
-  updateBrainBreakUI();
-  try{ lsSet(BRAINBREAK_ENABLED_KEY, brainBreakEnabled ? '1' : '0'); }catch(e){}
-};
+$('brainBreakToggle').onchange = e => setBrainBreakEnabled(e.target.checked);
 function initConfidenceToggle(){
   const el = $('confidenceToggle');
   if(!el) return;
@@ -8520,19 +8586,28 @@ $('brainBreakInterval').onchange = e => {
   try{ lsSet(BRAINBREAK_INTERVAL_KEY, String(brainBreakInterval)); }catch(e){}
 };
 
-function showBrainBreak(){
+// resumeSameCard: true when the break interrupted an in-progress, unanswered
+// question (e.g. the floating pomodoro timer ran out mid-card) rather than
+// the normal every-N-cards break, which always lands between cards. In that
+// case "Continue" should redisplay the same question instead of advancing.
+function showBrainBreak(opts){
+  opts = opts || {};
+  const resumeSameCard = !!opts.resumeSameCard;
   cardsSinceBreak = 0;
-  $('brainBreakStats').textContent = `Mastered ${masteredCount} / ${totalCards} so far · ${queue.length + 1} card${queue.length === 0 ? '' : 's'} left`;
+  const cardsLeft = queue.length + 1; // the current card (unfinished either way) plus whatever's queued
+  $('brainBreakStats').textContent = `Mastered ${masteredCount} / ${totalCards} so far · ${cardsLeft} card${cardsLeft === 1 ? '' : 's'} left`;
   $('brainBreakMessage').textContent = BRAIN_BREAK_MESSAGES[Math.floor(Math.random() * BRAIN_BREAK_MESSAGES.length)];
   hideAllScreens();
   $('brainBreak').classList.remove('hidden');
-  saveSession({onBreak: true});
+  $('brainBreak').dataset.resumeSameCard = resumeSameCard ? '1' : '0';
+  saveSession({onBreak: true, resumeSameCard});
 }
 
 $('breakContinueBtn').onclick = () => {
+  const resumeSameCard = $('brainBreak').dataset.resumeSameCard === '1';
   $('brainBreak').classList.add('hidden');
   $('quiz').classList.remove('hidden');
-  advanceToNextCard();
+  if(resumeSameCard) showCard(); else advanceToNextCard();
 };
 
 $('quitFromBreakBtn').onclick = () => {
@@ -8558,6 +8633,7 @@ function launchQuiz(cardArr, setId){
   cards = cardArr;
   activeSetId = setId;
   window.__quizSessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
+  window.__quizStartTime = Date.now();
   // Reset here; cram-launching call sites (startCramSession/cramContinueBtn)
   // set this back right after calling launchQuiz, so it only survives when
   // a cram queue is actually what's running.
@@ -9216,18 +9292,48 @@ function nextFromQueue(){
   advanceToNextCard();
 }
 
+// Renders the unified "Study Session" control at the bottom of the quiz
+// screen: the collapsed pill's summary text, the Card Breaks section's
+// live numbers, and (via window.pomodoroSyncStudySession, exposed by the
+// pomodoro module below) the Focus Timer section. Kept under its old name
+// so every existing call site (hideAllScreens, showCard, interval
+// adjustment) picks up the new behavior automatically.
 function renderBrainBreakCountdown(){
-  const el = $('brainBreakCountdown');
-  if(!el) return;
+  const widget = $('studySessionWidget');
+  if(!widget) return;
   const quizVisible = $('quiz') && !$('quiz').classList.contains('hidden');
-  if(!quizVisible || !brainBreakEnabled){ el.classList.add('hidden'); el.innerHTML=''; return; }
-  el.classList.remove('hidden');
-  const remaining = Math.max(0, brainBreakInterval - cardsSinceBreak);
-  el.innerHTML = `<span class="bb-step" id="bbDec" title="Fewer cards until break">−</span>`
-    + `<span>Break in ${remaining} card${remaining === 1 ? '' : 's'} (every ${brainBreakInterval})</span>`
-    + `<span class="bb-step" id="bbInc" title="More cards until break">+</span>`;
-  $('bbDec').onclick = e => { e.stopPropagation(); adjustBrainBreakInterval(-1); };
-  $('bbInc').onclick = e => { e.stopPropagation(); adjustBrainBreakInterval(1); };
+  widget.classList.toggle('hidden', !quizVisible);
+  if(!quizVisible) return;
+
+  const breaksToggle = $('ssBreaksToggle');
+  if(breaksToggle) breaksToggle.checked = brainBreakEnabled;
+  const breaksBody = $('ssBreaksBody');
+  if(breaksBody){
+    breaksBody.style.opacity = brainBreakEnabled ? '1' : '.45';
+    breaksBody.style.pointerEvents = brainBreakEnabled ? '' : 'none';
+  }
+  const numEl = $('ssBreaksIntervalNum');
+  if(numEl) numEl.textContent = brainBreakInterval;
+  const noteEl = $('ssBreaksNote');
+  if(noteEl){
+    const remaining = Math.max(0, brainBreakInterval - cardsSinceBreak);
+    noteEl.textContent = brainBreakEnabled ? `${remaining} card${remaining === 1 ? '' : 's'} to go` : '';
+  }
+
+  // The Focus Timer section lives inside the pomodoro module's own closure
+  // — ask it to refresh its half of the panel and report a summary phrase.
+  const focusSummary = (typeof window.pomodoroSyncStudySession === 'function') ? window.pomodoroSyncStudySession() : '';
+
+  const parts = [];
+  if(focusSummary) parts.push(focusSummary);
+  if(brainBreakEnabled) parts.push(`☕ Every ${brainBreakInterval} card${brainBreakInterval === 1 ? '' : 's'}`);
+  const summaryEl = $('ssCollapsedSummary');
+  if(summaryEl) summaryEl.textContent = parts.length ? parts.join(' · ') : 'No active timers';
+  // Give the always-visible clock icon (next to pencil/flag) the same
+  // "lit up" treatment the flag button gets when active, so it's obvious
+  // at a glance whether a timer is currently running.
+  const clockBtn = $('ssClockBtn');
+  if(clockBtn) clockBtn.classList.toggle('flagged', parts.length > 0);
 }
 function adjustBrainBreakInterval(delta){
   const next = Math.min(50, Math.max(2, brainBreakInterval + delta));
@@ -9239,6 +9345,45 @@ function adjustBrainBreakInterval(delta){
   updateBrainBreakUI();
   renderBrainBreakCountdown();
 }
+function setBrainBreakEnabled(v){
+  brainBreakEnabled = !!v;
+  updateBrainBreakUI();
+  try{ lsSet(BRAINBREAK_ENABLED_KEY, brainBreakEnabled ? '1' : '0'); }catch(e){}
+  renderBrainBreakCountdown();
+}
+// These wire up elements that live in the Study Session widget markup,
+// which is defined further down the body than this script tag — so the
+// DOM nodes don't exist yet at parse time. Deferred to DOMContentLoaded
+// (same pattern the pomodoro module below uses) so the lookups succeed.
+function initStudySessionControls(){
+  $('ssBreaksToggle')?.addEventListener('change', e => setBrainBreakEnabled(e.target.checked));
+  $('ssBbDec')?.addEventListener('click', () => adjustBrainBreakInterval(-1));
+  $('ssBbInc')?.addEventListener('click', () => adjustBrainBreakInterval(1));
+  // Collapsed pill <-> expanded panel. Purely a display toggle — neither
+  // state (card breaks / focus timer) is touched by expanding/collapsing.
+  // The pill itself stays visible at all times (open or closed) so people
+  // can always see it's there; clicking it toggles the panel open/shut.
+  // The clock icon next to the pencil/flag buttons on the card does the
+  // same thing, as a second, always-visible entry point.
+  const collapsedEl = $('ssCollapsed');
+  const panelEl = $('ssPanel');
+  const collapseBtn = $('ssCollapseBtn');
+  const clockBtn = $('ssClockBtn');
+  function isExpanded(){
+    return !!panelEl && !panelEl.classList.contains('hidden');
+  }
+  function setExpanded(v){
+    if(panelEl) panelEl.classList.toggle('hidden', !v);
+    collapsedEl?.classList.toggle('ss-collapsed-open', v);
+  }
+  function toggleExpanded(){ setExpanded(!isExpanded()); }
+  collapsedEl?.addEventListener('click', toggleExpanded);
+  clockBtn?.addEventListener('click', toggleExpanded);
+  collapseBtn?.addEventListener('click', () => setExpanded(false));
+  setExpanded(false);
+}
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initStudySessionControls);
+else initStudySessionControls();
 
 const EDIT_LETTERS = ['A','B','C','D','E','F'];
 let editCorrectIndex = 0;
@@ -9577,6 +9722,7 @@ function resumeSession(id){
   askedCount = s.askedCount || 0;
   score = s.score || 0;
   cardsSinceBreak = s.cardsSinceBreak || 0;
+  window.__quizStartTime = s.quizStartTime || Date.now();
 
   buildSimilarityIndex(cards);
   setInputMode(s.mode || 'classic');
@@ -9586,8 +9732,10 @@ function resumeSession(id){
   renderPlant(masteredCount / totalCards);
 
   if(s.onBreak){
-    $('brainBreakStats').textContent = `Mastered ${masteredCount} / ${totalCards} so far · ${queue.length} card${queue.length === 1 ? '' : 's'} left`;
+    const cardsLeft = s.resumeSameCard ? queue.length + 1 : queue.length;
+    $('brainBreakStats').textContent = `Mastered ${masteredCount} / ${totalCards} so far · ${cardsLeft} card${cardsLeft === 1 ? '' : 's'} left`;
     $('brainBreakMessage').textContent = BRAIN_BREAK_MESSAGES[Math.floor(Math.random() * BRAIN_BREAK_MESSAGES.length)];
+    $('brainBreak').dataset.resumeSameCard = s.resumeSameCard ? '1' : '0';
     $('brainBreak').classList.remove('hidden');
     return;
   }
@@ -9631,6 +9779,56 @@ function finishQuiz(){
   $('finalScore').textContent = `${masteredCount} / ${totalCards}`;
   const pct = totalCards ? Math.round(masteredCount / totalCards * 100) : 0;
   $('finalSub').textContent = `${pct}% mastered · ${score} correct answers over ${askedCount} questions asked`;
+
+  // Session stats: how long this run took, and when it started/ended.
+  const sessionMetaEl = $('sessionMeta');
+  if(sessionMetaEl){
+    const startedAt = window.__quizStartTime || Date.now();
+    const endedAt = Date.now();
+    const durationSec = Math.max(0, Math.round((endedAt - startedAt) / 1000));
+    const durMin = Math.floor(durationSec / 60);
+    const durSec = durationSec % 60;
+    const durText = durMin > 0 ? `${durMin}m ${durSec}s` : `${durSec}s`;
+    const fmtClock = ts => {
+      const d = new Date(ts);
+      let h = d.getHours();
+      const m = String(d.getMinutes()).padStart(2, '0');
+      const ampm = h >= 12 ? 'PM' : 'AM';
+      h = h % 12; if(h === 0) h = 12;
+      return `${h}:${m} ${ampm}`;
+    };
+    sessionMetaEl.textContent = `⏱ ${durText} · started ${fmtClock(startedAt)} · ended ${fmtClock(endedAt)}`;
+  }
+
+  // Weakest cards this session, pulled from the same per-card accuracy
+  // stats the weak-practice/adaptive-learning features already track —
+  // just filtered down to the cards actually seen in this run.
+  const weakBox = $('weakCardsBox');
+  const weakList = $('weakCardsList');
+  if(weakBox && weakList){
+    weakList.innerHTML = '';
+    const statsAll = loadStatsData();
+    const bucketId = activeSetId || 'scratch';
+    const cs = (statsAll[bucketId] && statsAll[bucketId].cardStats) || {};
+    const weak = cards
+      .map(c => cs[cardKey(c)])
+      .filter(s => s && s.seen > 0 && s.correct < s.seen)
+      .sort((a, b) => (a.correct / a.seen) - (b.correct / b.seen))
+      .slice(0, 5);
+    if(weak.length === 0){
+      weakBox.classList.add('hidden');
+    } else {
+      weakBox.classList.remove('hidden');
+      weak.forEach(s => {
+        const p = document.createElement('div');
+        p.className = 'missed-item';
+        const acc = Math.round((s.correct / s.seen) * 100);
+        p.innerHTML = `<span class="f">${escapeHtml(s.front)}</span> — <span class="b">${acc}% (${s.correct}/${s.seen})</span>`;
+        weakList.appendChild(p);
+      });
+    }
+  }
+
   const list = $('missedList');
   list.innerHTML = '';
   if(missedSet.size === 0){
@@ -9683,6 +9881,7 @@ $('retryFlaggedBtn').onclick = () => {
   totalCards = flaggedCards.length;
   queue = shuffle(flaggedCards);
   masteredCount = 0; askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
+  window.__quizStartTime = Date.now();
   renderPlant(0);
   $('results').classList.add('hidden');
   $('quiz').classList.remove('hidden');
@@ -9692,6 +9891,7 @@ $('retryFlaggedBtn').onclick = () => {
 $('retryAllBtn').onclick = () => {
   queue = orderedQueue(cards);
   masteredCount = 0; askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
+  window.__quizStartTime = Date.now();
   renderPlant(0);
   $('results').classList.add('hidden');
   $('quiz').classList.remove('hidden');
@@ -9703,6 +9903,7 @@ $('retryMissedBtn').onclick = () => {
   totalCards = missedSet.size;
   queue = shuffle(Array.from(missedSet.values()));
   masteredCount = 0; askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
+  window.__quizStartTime = Date.now();
   renderPlant(0);
   $('results').classList.add('hidden');
   $('quiz').classList.remove('hidden');
@@ -10043,8 +10244,6 @@ document.addEventListener('keydown', e => {
   requestAnimationFrame(pollGamepads);
 })();
 </script>
-
-<span id="brainBreakCountdown" class="brain-break-countdown hidden"></span>
 
 <div class="zoom-controls">
 <button type="button" id="zoomOut" title="Smaller text">A−</button>
@@ -11696,6 +11895,28 @@ updateNavActiveState();
   function notifySegmentDone(){
     playAlarm();
     if(navigator.vibrate) try{ navigator.vibrate([80,60,80]); }catch(e){}
+    // A focus segment just ended (state.mode has already flipped to
+    // 'break' by this point) — hand off to the app's brain-break screen
+    // instead of just relabeling the floating widget, so the person
+    // actually steps away. Skipped while they're mid-edit on a card so an
+    // in-progress edit is never yanked out from under them; the timer
+    // keeps running in the background either way and will re-offer the
+    // break on its next check if it was skipped.
+    if(state.mode === 'break') triggerPomodoroBreak();
+  }
+
+  function triggerPomodoroBreak(){
+    try{
+      const quizEl = $('quiz');
+      const editPanel = $('cardEditPanel');
+      const breakEl = $('brainBreak');
+      const quizVisible = quizEl && !quizEl.classList.contains('hidden');
+      const editingCard = editPanel && !editPanel.classList.contains('hidden');
+      const alreadyOnBreak = breakEl && !breakEl.classList.contains('hidden');
+      if(quizVisible && !editingCard && !alreadyOnBreak && typeof showBrainBreak === 'function'){
+        showBrainBreak({resumeSameCard: true});
+      }
+    }catch(e){}
   }
 
   function currentModeLen(){
@@ -11703,22 +11924,21 @@ updateNavActiveState();
   }
 
   function render(){
-    const widget = $('pomodoroWidget');
-    if(!widget) return;
-    widget.classList.toggle('hidden', !state.visible);
-    widget.classList.toggle('expanded', state.expanded);
-    widget.classList.toggle('running', state.running);
-    widget.classList.toggle('on-break', state.mode === 'break');
-    // Final-countdown pulse: same 5-second window that triggers the
-    // ticking audio, so the visual and audible cues line up.
-    widget.classList.toggle('final-countdown', state.running && state.remaining > 0 && state.remaining <= 5);
+    // The Focus section's "widget" root is now the section body nested
+    // inside the unified Study Session panel rather than its own floating
+    // element — state-driven classes (running/on-break/final-countdown)
+    // land on that body element instead.
+    const widget = $('ssFocusBody');
+    if(widget){
+      widget.classList.toggle('running', state.running);
+      widget.classList.toggle('on-break', state.mode === 'break');
+      // Final-countdown pulse: same 5-second window that triggers the
+      // ticking audio, so the visual and audible cues line up.
+      widget.classList.toggle('final-countdown', state.running && state.remaining > 0 && state.remaining <= 5);
+    }
     const timeStr = fmt(state.remaining);
-    const collapsedTime = $('pomodoroCollapsedTime');
     const panelTime = $('pomodoroTime');
-    if(collapsedTime) collapsedTime.textContent = timeStr;
     if(panelTime) panelTime.textContent = timeStr;
-    const collapsedState = $('pomodoroCollapsedState');
-    if(collapsedState) collapsedState.textContent = state.running ? '⏸' : '▶';
     const modeLabel = $('pomodoroModeLabel');
     if(modeLabel) modeLabel.textContent = state.mode === 'focus' ? 'Focus' : 'Break';
     const remainingLabel = $('pomodoroRemainingLabel');
@@ -11735,12 +11955,32 @@ updateNavActiveState();
     }
     const volumeSlider = $('pomodoroVolumeSlider');
     if(volumeSlider && document.activeElement !== volumeSlider) volumeSlider.value = Math.round(state.volume * 100);
-    $('pomodoroPanel')?.classList.toggle('hidden', !state.expanded);
-    $('pomodoroCollapsed')?.classList.toggle('hidden', state.expanded);
     document.querySelectorAll('.pomodoro-len-btn').forEach(btn => {
       btn.classList.toggle('active', Number(btn.dataset.len) === state.focusMinutes);
     });
+    // Focus is "on" when the timer is actively running — that single flag
+    // now drives every toggle that represents this feature: the setup
+    // screen's pre-quiz checkbox and the Study Session panel's own switch,
+    // so all three (this render, that checkbox, and the Play/Pause button)
+    // always agree on the same state instead of tracking it separately.
+    const setupToggle = $('pomodoroSetupToggle');
+    if(setupToggle) setupToggle.checked = state.running;
+    const setupLabel = $('pomodoroSetupToggleLabel');
+    if(setupLabel) setupLabel.textContent = state.running ? 'Focus timer on' : 'Focus timer off';
+    const ssFocusToggle = $('ssFocusToggle');
+    if(ssFocusToggle) ssFocusToggle.checked = state.running;
+
+    // Keep the Card Breaks half + the collapsed pill's summary in sync too
+    // — Card Breaks lives outside this closure, so ask the app for it.
+    if(typeof renderBrainBreakCountdown === 'function') renderBrainBreakCountdown();
   }
+
+  // Called by renderBrainBreakCountdown() (the app-level Study Session
+  // renderer) to refresh this half of the panel and get back a short
+  // summary phrase for the collapsed pill — empty string when Focus is off.
+  window.pomodoroSyncStudySession = function(){
+    return state.running ? ('⏱ ' + fmt(state.remaining)) : '';
+  };
 
   function tick(){
     if(!state.running) return;
@@ -11768,21 +12008,6 @@ updateNavActiveState();
       stopTicking();
       tickingPlayed = false;
     }
-    persist();
-    render();
-  }
-
-  function toggleVisible(){
-    state.visible = !state.visible;
-    // Reopens in whatever collapsed/expanded state it was last left in
-    // (state.expanded persists on its own) rather than always popping
-    // the full panel back open.
-    persist();
-    render();
-  }
-
-  function toggleExpanded(){
-    state.expanded = !state.expanded;
     persist();
     render();
   }
@@ -11816,10 +12041,8 @@ updateNavActiveState();
     render();
     if(state.running) startInterval();
 
-    $('pomodoroToggleBtn')?.addEventListener('click', toggleVisible);
-    $('pomodoroCloseBtn')?.addEventListener('click', () => { state.visible = false; persist(); render(); });
-    $('pomodoroCollapsed')?.addEventListener('click', toggleExpanded);
-    $('pomodoroCollapseBtn')?.addEventListener('click', toggleExpanded);
+    $('pomodoroSetupToggle')?.addEventListener('change', (e) => setRunning(e.target.checked));
+    $('ssFocusToggle')?.addEventListener('change', (e) => setRunning(e.target.checked));
     $('pomodoroPlayPauseBtn')?.addEventListener('click', () => setRunning(!state.running));
     $('pomodoroResetBtn')?.addEventListener('click', resetCurrent);
     $('pomodoroSkipBtn')?.addEventListener('click', skipToNext);
@@ -11855,47 +12078,86 @@ updateNavActiveState();
 
 </script>
 
-<div id="pomodoroWidget" class="pomodoro-widget hidden">
-  <div class="pomodoro-collapsed" id="pomodoroCollapsed">
-    <span class="pomodoro-collapsed-emoji" aria-hidden="true">🍅</span>
-    <span id="pomodoroCollapsedTime" class="pomodoro-collapsed-time">25:00</span>
-    <span id="pomodoroCollapsedState" class="pomodoro-collapsed-state" aria-hidden="true">▶</span>
-  </div>
-  <div class="pomodoro-panel hidden" id="pomodoroPanel">
-    <div class="pomodoro-panel-head">
-      <span id="pomodoroModeLabel">Focus</span>
-      <div class="pomodoro-head-actions">
-        <button type="button" class="pomodoro-icon-btn pomodoro-collapse-btn" id="pomodoroCollapseBtn" title="Collapse to pill">
-          <svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><path d="M2.5 4.5 L6 8 L9.5 4.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <button type="button" class="pomodoro-icon-btn" id="pomodoroSpeakerBtn" title="Mute sound" aria-pressed="false">🔊</button>
-        <div class="pomodoro-menu-wrap">
-          <button type="button" class="pomodoro-icon-btn" id="pomodoroMenuBtn" title="More options" aria-haspopup="true" aria-expanded="false">⋯</button>
-          <div class="pomodoro-menu hidden" id="pomodoroMenu">
-            <label class="pomodoro-menu-label" for="pomodoroVolumeSlider">Volume</label>
-            <input type="range" min="0" max="100" value="100" id="pomodoroVolumeSlider" class="pomodoro-volume-slider">
-          </div>
-        </div>
-        <button type="button" class="pomodoro-close" id="pomodoroCloseBtn" title="Hide timer">✕</button>
+<div id="studySessionWidget" class="study-session-widget hidden">
+  <div class="ss-panel hidden" id="ssPanel">
+    <div class="ss-panel-head">
+      <span>Study Session</span>
+      <button type="button" class="pomodoro-icon-btn" id="ssCollapseBtn" title="Collapse">
+        <svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><path d="M2.5 7.5 L6 4 L9.5 7.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+
+    <!-- Card Breaks: pacing by card count. Fully independent of Focus below —
+         its own toggle, its own interval, its own countdown. -->
+    <div class="ss-section">
+      <div class="ss-section-head">
+        <span class="ss-section-title">☕ Card Breaks</span>
+        <label class="switch ss-switch">
+          <input type="checkbox" id="ssBreaksToggle">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+        </label>
+      </div>
+      <div class="ss-section-body" id="ssBreaksBody">
+        <span>Every</span>
+        <button type="button" class="bb-step" id="ssBbDec" title="Fewer cards until break">−</button>
+        <span class="ss-breaks-num" id="ssBreaksIntervalNum">2</span>
+        <button type="button" class="bb-step" id="ssBbInc" title="More cards until break">+</button>
+        <span>cards</span>
+        <span class="ss-section-note" id="ssBreaksNote"></span>
       </div>
     </div>
-    <div class="pomodoro-time" id="pomodoroTime">25:00</div>
-    <div class="pomodoro-context">
-      <span id="pomodoroRemainingLabel">25 min remaining</span>
-      <span class="pomodoro-context-dot" aria-hidden="true">·</span>
-      <span id="pomodoroEndsAt">Ends at --:--</span>
-    </div>
-    <div class="pomodoro-controls">
-      <button type="button" class="pomodoro-btn-icon" id="pomodoroResetBtn" title="Reset">↺</button>
-      <button type="button" class="pomodoro-btn-main" id="pomodoroPlayPauseBtn" title="Start">▶</button>
-      <button type="button" class="pomodoro-btn-icon" id="pomodoroSkipBtn" title="Skip to next">⏭</button>
-    </div>
-    <div class="pomodoro-lengths">
-      <button type="button" class="pomodoro-len-btn" data-len="25">25</button>
-      <button type="button" class="pomodoro-len-btn" data-len="15">15</button>
-      <button type="button" class="pomodoro-len-btn" data-len="5">5</button>
+
+    <div class="ss-divider"></div>
+
+    <!-- Focus Timer: pacing by elapsed time. Its own toggle (mirrors
+         Play/Pause below), its own length pills, its own countdown. -->
+    <div class="ss-section">
+      <div class="ss-section-head">
+        <span class="ss-section-title">⏱ Focus Timer</span>
+        <label class="switch ss-switch">
+          <input type="checkbox" id="ssFocusToggle">
+          <span class="switch-track"><span class="switch-thumb"></span></span>
+        </label>
+      </div>
+      <div class="ss-section-body ss-section-body-col pomodoro-widget" id="ssFocusBody">
+        <div class="pomodoro-panel-head">
+          <span id="pomodoroModeLabel">Focus</span>
+          <div class="pomodoro-head-actions">
+            <button type="button" class="pomodoro-icon-btn" id="pomodoroSpeakerBtn" title="Mute sound" aria-pressed="false">🔊</button>
+            <div class="pomodoro-menu-wrap">
+              <button type="button" class="pomodoro-icon-btn" id="pomodoroMenuBtn" title="More options" aria-haspopup="true" aria-expanded="false">⋯</button>
+              <div class="pomodoro-menu hidden" id="pomodoroMenu">
+                <label class="pomodoro-menu-label" for="pomodoroVolumeSlider">Volume</label>
+                <input type="range" min="0" max="100" value="100" id="pomodoroVolumeSlider" class="pomodoro-volume-slider">
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="pomodoro-time" id="pomodoroTime">25:00</div>
+        <div class="pomodoro-context">
+          <span id="pomodoroRemainingLabel">25 min remaining</span>
+          <span class="pomodoro-context-dot" aria-hidden="true">·</span>
+          <span id="pomodoroEndsAt">Ends at --:--</span>
+        </div>
+        <div class="pomodoro-controls">
+          <button type="button" class="pomodoro-btn-icon" id="pomodoroResetBtn" title="Reset">↺</button>
+          <button type="button" class="pomodoro-btn-main" id="pomodoroPlayPauseBtn" title="Start">▶</button>
+          <button type="button" class="pomodoro-btn-icon" id="pomodoroSkipBtn" title="Skip to next">⏭</button>
+        </div>
+        <div class="pomodoro-lengths">
+          <button type="button" class="pomodoro-len-btn" data-len="25">25</button>
+          <button type="button" class="pomodoro-len-btn" data-len="15">15</button>
+          <button type="button" class="pomodoro-len-btn" data-len="5">5</button>
+        </div>
+      </div>
     </div>
   </div>
+
+  <button type="button" class="ss-collapsed" id="ssCollapsed" title="Study session controls">
+    <span class="ss-collapsed-label">Study Session</span>
+    <span class="ss-collapsed-dot" aria-hidden="true">·</span>
+    <span class="ss-collapsed-summary" id="ssCollapsedSummary">No active timers</span>
+  </button>
 </div>
 
 </body>
