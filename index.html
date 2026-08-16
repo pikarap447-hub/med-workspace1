@@ -4204,7 +4204,7 @@ OUTCOME: NEG
    baked into the page, so if Settings shows an OLD value, that's proof the
    browser is serving a stale cached copy rather than the real thing — use
    the "Force refresh" button in Settings to break out of it. */
-const APP_VERSION = '2026-08-13 pet-cyan-walk-fix v3';
+const APP_VERSION = '2026-08-16 bold-exam-tips v1';
 
 /* Safe localStorage wrapper — some iOS contexts (e.g. Quick Look previews
    opened straight from the Files app) restrict or disable localStorage.
@@ -4674,6 +4674,17 @@ function persistCaseProgress(){
 
 function saveSession(extra){
   try{
+    // Checkpoint the active-study accumulator every time we save (which
+    // happens on every pause/navigate-away, e.g. End quiz or the tab going
+    // hidden): fold whatever's elapsed since the last checkpoint into the
+    // running total, then restart the segment from now. A save that happens
+    // while still actively studying is a no-op here (segment just restarts
+    // where it left off); a save right before walking away means the clock
+    // that resumes on Continue starts fresh, so the gap in between is never
+    // counted as time spent studying.
+    const __now = Date.now();
+    window.__quizActiveMs = (window.__quizActiveMs || 0) + (__now - (window.__quizSegmentStart || __now));
+    window.__quizSegmentStart = __now;
     const state = Object.assign({
       cards,
       queue,
@@ -4689,6 +4700,7 @@ function saveSession(extra){
       mode: inputMode,
       cardsSinceBreak,
       quizStartTime: window.__quizStartTime || Date.now(),
+      quizActiveMs: window.__quizActiveMs,
       updatedAt: Date.now()
     }, extra || {});
     const all = loadAllSessions();
@@ -8753,6 +8765,8 @@ function launchQuiz(cardArr, setId){
   activeSetId = setId;
   window.__quizSessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
   window.__quizStartTime = Date.now();
+  window.__quizActiveMs = 0;
+  window.__quizSegmentStart = Date.now();
   // Reset here; cram-launching call sites (startCramSession/cramContinueBtn)
   // set this back right after calling launchQuiz, so it only survives when
   // a cram queue is actually what's running.
@@ -9856,6 +9870,12 @@ function resumeSession(id){
   score = s.score || 0;
   cardsSinceBreak = s.cardsSinceBreak || 0;
   window.__quizStartTime = s.quizStartTime || Date.now();
+  // Restore the accumulated active-study time as-is, but start a fresh
+  // segment from right now — whatever wall-clock gap there was between
+  // saving (End quiz, backgrounding, etc.) and this resume never gets
+  // counted as time spent studying.
+  window.__quizActiveMs = s.quizActiveMs || 0;
+  window.__quizSegmentStart = Date.now();
 
   buildSimilarityIndex(cards);
   setInputMode(s.mode || 'classic');
@@ -9919,7 +9939,12 @@ function finishQuiz(){
   if(sessionMetaEl){
     const startedAt = window.__quizStartTime || Date.now();
     const endedAt = Date.now();
-    const durationSec = Math.max(0, Math.round((endedAt - startedAt) / 1000));
+    // Duration is actual time spent actively studying, not wall-clock time
+    // since the quiz first started — any time paused (End quiz, tab
+    // backgrounded, etc.) between then and now is excluded via the
+    // active-time accumulator kept up to date by saveSession().
+    const currentSegmentMs = endedAt - (window.__quizSegmentStart || endedAt);
+    const durationSec = Math.max(0, Math.round(((window.__quizActiveMs || 0) + currentSegmentMs) / 1000));
     const durMin = Math.floor(durationSec / 60);
     const durSec = durationSec % 60;
     const durText = durMin > 0 ? `${durMin}m ${durSec}s` : `${durSec}s`;
@@ -10016,6 +10041,8 @@ $('retryFlaggedBtn').onclick = () => {
   queue = shuffle(flaggedCards);
   masteredCount = 0; askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
   window.__quizStartTime = Date.now();
+  window.__quizActiveMs = 0;
+  window.__quizSegmentStart = Date.now();
   renderPlant(0);
   $('results').classList.add('hidden');
   $('quiz').classList.remove('hidden');
@@ -10026,6 +10053,8 @@ $('retryAllBtn').onclick = () => {
   queue = orderedQueue(cards);
   masteredCount = 0; askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
   window.__quizStartTime = Date.now();
+  window.__quizActiveMs = 0;
+  window.__quizSegmentStart = Date.now();
   renderPlant(0);
   $('results').classList.add('hidden');
   $('quiz').classList.remove('hidden');
@@ -10038,6 +10067,8 @@ $('retryMissedBtn').onclick = () => {
   queue = shuffle(Array.from(missedSet.values()));
   masteredCount = 0; askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
   window.__quizStartTime = Date.now();
+  window.__quizActiveMs = 0;
+  window.__quizSegmentStart = Date.now();
   renderPlant(0);
   $('results').classList.add('hidden');
   $('quiz').classList.remove('hidden');
@@ -12020,15 +12051,24 @@ updateNavActiveState();
       const nextLen = state.mode === 'focus' ? state.focusMinutes*60 : LEN_OPTIONS.break*60;
       remaining = nextLen + remaining; // carry the overshoot into the next segment
       tickingPlayed = false;
-      if(allowSound && guard === 1) notifySegmentDone();
+      // The screen transition (showing/ending the brain break) must happen
+      // regardless of allowSound — it previously only ran when allowSound
+      // was true, which meant that whenever a segment finished while the
+      // app was backgrounded/reloaded (loadState's catch-up always calls
+      // this with allowSound=false), the mode flipped silently and the
+      // brain-break screen never appeared. Only the alarm sound/vibration
+      // is gated on allowSound now.
+      if(guard === 1) notifySegmentDone(allowSound);
     }
     state.remaining = remaining;
     if(doPersist) persist();
   }
 
-  function notifySegmentDone(){
-    playAlarm();
-    if(navigator.vibrate) try{ navigator.vibrate([80,60,80]); }catch(e){}
+  function notifySegmentDone(playSound){
+    if(playSound){
+      playAlarm();
+      if(navigator.vibrate) try{ navigator.vibrate([80,60,80]); }catch(e){}
+    }
     // A focus segment just ended (state.mode has already flipped to
     // 'break' by this point) — hand off to the app's brain-break screen
     // instead of just relabeling the floating widget, so the person
@@ -12242,8 +12282,22 @@ updateNavActiveState();
     // to be hidden or closed, so a running timer resumes accurately
     // instead of silently pausing or drifting.
     document.addEventListener('visibilitychange', () => {
-      if(document.visibilityState === 'hidden') persist();
-      else if(state.running) applyElapsed(0, false, false); // no-op catch-up hook point; real catch-up happens in loadState on full reload
+      if(document.visibilityState === 'hidden'){
+        persist();
+      } else if(state.running && state.lastTick){
+        // Catch up on real wall-clock time that passed while hidden. Mobile
+        // browsers throttle/suspend intervals in the background without
+        // always doing a full page reload, so this can't rely on
+        // loadState()'s reload-time catch-up alone — without this, a
+        // segment that finished while the phone was locked would sit
+        // silently flipped in the background and never show the brain
+        // break screen until some later, unrelated tick happened to
+        // trigger it. No alarm sound here (time already passed unheard),
+        // but the screen transition still fires via applyElapsed/notifySegmentDone.
+        const elapsed = Math.floor((Date.now() - state.lastTick) / 1000);
+        if(elapsed > 0) applyElapsed(elapsed, true, false);
+        render();
+      }
     });
     window.addEventListener('pagehide', persist);
   }
