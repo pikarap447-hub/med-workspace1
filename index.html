@@ -4931,7 +4931,21 @@ function renderLanding(){
 
   const chipLabel = groupMode === 'le' ? 'LE' : 'Subject';
   const FOLDER_ICONS = ['🧠','📗','🩻','🧬','💊','🫀','🦴','🔬','🩺','📘','🧪','🫁'];
+  // Fixed, meaningful icons for the known subject codes (Settings → subject
+  // dropdown) instead of a random hash-based pick. LE folders (numbered)
+  // and any custom/unfiled subject fall through to the hash below.
+  const SUBJECT_ICONS = {
+    PED2: '👶',   // Pediatrics
+    PSY2: '🛋️',  // Psychiatry
+    LEG: '⚖️',    // Legal Medicine
+    OB: '🤰',     // OB-Gyne
+    OPT: '👁️',   // Ophthalmology
+    MED2: '🩺',   // Internal Medicine
+    NEU2: '🧠',   // Neurology
+    SUR2: '🔪'    // Surgery
+  };
   function folderIcon(key){
+    if(SUBJECT_ICONS[key]) return SUBJECT_ICONS[key];
     let h = 0; for(let i=0;i<String(key).length;i++) h = (h*31 + String(key).charCodeAt(i)) >>> 0;
     return FOLDER_ICONS[h % FOLDER_ICONS.length];
   }
