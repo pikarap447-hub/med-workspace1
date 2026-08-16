@@ -8808,6 +8808,9 @@ function launchQuiz(cardArr, setId){
   buildSimilarityIndex(cards);
   queue = orderedQueue(cards);
   masteredCount = 0; askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
+  // Fresh quiz: clear the pet's running session signals (streaks, slumps)
+  // so its reactions reflect this session, not a leftover run.
+  if(typeof window.petStartStudySession === 'function') window.petStartStudySession();
   renderPlant(0);
   hideAllScreens();
   $('quiz').classList.remove('hidden');
@@ -9457,9 +9460,14 @@ function nextFromQueue(){
 function renderBrainBreakCountdown(){
   const widget = $('studySessionWidget');
   if(!widget) return;
+  // The widget (and specifically the Focus Timer half) needs to stay
+  // visible and ticking while the brain-break screen itself is up, not
+  // just on the quiz screen — otherwise the pomodoro controls disappear
+  // during the very break they're timing.
   const quizVisible = $('quiz') && !$('quiz').classList.contains('hidden');
-  widget.classList.toggle('hidden', !quizVisible);
-  if(!quizVisible) return;
+  const breakVisible = $('brainBreak') && !$('brainBreak').classList.contains('hidden');
+  widget.classList.toggle('hidden', !quizVisible && !breakVisible);
+  if(!quizVisible && !breakVisible) return;
 
   const breaksToggle = $('ssBreaksToggle');
   if(breaksToggle) breaksToggle.checked = brainBreakEnabled;
@@ -9468,12 +9476,17 @@ function renderBrainBreakCountdown(){
     breaksBody.style.opacity = brainBreakEnabled ? '1' : '.45';
     breaksBody.style.pointerEvents = brainBreakEnabled ? '' : 'none';
   }
+  // The pill's number is the at-a-glance figure people actually want while
+  // studying: how many cards are left until the next break — not the
+  // fixed per-interval size (which barely changes and isn't actionable
+  // mid-session). The note now carries the static "every N cards" context
+  // instead, so the interval setting is still visible for reference.
+  const remaining = Math.max(0, brainBreakInterval - cardsSinceBreak);
   const numEl = $('ssBreaksIntervalNum');
-  if(numEl) numEl.textContent = brainBreakInterval;
+  if(numEl) numEl.textContent = brainBreakEnabled ? remaining : brainBreakInterval;
   const noteEl = $('ssBreaksNote');
   if(noteEl){
-    const remaining = Math.max(0, brainBreakInterval - cardsSinceBreak);
-    noteEl.textContent = brainBreakEnabled ? `${remaining} card${remaining === 1 ? '' : 's'} to go` : '';
+    noteEl.textContent = brainBreakEnabled ? `of ${brainBreakInterval}` : '';
   }
 
   // The Focus Timer section lives inside the pomodoro module's own closure
@@ -9769,7 +9782,7 @@ function selectAnswer(btn, chosen, card){
   maybeShowTipImage(card);
   renderLearningNotice(learningRec, attempt, card);
   if(confidencePromptsEnabled()) showConfidenceRow(attempt); else hideConfidenceRow();
-  if(typeof petQuizBehavior === 'function') petQuizBehavior(isCorrect ? 'correct' : 'wrong');
+  if(typeof petQuizBehavior === 'function') petQuizBehavior(isCorrect ? 'correct' : 'wrong', responseTimeMs);
   $('nextBtn').classList.remove('hidden');
   $('nextBtn').textContent = queue.length === 0 ? 'See results →' : (isCorrect ? 'Next card →' : "I'll see this again →");
   saveSession({chosen, isCorrect});
@@ -10685,6 +10698,11 @@ document.addEventListener('DOMContentLoaded',function(){
   const petCanvas=document.getElementById('studyPetCanvas');
   const petCtx=petCanvas.getContext('2d');
   const petBubble=document.getElementById('studyPetBubble');
+  // The dedicated pet page (#petView) has its OWN speech bubble over the big
+  // sprite, separate from the floating overlay's bubble above. Reactions need
+  // to appear on whichever surface the person is actually looking at, so we
+  // hold a reference to both and route showPetBubble() to the visible one.
+  const petPageBubble=document.getElementById('petBubble');
   const PET_KEY='topicReviewVirtualPet_v2';
   const defaultPet={name:'Mochi',breed:'cavalier',hunger:80,happy:80,energy:80,clean:80,carePoints:0,lastTick:Date.now()};
   let pet=loadPet(), petMode='home', petAction='stand', petFrameIndex=0;
@@ -10698,7 +10716,29 @@ document.addEventListener('DOMContentLoaded',function(){
   function savePet(){try{localStorage.setItem(PET_KEY,JSON.stringify(pet))}catch(e){}}
   function clampPet(n){return Math.max(0,Math.min(100,Math.round(n)))}
   function petMood(){const a=(pet.hunger+pet.happy+pet.energy+pet.clean)/4;if(pet.energy<20)return['Sleepy','😴'];if(pet.hunger<20)return['Hungry','🍖'];if(pet.clean<20)return['Messy','🫧'];if(a>=80)return['Thriving','✨'];if(a>=60)return['Happy','😊'];if(a>=40)return['Okay','🙂'];return['Needy','🥺']}
-  function showPetBubble(msg,ms=1400){petBubble.textContent=msg;petBubble.classList.add('show');clearTimeout(petBubbleTimer);petBubbleTimer=setTimeout(()=>petBubble.classList.remove('show'),ms)}
+  // Show a short speech line over the pet. There are two possible surfaces:
+  // the floating overlay (home/quiz screens) and the big sprite on the pet
+  // page. We render to whichever the person is currently viewing so quiz
+  // reactions, care responses and ambient lines all appear "live" on both.
+  // The two bubbles use different show/hide conventions: the overlay bubble
+  // animates via a `.show` class; the pet-page bubble is toggled with `hidden`.
+  function petPageIsActive(){const v=document.getElementById('petView');return !!v&&!v.classList.contains('hidden');}
+  function showPetBubble(msg,ms=1400){
+    clearTimeout(petBubbleTimer);
+    if(petPageIsActive()&&petPageBubble){
+      // Keep the overlay bubble silent so it can't linger behind the page.
+      petBubble.classList.remove('show');
+      petPageBubble.textContent=msg;
+      petPageBubble.classList.remove('hidden');
+      petBubbleTimer=setTimeout(()=>petPageBubble.classList.add('hidden'),ms);
+    }else{
+      // Make sure the pet-page bubble isn't left visible from an earlier view.
+      if(petPageBubble)petPageBubble.classList.add('hidden');
+      petBubble.textContent=msg;
+      petBubble.classList.add('show');
+      petBubbleTimer=setTimeout(()=>petBubble.classList.remove('show'),ms);
+    }
+  }
   function setPetSceneCaption(text){
     const el=$('petSceneCaption');
     if(el)el.textContent=text;
@@ -10722,7 +10762,30 @@ document.addEventListener('DOMContentLoaded',function(){
     hungry:['My tummy...','Got a snack?','Feed me?'],
     sleepy:['So... tired...','*yaaawn*','Need a nap.'],
     messy:['I need a bath.','Kinda grubby.','Bleh, sticky.'],
-    lonely:['Miss you.','Study with me?','Bored...']
+    lonely:['Miss you.','Study with me?','Bored...'],
+
+    // ---- Contextual pools ----
+    // These are chosen ahead of the generic correct/incorrect pools when the
+    // live study signals below match, so the pet reacts to *what's actually
+    // happening in the session* rather than saying the same thing every card.
+    hotStreak:['On fire! 🔥','Unstoppable!','Streak lives! 🔥','Look at you go!','Nothing can stop us!'],
+    bigStreak:['🔥🔥 LEGENDARY 🔥🔥','You\'re a genius!','Ten in a row?!','I\'m so proud!','Textbook. Literally.'],
+    fastCorrect:['Lightning fast! ⚡','Instant! ⚡','You knew that cold.','Too easy for you.'],
+    comeback:['Back on track! 💪','That\'s the comeback!','Knew you\'d get it!','Bounced right back!'],
+    firstMiss:['No worries, shake it off.','That one was tricky.','Happens to everyone.','Now you\'ll remember it.'],
+    slump:['Deep breath — you\'ve got this.','Tricky batch, huh?','Maybe a quick break?','We\'ll get these. Together.'],
+    persevere:['Missed it, but you\'re still here 💛','Showing up is the hard part.','Grind mode. Respect.','Keep chipping away.'],
+
+    // Time-of-day flavor (used for ambient/idle lines, not answers)
+    lateNight:['It\'s late... one more then bed? 🌙','Burning the midnight oil 🕯️','Sleep is for cards you\'ve mastered.','I\'ll stay up with you. 🌙','Don\'t overdo it tonight.'],
+    earlyMorning:['Early bird! ☀️','Morning brain is sharp!','Coffee first? ☕','A fresh start! 🌅'],
+    afternoon:['Afternoon grind! 💪','Good time to review.','Steady progress today.'],
+    evening:['Winding down with cards? 🌆','Evening study, cozy.','Nice way to end the day.'],
+
+    // Milestones / consistency
+    streakMilestone:['🔥 Streak day! Keep it alive!','Your daily streak thanks you!','Consistency! I love it. 🔥','Another day on the books!'],
+    marathon:['We\'ve done SO many today! 🏅','Marathon session, huh?','You\'ve earned a treat. 🦴','Big day of studying!'],
+    welcomeBack:['There you are! Missed you. 💛','Ready when you are!','Let\'s pick up where we left off.']
   };
   const petLineHistory={};
   function petPickLine(context){
@@ -10735,6 +10798,55 @@ document.addEventListener('DOMContentLoaded',function(){
     petLineHistory[context]=line;
     return line;
   }
+
+  // ---- Contextual signal tracking -------------------------------------
+  // Lightweight per-session memory so the pet can react to patterns across
+  // several answers (a hot streak, a slump, a comeback) instead of judging
+  // each card in isolation. Reset at the start of every quiz session.
+  const petSession={correctRun:0,missRun:0,answered:0,misses:0,lastResult:null};
+  function petResetSessionSignals(){
+    petSession.correctRun=0;petSession.missRun=0;
+    petSession.answered=0;petSession.misses=0;petSession.lastResult=null;
+  }
+  function petTimeContext(){
+    const h=new Date().getHours();
+    if(h>=0&&h<5) return 'lateNight';
+    if(h>=5&&h<9) return 'earlyMorning';
+    if(h>=9&&h<12) return null;      // plain daytime — no special flavor
+    if(h>=12&&h<17) return 'afternoon';
+    if(h>=17&&h<22) return 'evening';
+    return 'lateNight';              // 22:00–24:00
+  }
+  // Read the daily-streak summary defined in the quiz module. Wrapped since
+  // that helper lives outside this closure and may not exist in every build.
+  function petStreakDays(){
+    try{ if(typeof getStudyStreakSummary==='function') return Number(getStudyStreakSummary().current)||0; }catch(e){}
+    return 0;
+  }
+
+  // Decide what the pet should say in response to a graded answer, based on
+  // the running session signals + response speed. Returns a PET_LINES key.
+  // Falls back to the plain correct/incorrect pools when nothing special is
+  // happening, so ordinary answers still feel varied but not gimmicky.
+  function petAnswerContext(isCorrect,responseMs){
+    const prev=petSession.lastResult;
+    petSession.answered++;
+    if(isCorrect){
+      petSession.correctRun++; petSession.missRun=0; petSession.lastResult='correct';
+      if(petSession.correctRun>=10) return 'bigStreak';
+      if(petSession.correctRun>=5)  return 'hotStreak';
+      if(prev==='wrong')            return 'comeback';
+      if(responseMs&&responseMs<3500&&petSession.correctRun>=2) return 'fastCorrect';
+      return 'correct';
+    }else{
+      petSession.missRun++; petSession.misses++; petSession.correctRun=0; petSession.lastResult='wrong';
+      if(petSession.missRun>=3) return 'slump';
+      if(petSession.missRun===1&&petSession.misses===1) return 'firstMiss';
+      if(petSession.answered>=8&&petSession.misses>=3)  return 'persevere';
+      return 'incorrect';
+    }
+  }
+
   // Fires a short speech-bubble reaction over the on-screen pet. Silently a
   // no-op when the pet isn't adopted yet or isn't currently visible, so it's
   // always safe to call from any interaction handler.
@@ -11211,6 +11323,20 @@ document.addEventListener('DOMContentLoaded',function(){
     petDirection=-1;
     positionPet(8,0,getPetBaseBottom());
     setPetAction('idle','stand');
+    // A brief, situational check-in when a study session comes into view —
+    // e.g. a gentle "it's late" nudge at night, or a streak cheer. Throttled
+    // so flipping between Home and Quiz doesn't make it chatter, and skipped
+    // for plain mid-day sessions where there's nothing notable to say.
+    maybePetEntryGreeting();
+  }
+  let petEntryGreetAt=0;
+  function maybePetEntryGreeting(){
+    const now=Date.now();
+    if(now-petEntryGreetAt<8*60000)return;   // at most once every ~8 min
+    const ctx=(petStreakDays()>=3&&Math.random()<0.4)?'streakMilestone':petTimeContext();
+    if(!ctx)return;
+    petEntryGreetAt=now;
+    setTimeout(()=>{if(petMode==='quiz'&&!carryDrag)petSay(ctx,1700);},1400);
   }
   let petVisibilityFrame=0;
   function isPetOnScreenEnabled(){return lsGet('topicReviewPetOnScreen')!=='0'}
@@ -11259,14 +11385,20 @@ document.addEventListener('DOMContentLoaded',function(){
     };
   }
 
-  function petQuizBehavior(kind){ playPetReaction(kind); }
+  function petQuizBehavior(kind,responseMs){ playPetReaction(kind,responseMs); }
 
-  function playPetReaction(kind){
+  function playPetReaction(kind,responseMs){
+    const isCorrect=(kind==='correct');
     const token=++petActionToken;clearTimeout(petMoveTimer);petMoving=false;
-    setPetAction('reactions',kind==='correct'?'celebrate':'encourage',true,()=>{
+    setPetAction('reactions',isCorrect?'celebrate':'encourage',true,()=>{
       if(token===petActionToken&&petMode==='quiz')setPetAction('idle','stand');
     });
-    petSay(kind==='correct'?'correct':'incorrect',1200);
+    // Contextual line instead of a flat correct/incorrect caption: reacts to
+    // streaks, comebacks, slumps and answer speed built up over the session.
+    const ctx=petAnswerContext(isCorrect,responseMs);
+    // A big milestone deserves to linger a touch longer on screen.
+    const dwell=(ctx==='bigStreak'||ctx==='slump'||ctx==='persevere')?1700:1200;
+    petSay(ctx,dwell);
     // The reaction itself owns its completion; do not interrupt it on a timer.
   }
 
@@ -11280,9 +11412,36 @@ document.addEventListener('DOMContentLoaded',function(){
     // static status display. Heavily throttled (~once a minute at most) and
     // only when the pet is actually on screen and not mid-carry.
     if(!carryDrag && (petMode==='home'||petMode==='quiz') && now-petNeedBubbleAt>55000 && Math.random()<0.5){
+      // Priority order for unprompted chatter:
+      //   1. A pressing physical need (hungry/sleepy/etc) always wins — it's
+      //      actionable and the person can fix it.
+      //   2. Otherwise, occasionally drop a *contextual* line so the pet feels
+      //      aware of when and how you're studying (late night, a live daily
+      //      streak, a long session) rather than only ever reacting to taps.
       const need=pet.hunger<25?'hungry':pet.energy<25?'sleepy':pet.clean<25?'messy':pet.happy<25?'lonely':null;
       if(need){petNeedBubbleAt=now;petSay(need,1600);}
+      else{
+        const ctx=petAmbientContext();
+        if(ctx){petNeedBubbleAt=now;petSay(ctx,1700);}
+      }
     }
+  }
+
+  // Pick an occasional situational remark for idle moments. Weighted toward
+  // whatever is most notable right now: a big same-day study count, a live
+  // daily streak worth protecting, or simply the time of day. Returns null
+  // most of the time so the pet stays quiet more often than it talks.
+  function petAmbientContext(){
+    // A long session today is the most "earned" thing to acknowledge.
+    let todayCount=0;
+    try{ if(typeof getStudyStreakSummary==='function') todayCount=Number(getStudyStreakSummary().todayCount)||0; }catch(e){}
+    if(todayCount>=40 && Math.random()<0.5) return 'marathon';
+
+    // A daily streak the person is actively keeping alive.
+    if(petStreakDays()>=3 && Math.random()<0.4) return 'streakMilestone';
+
+    // Otherwise, comment on the time of day (skips plain mid-morning).
+    return petTimeContext();
   }
   function isPetAdopted(){return lsGet('topicReviewPetRescueIntroSeen')==='1'}
   // Exposed so the study-data import handler (defined outside this
@@ -11325,6 +11484,8 @@ document.addEventListener('DOMContentLoaded',function(){
 
   // Quiz code is outside this closure; expose a narrow bridge for rewards.
   window.awardPetCarePoints=awardCarePoints;
+  // And one to reset the pet's per-session contextual signals on a new quiz.
+  window.petStartStudySession=petResetSessionSignals;
 
   function spendCarePoints(cost){
     if((Number(pet.carePoints)||0)<cost){
@@ -11744,7 +11905,11 @@ document.addEventListener('DOMContentLoaded',function(){
         petWalkRaf=null;
         petFrameIndex=0;
         petAction='stand';
-        positionPet(targetX,0,targetY);
+        // Use the free-vertical path so the pet stays at the height it was
+        // dropped at. The default (clamped) path re-clamps y to base+reach,
+        // which is what made a drop near the top of the screen shuffle in
+        // place for a moment and then teleport back down toward the shelf.
+        positionPet(targetX,0,targetY,window.innerHeight,true);
         drawPetFrame(2,3,direction>0);
         if(done) done();
         return;
