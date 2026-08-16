@@ -1484,6 +1484,13 @@ body.theme-midnight .set-item-menu{background:var(--surface-elevated);}
   grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));
   gap:16px;
   margin-bottom:8px;
+  /* Cap to roughly two rows so a subject list with lots of folders doesn't
+     dominate the landing page — the rest scrolls into view instead of all
+     showing at once. */
+  max-height:296px;
+  overflow-y:auto;
+  padding-right:4px;
+  scroll-behavior:smooth;
 }
 .folder-tile{
   background:var(--surface);
@@ -11156,17 +11163,23 @@ document.addEventListener('DOMContentLoaded',function(){
         // Spontaneous vertical wandering: pick a new height within reach of
         // the pet's resting spot so it hops/settles up and down the "shelf"
         // instead of only sliding left-to-right.
-        const petTargetY=getPetBaseBottom()+Math.random()*Math.min(420,Math.max(96,getPetTopCeiling()-getPetBaseBottom()));
+        const wanderReach=Math.min(420,Math.max(96,getPetTopCeiling()-getPetBaseBottom()));
+        const petTargetY=getPetBaseBottom()+Math.random()*wanderReach;
         const duration=4800+Math.random()*1600;
         petMoving=true;
         setPetAction('movement',Math.random()<.22?'walk_alt':'walk');
-        positionPet(petTargetX,duration,petTargetY);
+        // Pass the same reach used to pick petTargetY through to positionPet
+        // — its own default reach (96px) is only meant for the ambient "hop"
+        // case, and was silently re-clamping every higher wander target back
+        // down to base+96, so the pet never actually visibly reached the
+        // taller heights it picked.
+        positionPet(petTargetX,duration,petTargetY,wanderReach);
         petMoveTimer=setTimeout(()=>{
           if(petMode!=='home'||motionToken!==petMotionToken||carryDrag)return;
           petMoving=false;
           // The walk already animated to petTargetY. Keep the completion write
           // guarded so an old walk can never teleport the pet after a drag/drop.
-          positionPet(petTargetX,0,petTargetY);
+          positionPet(petTargetX,0,petTargetY,wanderReach);
           playAmbientBehavior(()=>{
             if(petMode!=='home'||motionToken!==petMotionToken||carryDrag)return;
             setPetAction('idle','stand');
