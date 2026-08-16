@@ -2211,7 +2211,14 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
   }
   .bb-step:hover{ background:var(--primary-soft); color:var(--primary); border-color:var(--primary); }
   @media(max-width:600px){
-    .study-session-widget{ width:calc(100vw - 20px); bottom:12px; }
+    /* Same left:50%/centered stack the dark-mode/fullscreen/zoom bar
+       (.zoom-controls) uses on mobile — sit above it instead of on top
+       of it. ~56px clears that bar's height (32px buttons + padding)
+       plus a small gap. */
+    .study-session-widget{
+      width:calc(100vw - 20px);
+      bottom:calc(12px + env(safe-area-inset-bottom) + 56px);
+    }
   }
 
   /* --- Focus Timer section (nested inside the Study Session panel) --- */
