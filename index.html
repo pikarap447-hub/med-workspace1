@@ -1625,6 +1625,9 @@ body.theme-midnight .set-item-menu{background:var(--surface-elevated);}
 .landing-columns.no-recent{grid-template-columns:minmax(0,1fr);}
 @media (min-width:720px){
   .landing-columns{grid-template-columns:minmax(0,1.08fr) minmax(0,1fr); gap:28px;}
+  /* Fill more of the space next to "Continue studying" (about 3 rows
+     of folders) before scrolling kicks in for any rows past that. */
+  .landing-col-folders .folder-grid{max-height:452px;}
 }
 /* Grid/flex children must be allowed to shrink. Without this, a long set
    title can contribute its min-content width all the way up to the landing
