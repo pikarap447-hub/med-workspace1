@@ -4295,6 +4295,9 @@ OUTCOME: NEG
         </div>
         <label class="field-label">Your stats</label>
         <div class="stats-overview" id="statsOverview"></div>
+        <div class="stats-section-title" style="margin-top:16px;">Today</div>
+        <div id="statsToday"></div>
+        <div id="statsTrend"></div>
         <div id="learningInsights"></div>
         <div class="stats-section-title">By set</div>
         <div id="statsBySet"></div>
@@ -6725,6 +6728,27 @@ function calculateEmpiricalDifficulty(rec){
   return 'HARD';
 }
 
+// Groups every logged attempt by the card's optional topic field, so
+// "Weakest areas" (and the daily-by-subject breakdown below) can report
+// topic-level accuracy instead of only per-set numbers.
+// FIX: this function was called from getLearningDashboard() (see below)
+// but was never actually defined anywhere in the file. That threw a
+// ReferenceError the moment getLearningDashboard() ran, which is the very
+// first thing renderStatsScreen() does — so the whole Stats screen was
+// silently failing to render (nothing under "Your stats" ever showed up)
+// as soon as any attempt history existed. Defining it fixes that crash.
+function getTopicStats(){
+  const attempts = loadAttempts();
+  const groups = {};
+  attempts.forEach(a => {
+    if(!a.topic) return;
+    if(!groups[a.topic]) groups[a.topic] = {correct: 0, total: 0};
+    groups[a.topic].total++;
+    if(a.isCorrect) groups[a.topic].correct++;
+  });
+  return Object.entries(groups).map(([label, v]) => ({label, accuracy: Math.round(v.correct/v.total*100), total: v.total}));
+}
+
 // Same idea as getTopicStats, grouped by the card's optional questionType field.
 function getQuestionTypeStats(){
   const attempts = loadAttempts();
@@ -6736,6 +6760,58 @@ function getQuestionTypeStats(){
     if(a.isCorrect) groups[a.questionType].correct++;
   });
   return Object.entries(groups).map(([label, v]) => ({label, accuracy: Math.round(v.correct/v.total*100), total: v.total}));
+}
+
+/* ---- Daily stats ----------------------------------------------------
+   Built straight from the attempt log (loadAttempts()) so "cards done
+   today" and "accuracy today" are real per-question counts, not an
+   estimate — each attempt already carries its own timestamp and the
+   subject of the set it was answered under (set at record time in
+   recordAttempt), so this is just a group-by over a day's slice of the
+   log. Subject is used (rather than set name) because that's the
+   existing "folder" grouping already used elsewhere in the app (see
+   subjectKey/UNFILED) — an unlabeled card falls into "Unfiled", same as
+   the folder view does. ---------------------------------------------- */
+function getDailyBreakdown(dateKey){
+  const targetKey = dateKey || studyDateKey();
+  const attempts = loadAttempts().filter(a => studyDateKey(a.timestamp) === targetKey);
+  const total = attempts.length;
+  const correct = attempts.filter(a => a.isCorrect).length;
+  const accuracy = total ? Math.round(correct / total * 100) : 0;
+
+  const bySubject = {};
+  attempts.forEach(a => {
+    const label = (a.subject && a.subject.trim()) ? a.subject.trim() : 'Unfiled';
+    if(!bySubject[label]) bySubject[label] = {correct: 0, total: 0};
+    bySubject[label].total++;
+    if(a.isCorrect) bySubject[label].correct++;
+  });
+  const subjects = Object.entries(bySubject)
+    .map(([label, v]) => ({label, total: v.total, correct: v.correct, accuracy: Math.round(v.correct / v.total * 100)}))
+    .sort((a, b) => b.total - a.total);
+
+  return {date: targetKey, total, correct, accuracy, subjects};
+}
+
+// Last N calendar days (oldest first) — one pass over the attempt log so
+// every day's total/accuracy is guaranteed to agree with getDailyBreakdown()
+// for "today" rather than being computed a second, slightly different way.
+function getRecentDailyTrend(days){
+  const n = days || 7;
+  const attempts = loadAttempts();
+  const keys = [];
+  let cursor = studyDateKey();
+  for(let i = 0; i < n; i++){ keys.unshift(cursor); cursor = shiftStudyDate(cursor, -1); }
+  const byDate = {};
+  keys.forEach(k => { byDate[k] = {date: k, total: 0, correct: 0}; });
+  attempts.forEach(a => {
+    const k = studyDateKey(a.timestamp);
+    if(byDate[k]){ byDate[k].total++; if(a.isCorrect) byDate[k].correct++; }
+  });
+  return keys.map(k => {
+    const d = byDate[k];
+    return {...d, accuracy: d.total ? Math.round(d.correct / d.total * 100) : 0};
+  });
 }
 
 // Cards whose actual (empirical) difficulty came out meaningfully harder
@@ -7141,7 +7217,56 @@ function renderStatsScreen(){
     });
   }
 
+  renderDailyStatsSection();
   renderLearningDashboardSections(allTrackedCards, dash);
+}
+
+// "Today" block (cards done, accuracy, per-subject breakdown) + a compact
+// last-7-days trend underneath it. Reuses the same .stat-tile / .set-stat-row
+// / .acc-bar-* styling as the overview and "By set" sections above so it
+// reads as part of the same page rather than a bolted-on widget.
+function renderDailyStatsSection(){
+  const todayBox = $('statsToday');
+  const trendBox = $('statsTrend');
+  if(!todayBox) return;
+
+  const today = getDailyBreakdown();
+  if(today.total === 0){
+    todayBox.innerHTML = '<div class="no-sets">No cards studied yet today.</div>';
+  } else {
+    const subjectRows = today.subjects.map(s => `
+      <div class="set-stat-row">
+        <div class="set-item-main">
+          <div class="set-item-name">${escapeHtml(s.label)}</div>
+          <div class="set-item-meta">${s.total} card${s.total === 1 ? '' : 's'} · ${s.accuracy}% accuracy</div>
+        </div>
+        <div class="acc-bar-wrap"><div class="acc-bar-fill" style="width:${s.accuracy}%"></div></div>
+      </div>
+    `).join('');
+    todayBox.innerHTML = `
+      <div class="stats-overview" style="margin:10px 0 12px;">
+        <div class="stat-tile"><div class="stat-num">${today.total}</div><div class="stat-label">Cards today</div></div>
+        <div class="stat-tile"><div class="stat-num">${today.accuracy}%</div><div class="stat-label">Accuracy today</div></div>
+      </div>
+      ${today.subjects.length ? `<div class="hint" style="margin-top:0;">By subject</div>${subjectRows}` : ''}
+    `;
+  }
+
+  if(!trendBox) return;
+  const trend = getRecentDailyTrend(7);
+  if(!trend.some(d => d.total > 0)){
+    trendBox.innerHTML = '';
+    return;
+  }
+  const todayKey = studyDateKey();
+  const rows = trend.map(d => {
+    const label = d.date === todayKey ? 'Today' : new Date(`${d.date}T12:00:00`).toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric'});
+    return `<div class="row" style="justify-content:space-between; padding:6px 0; border-bottom:1px solid var(--border);">
+      <span style="font-size:12.5px; color:var(--ink-soft);">${label}</span>
+      <span style="font-size:12.5px; color:var(--ink); font-weight:600;">${d.total ? `${d.total} card${d.total === 1 ? '' : 's'} · ${d.accuracy}%` : '—'}</span>
+    </div>`;
+  }).join('');
+  trendBox.innerHTML = `<div class="stats-section-title" style="margin-top:16px;">Last 7 days</div>${rows}`;
 }
 
 // Study-Now card + compact "Learning insights" block. Deliberately terse —
