@@ -134,6 +134,14 @@
        these down uniformly. ---- */
     --decoration-opacity:1;
     --shadow-scale:1;
+
+    /* Fixed-contrast text for the correct/wrong quiz states below —
+       these need their OWN light/dark pair (not derived from --green/
+       --red) because they sit on --green-bg/--red-bg, whose lightness
+       flips between modes; a single hardcoded value could only ever be
+       legible in one mode. */
+    --correct-text:#284D38;
+    --wrong-text:#6B2A21;
   }
 
   /* ---- Kawaii theme: an alternate palette+font+border skin, toggled in
@@ -143,8 +151,8 @@
      SVG fills, the correct/wrong states) repaints automatically — no
      component-level changes needed beyond the vine-edge border tiles,
      which are raw data-URI SVGs below since they can't reference CSS
-     vars. Scoped to body so it composes with dark mode's filter-invert
-     the same way the garden theme already does.
+     vars. Scoped to body so it composes independently with Appearance
+     Mode (light/dark/system) the same way every theme now does.
 
      Rebalanced toward "cute Japanese stationery" rather than a candy
      palette: cream base, strawberry/lavender/mint as accents rather than
@@ -320,6 +328,7 @@
     --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--gold);
     --shadow:0 14px 36px rgba(0,0,0,.40); --shadow-sm:0 3px 12px rgba(0,0,0,.32);
     --shadow-md:var(--shadow); --shadow-lg:0 26px 58px rgba(0,0,0,.48);
+    --correct-text:#B7E8C9; --wrong-text:#F5C7BE;
     background:var(--bg);
   }
   body.mode-dark.theme-kawaii{
@@ -438,17 +447,26 @@
   body.theme-midnight .header-title,
   body.theme-midnight .set-item,
   body.theme-midnight .set-stat-row,
-  body.theme-midnight .stat-tile,
-  body.theme-midnight .folder-tile,
-  body.theme-midnight .opt,
-  body.theme-midnight .edit-option-letter,
-  body.theme-midnight .card-edit-panel,
-  body.theme-midnight table.sheet td,
-  body.theme-midnight .modal-input{
+  /* ---- Components that still hardcode a light background (table
+     cells, stat tiles, modal inputs, etc.) get forced onto a theme-aware
+     surface whenever Appearance Mode is dark — regardless of which of
+     the 8 themes is active, not just Midnight (this block used to be
+     Midnight-only, back when Midnight was the app's only dark option).
+     ---- */
+  body.mode-dark .stat-tile,
+  body.mode-dark .folder-tile,
+  body.mode-dark .opt,
+  body.mode-dark .edit-option-letter,
+  body.mode-dark .card-edit-panel,
+  body.mode-dark table.sheet td,
+  body.mode-dark .modal-input{
     background:var(--surface-elevated);
   }
-  body.theme-midnight .card{ background:var(--surface); }
-  body.theme-midnight .sidebar-nav{ background:rgba(22,30,44,.75); }
+  body.mode-dark table.sheet tr:nth-child(even) td{ background:var(--surface); }
+  body.mode-dark table.sheet td.rownum{ color:var(--text-muted); background:var(--color-surface-2) !important; border-color:var(--tile-blue-mid) !important; }
+  body.mode-dark .cell:empty::before{ color:var(--text-muted); }
+  body.mode-dark .card{ background:var(--surface); }
+  body.mode-dark .sidebar-nav{ background:color-mix(in srgb, var(--surface-elevated) 75%, transparent); }
 
   *{box-sizing:border-box;}
   html{-webkit-text-size-adjust:100%; text-size-adjust:100%;}
@@ -930,8 +948,8 @@ transition:background var(--transition-normal), color var(--transition-normal), 
     color:var(--tile-blue);
     font-weight:700;
   }
-  .opt.correct{background:var(--green-bg); border-color:var(--green); color:#284D38; animation:optPop .25s ease;}
-  .opt.wrong{background:var(--red-bg); border-color:var(--red); color:#6B2A21; animation:optShake .3s ease;}
+  .opt.correct{background:var(--green-bg); border-color:var(--green); color:var(--correct-text,#284D38); animation:optPop .25s ease;}
+  .opt.wrong{background:var(--red-bg); border-color:var(--red); color:var(--wrong-text,#6B2A21); animation:optShake .3s ease;}
   .opt:disabled{cursor:default;}
   @keyframes optPop{ 0%{transform:scale(.98);} 60%{transform:scale(1.01);} 100%{transform:scale(1);} }
   @keyframes optShake{ 0%,100%{transform:translateX(0);} 25%{transform:translateX(-3px);} 75%{transform:translateX(3px);} }
@@ -1043,7 +1061,7 @@ transition:background var(--transition-normal), color var(--transition-normal), 
     align-self:flex-end; border-bottom-right-radius:4px;
   }
   .case-bubble.pearl{
-    background:var(--green-bg); border:1.5px solid var(--green); color:#284D38;
+    background:var(--green-bg); border:1.5px solid var(--green); color:var(--correct-text,#284D38);
     align-self:flex-end; border-bottom-right-radius:4px; font-weight:600;
   }
   @keyframes caseIn{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
@@ -1058,13 +1076,13 @@ transition:background var(--transition-normal), color var(--transition-normal), 
   .case-pill{
     font-family:var(--font); font-weight:600; font-size:12.5px;
     padding:7px 13px; border-radius:999px; cursor:pointer;
-    background:#fff; border:1.5px solid var(--tile-blue-pale); color:var(--tile-blue-deep);
+    background:var(--surface); border:1.5px solid var(--tile-blue-pale); color:var(--tile-blue-deep);
   }
   .case-pill:hover{ background:var(--tile-blue-paler); }
-  .case-pill.hint-pill{ border-color:var(--gold); color:#8a6d00; }
+  .case-pill.hint-pill{ border-color:var(--gold); color:var(--gold); }
   .case-end{
     padding:16px; border-radius:14px; background:var(--green-bg);
-    border:1.5px solid var(--green); color:#284D38; font-weight:600; text-align:center;
+    border:1.5px solid var(--green); color:var(--correct-text,#284D38); font-weight:600; text-align:center;
   }
   .case-end-badge{
     font-family:var(--font); font-weight:700; font-size:15px; letter-spacing:.02em;
@@ -1586,8 +1604,8 @@ body.mode-dark .zoom-controls button:hover{
   margin-top:4px;
 }
 .set-item-progress.done{
-  color:#1F7A4D;
-  background:#E4F5EC;
+  color:var(--correct-text,#1F7A4D);
+  background:var(--green-bg,#E4F5EC);
 }
 .search-input{
   width:100%;
@@ -4198,7 +4216,7 @@ OUTCOME: NEG
             <span class="settings-nav-icon">🎨</span>
             <span class="settings-nav-text">
               <span class="settings-nav-title">Appearance</span>
-              <span class="settings-nav-sub">Theme colors for the whole app</span>
+              <span class="settings-nav-sub">Theme, light/dark mode, accent &amp; intensity</span>
             </span>
             <span class="settings-nav-chev">›</span>
           </button>
