@@ -6271,7 +6271,30 @@ function recordSession(){
   const statsAll = loadStatsData();
   const bucketId = activeSetId || 'scratch';
   if(!statsAll[bucketId]) statsAll[bucketId] = {cardStats:{}, sessions:[]};
-  statsAll[bucketId].sessions.push({date: Date.now(), correct: score, total: askedCount, mastered: masteredCount, totalCards, missedList: Array.from(missedSet.values())});
+
+  // Same active-study-time math used for the results-screen display
+  // (finishQuiz's sessionMeta/resultTimeNum block) — computed here too so
+  // it actually gets persisted into long-term stats instead of only being
+  // shown once and discarded. Any time the tab was hidden/paused is
+  // already excluded via the __quizActiveMs accumulator kept by saveSession().
+  const startedAt = window.__quizStartTime || Date.now();
+  const endedAt = Date.now();
+  const currentSegmentMs = endedAt - (window.__quizSegmentStart || endedAt);
+  const durationSec = Math.max(0, Math.round(((window.__quizActiveMs || 0) + currentSegmentMs) / 1000));
+
+  const sessionRecord = {
+    date: endedAt,
+    sessionId: window.__quizSessionId || null,
+    startedAt,
+    endedAt,
+    durationSec,
+    correct: score,
+    total: askedCount,
+    mastered: masteredCount,
+    totalCards,
+    missedList: Array.from(missedSet.values())
+  };
+  statsAll[bucketId].sessions.push(sessionRecord);
   if(statsAll[bucketId].sessions.length > 50) statsAll[bucketId].sessions = statsAll[bucketId].sessions.slice(-50);
   saveStatsData(statsAll);
   if(activeSetId){
@@ -6286,6 +6309,7 @@ function recordSession(){
       saveSetsData(sets);
     }
   }
+  return sessionRecord;
 }
 
 /* ============================================================
@@ -10509,7 +10533,7 @@ $('quitBtn').onclick = () => {
 };
 
 function finishQuiz(){
-  recordSession();
+  const finishedSession = recordSession();
   if(activeSetId === PRACTICE_ID && window.__activeInterventionId){
     finalizeIntervention(window.__activeInterventionId, window.__quizSessionId);
     window.__activeInterventionId = null;
@@ -10558,17 +10582,15 @@ function finishQuiz(){
   $('resultAskedNum').textContent = String(askedCount);
 
   // Session stats: how long this run took, and when it started/ended.
+  // Pulled from the record recordSession() just persisted (rather than
+  // recomputed here a moment later), so the numbers shown always match
+  // exactly what landed in long-term stats.
   const sessionMetaEl = $('sessionMeta');
   const timeNumEl = $('resultTimeNum');
   {
-    const startedAt = window.__quizStartTime || Date.now();
-    const endedAt = Date.now();
-    // Duration is actual time spent actively studying, not wall-clock time
-    // since the quiz first started — any time paused (End quiz, tab
-    // backgrounded, etc.) between then and now is excluded via the
-    // active-time accumulator kept up to date by saveSession().
-    const currentSegmentMs = endedAt - (window.__quizSegmentStart || endedAt);
-    const durationSec = Math.max(0, Math.round(((window.__quizActiveMs || 0) + currentSegmentMs) / 1000));
+    const startedAt = finishedSession.startedAt;
+    const endedAt = finishedSession.endedAt;
+    const durationSec = finishedSession.durationSec;
     const durMin = Math.floor(durationSec / 60);
     const durSec = durationSec % 60;
     const durText = durMin > 0 ? `${durMin}m ${durSec}s` : `${durSec}s`;
