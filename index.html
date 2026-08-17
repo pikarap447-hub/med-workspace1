@@ -4214,7 +4214,7 @@ OUTCOME: NEG
    baked into the page, so if Settings shows an OLD value, that's proof the
    browser is serving a stale cached copy rather than the real thing — use
    the "Force refresh" button in Settings to break out of it. */
-const APP_VERSION = '2026-08-16 bold-exam-tips v1';
+const APP_VERSION = '2026-08-17 debug-fixes v1';
 
 /* Safe localStorage wrapper — some iOS contexts (e.g. Quick Look previews
    opened straight from the Files app) restrict or disable localStorage.
@@ -8084,10 +8084,21 @@ tableBody.addEventListener('keydown', (e) => {
     }
   }
 });
+// Clicking the B button steals focus from the tip cell on mousedown,
+// *before* the click handler runs — and taking focus away from a
+// contenteditable collapses/clears its text selection in most browsers.
+// By the time applyBoldToCell ran, window.getSelection() no longer had
+// a usable range, so it silently fell back to "no selection" and just
+// appended **bold text** at the end instead of wrapping what was
+// actually highlighted — the reported "bold text feature not working".
+// Preventing the mousedown's default keeps focus (and the selection) in
+// the cell so the click handler sees the real selection.
+$('tableBoldBtn')?.addEventListener('mousedown', (e) => e.preventDefault());
 $('tableBoldBtn')?.addEventListener('click', () => {
   if(lastFocusedTipCell && document.body.contains(lastFocusedTipCell)) applyBoldToCell(lastFocusedTipCell);
 });
 
+$('editTipBoldBtn')?.addEventListener('mousedown', (e) => e.preventDefault());
 $('editTipBoldBtn')?.addEventListener('click', () => applyBoldToTextarea($('editTip')));
 $('editTip')?.addEventListener('keydown', (e) => {
   if((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')){
@@ -9498,7 +9509,10 @@ function renderBrainBreakCountdown(){
 
   const parts = [];
   if(focusSummary) parts.push(focusSummary);
-  if(brainBreakEnabled) parts.push(`☕ Every ${brainBreakInterval} card${brainBreakInterval === 1 ? '' : 's'}`);
+  // Show how many cards remain until the next break as an "X/Y" count
+  // (e.g. "4/15") rather than the static "Every 15 cards" — that's the
+  // number people actually want to check at a glance while studying.
+  if(brainBreakEnabled) parts.push(`☕ ${remaining}/${brainBreakInterval}`);
   const summaryEl = $('ssCollapsedSummary');
   if(summaryEl) summaryEl.textContent = parts.length ? parts.join(' · ') : 'No active timers';
   // Give the always-visible clock icon (next to pencil/flag) the same
@@ -9642,6 +9656,18 @@ $('saveCardEditBtn').onclick = () => {
   current.tip = newTip;
   current.options = newOptions;
   current.mode = 'full'; // now hand-authored — stop regenerating distractors for this card
+  // The single "Exam tip" box in this editor is the only tip field a
+  // person can actually see and edit here. But buildFeedbackText() prefers
+  // per-option tips + a separate rationale (card.optionTips/card.rationale)
+  // over card.tip whenever they're present — which every Samplex-imported
+  // card has. That meant an edit made here (including bolding) saved fine
+  // into card.tip but was then silently ignored during the quiz, which
+  // kept showing the untouched original optionTips/rationale text instead.
+  // Clearing them makes this one box the single source of truth for the
+  // tip shown after answering, matching what the editor actually lets you
+  // change.
+  delete current.optionTips;
+  current.rationale = newTip;
   current.topic = newTopic || undefined;
   current.subtopic = newSubtopic || undefined;
   current.questionType = newQuestionType || undefined;
@@ -9663,6 +9689,8 @@ $('saveCardEditBtn').onclick = () => {
         s.cards[idx].tip = newTip;
         s.cards[idx].options = newOptions;
         s.cards[idx].mode = 'full';
+        delete s.cards[idx].optionTips;
+        s.cards[idx].rationale = newTip;
         s.cards[idx].topic = newTopic || undefined;
         s.cards[idx].subtopic = newSubtopic || undefined;
         s.cards[idx].questionType = newQuestionType || undefined;
@@ -12231,10 +12259,24 @@ updateNavActiveState();
     return mins + ' min remaining';
   }
 
+  // The timer keeps counting down in the background no matter which
+  // screen is showing (home, settings, etc.) — that's intentional, so a
+  // focus block doesn't silently pause just because the person tabbed
+  // away from the quiz. But the ticking/alarm *sounds* should only play
+  // while the study screen they belong to (quiz or brain-break) is
+  // actually on screen; otherwise a segment finishing while someone is
+  // back on the home screen rings the bell with no visible context for
+  // it, which just reads as a random, unexplained sound.
+  function isStudyScreenVisible(){
+    const quizEl = $('quiz');
+    const breakEl = $('brainBreak');
+    return !!((quizEl && !quizEl.classList.contains('hidden')) || (breakEl && !breakEl.classList.contains('hidden')));
+  }
+
   function applyElapsed(seconds, doPersist, allowSound = true){
     const before = state.remaining;
     let remaining = state.remaining - seconds;
-    if(allowSound && state.running && before > 5 && remaining <= 5 && remaining > 0) playTicking();
+    if(allowSound && isStudyScreenVisible() && state.running && before > 5 && remaining <= 5 && remaining > 0) playTicking();
     // Walk through mode switches one at a time in case a lot of time
     // passed (e.g. the tab was closed for an hour) rather than just
     // clamping to one switch.
@@ -12260,7 +12302,7 @@ updateNavActiveState();
   }
 
   function notifySegmentDone(playSound){
-    if(playSound){
+    if(playSound && isStudyScreenVisible()){
       playAlarm();
       if(navigator.vibrate) try{ navigator.vibrate([80,60,80]); }catch(e){}
     }
