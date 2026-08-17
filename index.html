@@ -9293,6 +9293,14 @@ function launchQuiz(cardArr, setId){
   // Fresh quiz: clear the pet's running session signals (streaks, slumps)
   // so its reactions reflect this session, not a leftover run.
   if(typeof window.petStartStudySession === 'function') window.petStartStudySession();
+  // Fresh quiz: the Focus Timer's "on" state was previously a single flag
+  // persisted forever, independent of any particular study session — so a
+  // timer left running (or already counting down) from whatever set was
+  // studied last would carry straight into this new one, making it look
+  // like the timer "was already on" the moment the session opened. Force
+  // it back to off/full-length here so every session starts from the same
+  // clean slate.
+  if(typeof window.pomodoroResetForNewSession === 'function') window.pomodoroResetForNewSession();
   renderPlant(0);
   hideAllScreens();
   $('quiz').classList.remove('hidden');
@@ -13173,6 +13181,26 @@ updateNavActiveState();
       pausedForEditing = false;
       setRunning(true);
     }
+  };
+
+  // Called by launchQuiz() (app-level) whenever a fresh study session
+  // starts. Without this, "running" was a single flag persisted forever in
+  // POMODORO_KEY — it never turned off on its own, so a Focus Timer left
+  // running (or mid-countdown) at the end of one set carried straight into
+  // the next set/session and appeared to "already be on"/already ticking
+  // the moment the new session opened. A new study session should always
+  // begin with the timer off and a full, un-drifted focus segment, exactly
+  // as if the person had just pressed Reset — not silently resuming
+  // whatever state a previous, unrelated session left behind.
+  window.pomodoroResetForNewSession = function(){
+    stopTicking();
+    tickingPlayed = false;
+    stopInterval();
+    state.mode = 'focus';
+    state.remaining = state.focusMinutes * 60;
+    state.running = false;
+    persist();
+    render();
   };
 
   function tick(){
