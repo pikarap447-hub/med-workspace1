@@ -6271,7 +6271,7 @@ function recordSession(){
   const statsAll = loadStatsData();
   const bucketId = activeSetId || 'scratch';
   if(!statsAll[bucketId]) statsAll[bucketId] = {cardStats:{}, sessions:[]};
-  statsAll[bucketId].sessions.push({date: Date.now(), correct: score, total: askedCount, mastered: masteredCount, totalCards});
+  statsAll[bucketId].sessions.push({date: Date.now(), correct: score, total: askedCount, mastered: masteredCount, totalCards, missedList: Array.from(missedSet.values())});
   if(statsAll[bucketId].sessions.length > 50) statsAll[bucketId].sessions = statsAll[bucketId].sessions.slice(-50);
   saveStatsData(statsAll);
   if(activeSetId){
