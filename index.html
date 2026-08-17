@@ -329,6 +329,21 @@
     --shadow:0 14px 36px rgba(0,0,0,.40); --shadow-sm:0 3px 12px rgba(0,0,0,.32);
     --shadow-md:var(--shadow); --shadow-lg:0 26px 58px rgba(0,0,0,.48);
     --correct-text:#B7E8C9; --wrong-text:#F5C7BE;
+    /* --text / --text-muted / --border are semantic tokens declared once
+       at :root (light mode) as var(--ink) / var(--ink-soft) /
+       var(--tile-blue-pale). Custom-property var() references resolve
+       against the value of the referenced property on the SAME element
+       they're declared on — since --text etc. were only ever declared on
+       :root, they kept resolving against :root's (light) --ink even after
+       --ink itself was correctly redeclared here on body.mode-dark. Newer
+       components that use the semantic names directly (e.g. the bottom
+       Study Session pill) ended up with light-mode dark text/borders on a
+       dark background — effectively invisible. Redeclaring the three
+       derived tokens here, on body, makes them resolve against this same
+       element's (correct, per-theme) --ink/--ink-soft/--tile-blue-pale.
+       Fixed once here rather than per-theme block below since none of
+       those blocks override --text/--text-muted/--border themselves. */
+    --text:var(--ink); --text-muted:var(--ink-soft); --border:var(--tile-blue-pale);
     background:var(--bg);
   }
   body.mode-dark.theme-kawaii{
@@ -1089,15 +1104,77 @@ transition:background var(--transition-normal), color var(--transition-normal), 
   }
 
   /* --- Results --- */
+  .result-hero{
+    display:flex;
+    align-items:center;
+    gap:18px;
+    margin:10px 0 16px;
+  }
+  .result-ring-wrap{
+    position:relative;
+    flex:0 0 auto;
+    width:120px; height:120px;
+  }
+  .result-ring{ transform:rotate(-90deg); }
+  .result-ring-track{
+    fill:none;
+    stroke:var(--tile-blue-pale);
+    stroke-width:9;
+  }
+  .result-ring-fill{
+    fill:none;
+    stroke:var(--tile-blue-deep);
+    stroke-width:9;
+    stroke-linecap:round;
+    /* Filled in by JS (dashoffset animates from 100 -> 100-pct along a
+       100-unit pathLength, so the ring reads directly as a percentage
+       regardless of the actual pixel radius/circumference). */
+    transition:stroke-dashoffset .7s cubic-bezier(.34,1.2,.4,1);
+  }
+  .result-ring-center{
+    position:absolute; inset:0;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+  }
+  .result-ring-pct{
+    font-family:var(--font-display);
+    font-weight:700;
+    font-size:24px;
+    color:var(--tile-blue-deep);
+    line-height:1;
+  }
+  .result-ring-label{
+    font-size:10px;
+    font-weight:700;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin-top:3px;
+  }
+  .result-hero-text{ flex:1 1 auto; min-width:0; }
+  .result-headline{
+    font-family:var(--font-display);
+    font-weight:700;
+    font-size:16px;
+    color:var(--ink);
+    margin-bottom:4px;
+  }
   .result-score{
     font-family:var(--font-display);
     font-optical-sizing:auto;
-    font-size:46px;
+    font-size:32px;
     font-weight:600;
-    margin:8px 0 2px;
+    margin:0 0 2px;
     color:var(--tile-blue-deep);
   }
   .result-sub{color:var(--ink-soft); font-size:14px; margin-bottom:22px; font-weight:500;}
+  .result-stats-grid{
+    display:grid;
+    grid-template-columns:repeat(3, 1fr);
+    gap:10px;
+    margin:0 0 18px;
+  }
+  .result-stats-grid .stat-tile{ padding:12px 8px; }
+  .result-stats-grid .stat-num{ font-size:20px; }
   .missed-item{
     padding:10px 0;
     border-top:1px solid var(--tile-blue-pale);
@@ -4004,8 +4081,37 @@ OUTCOME: NEG
       <!-- RESULTS -->
       <div id="results" class="hidden">
         <label class="field-label">Results</label>
-        <div class="result-score" id="finalScore">0 / 0</div>
-        <div class="result-sub" id="finalSub"></div>
+        <div class="result-hero">
+          <div class="result-ring-wrap">
+            <svg class="result-ring" viewBox="0 0 120 120" width="120" height="120" aria-hidden="true">
+              <circle class="result-ring-track" cx="60" cy="60" r="52"></circle>
+              <circle class="result-ring-fill" id="resultRingFill" cx="60" cy="60" r="52" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"></circle>
+            </svg>
+            <div class="result-ring-center">
+              <div class="result-ring-pct" id="resultRingPct">0%</div>
+              <div class="result-ring-label">mastered</div>
+            </div>
+          </div>
+          <div class="result-hero-text">
+            <div class="result-headline" id="resultHeadline"></div>
+            <div class="result-score" id="finalScore">0 / 0</div>
+            <div class="result-sub" id="finalSub" style="display:none;"></div>
+          </div>
+        </div>
+        <div class="result-stats-grid" id="resultStatsGrid">
+          <div class="stat-tile">
+            <div class="stat-num" id="resultCorrectNum">0</div>
+            <div class="stat-label">Correct</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-num" id="resultAskedNum">0</div>
+            <div class="stat-label">Asked</div>
+          </div>
+          <div class="stat-tile">
+            <div class="stat-num" id="resultTimeNum">0s</div>
+            <div class="stat-label">Time</div>
+          </div>
+        </div>
         <div class="result-sub" id="sessionMeta" style="margin-top:2px;"></div>
         <div id="weakCardsBox" class="hidden" style="margin-top:14px;">
           <label class="field-label">Weakest cards this session</label>
@@ -4244,6 +4350,14 @@ OUTCOME: NEG
             </span>
             <span class="settings-nav-chev">›</span>
           </button>
+          <button type="button" class="settings-nav-row" data-page="keyboard">
+            <span class="settings-nav-icon">⌨️</span>
+            <span class="settings-nav-text">
+              <span class="settings-nav-title">Keyboard</span>
+              <span class="settings-nav-sub">Custom shortcut keys</span>
+            </span>
+            <span class="settings-nav-chev">›</span>
+          </button>
           <button type="button" class="settings-nav-row" data-page="study">
             <span class="settings-nav-icon">🧠</span>
             <span class="settings-nav-text">
@@ -4445,6 +4559,20 @@ OUTCOME: NEG
           <div id="gpMapRows" class="gp-map-rows"></div>
           <div class="row" style="margin-top:14px;">
             <button class="btn-ghost" id="gpResetMapBtn">⟲ Reset to defaults</button>
+          </div>
+        </div>
+        </div>
+
+        <div id="settingsPage-keyboard" class="settings-page hidden">
+        <button type="button" class="back-link settings-page-back">← Settings</button>
+        <div class="backup-block">
+          <label class="field-label">Keyboard shortcuts</label>
+          <p class="modal-hint">
+            Works with any keyboard, wired or Bluetooth — there's nothing special to set up for a Bluetooth keyboard, it sends the exact same key presses as a wired one. By default, quiz answers can be picked with 1-4, A-D, or U/I/O/P, and Enter or Space moves to the next card. Set a personal shortcut below for any action and it works alongside those defaults rather than replacing them. Click "Remap", then press the key you want to use — Escape or clicking again cancels.
+          </p>
+          <div id="kbMapRows" class="gp-map-rows"></div>
+          <div class="row" style="margin-top:14px;">
+            <button class="btn-ghost" id="kbResetMapBtn">⟲ Clear all custom keys</button>
           </div>
         </div>
         </div>
@@ -7400,7 +7528,7 @@ function populateSettingsFields(){
 // showSettingsPage(page) opens one category. The in-page "← Settings" link
 // on every sub-page always returns to the menu, not out of Settings
 // entirely — that's still what the outer "← Back" (backFromSettingsBtn) does.
-const SETTINGS_PAGE_IDS = ['appearance','display','images','controller','study','backup','about'];
+const SETTINGS_PAGE_IDS = ['appearance','display','images','controller','keyboard','study','backup','about'];
 function showSettingsMenu(){
   $('settingsMenu').classList.remove('hidden');
   $('settingsExitRow').classList.remove('hidden');
@@ -10337,11 +10465,47 @@ function finishQuiz(){
   $('progressFill').style.width = '100%';
   $('finalScore').textContent = `${masteredCount} / ${totalCards}`;
   const pct = totalCards ? Math.round(masteredCount / totalCards * 100) : 0;
+  // finalSub stays populated (for anything reading its text, e.g. no
+  // current callers, but harmless to keep accurate) even though it's
+  // visually replaced by the ring + stat tiles below.
   $('finalSub').textContent = `${pct}% mastered · ${score} correct answers over ${askedCount} questions asked`;
+
+  // Headline tone scales with how the session went, so the result screen
+  // reads as a quick verdict at a glance instead of just a raw number.
+  const headlineEl = $('resultHeadline');
+  if(headlineEl){
+    let headline;
+    if(pct === 100) headline = 'Perfect run! 🎉';
+    else if(pct >= 80) headline = 'Great work!';
+    else if(pct >= 50) headline = 'Solid progress.';
+    else headline = 'Keep going — every rep helps.';
+    headlineEl.textContent = headline;
+  }
+
+  // Mastery ring: a 100-unit pathLength makes the SVG stroke-dasharray/
+  // dashoffset math a direct percentage regardless of the circle's actual
+  // pixel radius, so this stays correct even if the ring's size changes.
+  const ringFillEl = $('resultRingFill');
+  if(ringFillEl){
+    // Read the offset back before changing it so the browser has a
+    // starting value to transition from (rAF avoids the change landing in
+    // the same paint as the element becoming visible, which would skip
+    // the animation).
+    ringFillEl.style.strokeDashoffset = '100';
+    requestAnimationFrame(() => {
+      ringFillEl.style.strokeDashoffset = String(100 - pct);
+    });
+  }
+  const ringPctEl = $('resultRingPct');
+  if(ringPctEl) ringPctEl.textContent = `${pct}%`;
+
+  $('resultCorrectNum').textContent = String(score);
+  $('resultAskedNum').textContent = String(askedCount);
 
   // Session stats: how long this run took, and when it started/ended.
   const sessionMetaEl = $('sessionMeta');
-  if(sessionMetaEl){
+  const timeNumEl = $('resultTimeNum');
+  {
     const startedAt = window.__quizStartTime || Date.now();
     const endedAt = Date.now();
     // Duration is actual time spent actively studying, not wall-clock time
@@ -10353,6 +10517,7 @@ function finishQuiz(){
     const durMin = Math.floor(durationSec / 60);
     const durSec = durationSec % 60;
     const durText = durMin > 0 ? `${durMin}m ${durSec}s` : `${durSec}s`;
+    if(timeNumEl) timeNumEl.textContent = durText;
     const fmtClock = ts => {
       const d = new Date(ts);
       let h = d.getHours();
@@ -10361,7 +10526,7 @@ function finishQuiz(){
       h = h % 12; if(h === 0) h = 12;
       return `${h}:${m} ${ampm}`;
     };
-    sessionMetaEl.textContent = `⏱ ${durText} · started ${fmtClock(startedAt)} · ended ${fmtClock(endedAt)}`;
+    if(sessionMetaEl) sessionMetaEl.textContent = `Started ${fmtClock(startedAt)} · ended ${fmtClock(endedAt)}`;
   }
 
   // Weakest cards this session, pulled from the same per-card accuracy
@@ -10484,11 +10649,132 @@ $('editBtn').onclick = () => {
   showSetupScreen();
 };
 
-/* ---- Keyboard shortcuts during the quiz: 1-4 / A-D / U-P to pick, Enter/Space for next ---- */
+/* ---- Custom keyboard shortcuts: user-personalized keys, layered on top
+   of the built-in 1-4 / A-D / U-P / Enter / Space scheme below rather than
+   replacing it. Same "works with any Bluetooth keyboard" story as the
+   built-ins — a Bluetooth keyboard fires ordinary KeyboardEvents just like
+   a wired one, so nothing device-specific is needed here; a custom key is
+   just an extra key added to the existing lookup tables. Mirrors the
+   gamepad remap module's capture/settings pattern further down. ---- */
+(function(){
+  const KEY_ACTIONS = ['optionA','optionB','optionC','optionD','confirm'];
+  const KEY_ACTION_LABELS = {
+    optionA:'Option A', optionB:'Option B', optionC:'Option C', optionD:'Option D',
+    confirm:'Next / continue'
+  };
+  const KEY_GROUPS = [
+    {label:'Quiz answers', actions:['optionA','optionB','optionC','optionD']},
+    {label:'Menu navigation', actions:['confirm']}
+  ];
+  const KEY_MAP_KEY = 'topicReviewKeyMap';
+  const CAPTURE_TIMEOUT_MS = 10000;
+
+  // action -> the custom e.key value bound to it, or null if unset.
+  let keyMap = {optionA:null, optionB:null, optionC:null, optionD:null, confirm:null};
+  try{
+    const saved = JSON.parse(lsGet(KEY_MAP_KEY) || 'null');
+    if(saved && typeof saved === 'object') keyMap = Object.assign({}, keyMap, saved);
+  }catch(e){ /* ignore malformed saved mapping */ }
+
+  let captureAction = null;
+  let captureTimer = null;
+
+  function saveKeyMap(){ lsSet(KEY_MAP_KEY, JSON.stringify(keyMap)); }
+
+  function keyLabel(k){
+    if(!k) return 'Not set';
+    if(k === ' ') return 'Space';
+    return k.length === 1 ? k.toUpperCase() : k;
+  }
+
+  function renderKbSettings(){
+    const rowsEl = $('kbMapRows');
+    if(!rowsEl) return;
+    rowsEl.innerHTML = '';
+    KEY_GROUPS.forEach(group => {
+      const heading = document.createElement('div');
+      heading.className = 'gp-map-group-label';
+      heading.textContent = group.label;
+      rowsEl.appendChild(heading);
+      group.actions.forEach(action => {
+        const row = document.createElement('div');
+        row.className = 'gp-map-row';
+        const label = document.createElement('span');
+        label.className = 'gp-map-label';
+        label.textContent = KEY_ACTION_LABELS[action];
+        const current = document.createElement('span');
+        current.className = 'gp-map-current';
+        current.textContent = captureAction === action ? 'Press a key… (Esc to cancel)' : keyLabel(keyMap[action]);
+        const btnWrap = document.createElement('div');
+        btnWrap.style.display = 'flex';
+        btnWrap.style.gap = '6px';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'btn-ghost gp-remap-btn' + (captureAction === action ? ' listening' : '');
+        btn.textContent = captureAction === action ? 'Cancel' : 'Remap';
+        btn.onclick = () => { captureAction === action ? cancelKbCapture() : startKbCapture(action); };
+        btnWrap.appendChild(btn);
+        if(keyMap[action] && captureAction !== action){
+          const clearBtn = document.createElement('button');
+          clearBtn.type = 'button';
+          clearBtn.className = 'btn-ghost gp-remap-btn';
+          clearBtn.textContent = 'Clear';
+          clearBtn.onclick = () => { keyMap[action] = null; saveKeyMap(); renderKbSettings(); };
+          btnWrap.appendChild(clearBtn);
+        }
+        row.append(label, current, btnWrap);
+        rowsEl.appendChild(row);
+      });
+    });
+  }
+  function startKbCapture(action){
+    captureAction = action;
+    if(captureTimer) clearTimeout(captureTimer);
+    captureTimer = setTimeout(() => { captureAction = null; renderKbSettings(); }, CAPTURE_TIMEOUT_MS);
+    renderKbSettings();
+  }
+  function cancelKbCapture(){
+    captureAction = null;
+    if(captureTimer){ clearTimeout(captureTimer); captureTimer = null; }
+    renderKbSettings();
+  }
+  const kbResetBtn = $('kbResetMapBtn');
+  if(kbResetBtn) kbResetBtn.onclick = () => {
+    // Mutate the existing object in place (rather than reassigning
+    // `keyMap` to a new object) since window.customKeyMap below holds a
+    // reference to this same object — reassigning here would leave that
+    // reference pointing at the stale pre-reset map.
+    KEY_ACTIONS.forEach(a => { keyMap[a] = null; });
+    saveKeyMap();
+    cancelKbCapture();
+  };
+
+  // Captures the very next keydown while remapping is active, before the
+  // main quiz-shortcut handler below ever sees it (capture phase, so this
+  // always runs first regardless of listener registration order).
+  document.addEventListener('keydown', e => {
+    if(!captureAction) return;
+    e.preventDefault();
+    if(e.key === 'Escape'){ cancelKbCapture(); return; }
+    // Ignore bare modifier presses — wait for an actual key.
+    if(['Shift','Control','Alt','Meta'].includes(e.key)) return;
+    keyMap[captureAction] = e.key;
+    saveKeyMap();
+    cancelKbCapture();
+  }, true);
+
+  window.customKeyMap = keyMap;
+  renderKbSettings();
+})();
+
+/* ---- Keyboard shortcuts during the quiz: 1-4 / A-D / U-P (plus any
+   custom keys set above) to pick, Enter/Space for next ---- */
 document.addEventListener('keydown', e => {
   if(e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return;
+  const km = window.customKeyMap || {};
+  const isConfirmKey = k => k === 'Enter' || k === ' ' || (km.confirm && k === km.confirm);
   if(!$('brainBreak').classList.contains('hidden')){
-    if(e.key === 'Enter' || e.key === ' '){
+    if(isConfirmKey(e.key)){
       const btn = $('breakContinueBtn');
       if(btn){ e.preventDefault(); btn.click(); }
     }
@@ -10503,14 +10789,18 @@ document.addEventListener('keydown', e => {
     // unaffected by layout/case/dead-key quirks; e.key is kept as a fallback.
     const codeMap = {'Digit1':0,'Digit2':1,'Digit3':2,'Digit4':3,'KeyA':0,'KeyB':1,'KeyC':2,'KeyD':3,'KeyU':0,'KeyI':1,'KeyO':2,'KeyP':3};
     const keyMap = {'1':0,'2':1,'3':2,'4':3,'a':0,'b':1,'c':2,'d':3,'u':0,'i':1,'o':2,'p':3};
-    let idx = codeMap[e.code];
+    // Custom keys are matched on the raw e.key (case-sensitive as bound),
+    // so a user who deliberately remapped a letter's Shift'd form isn't
+    // silently folded into the lowercase built-in scheme.
+    const customIdx = ['optionA','optionB','optionC','optionD'].findIndex(a => km[a] && km[a] === e.key);
+    let idx = customIdx !== -1 ? customIdx : codeMap[e.code];
     if(idx === undefined) idx = keyMap[(e.key || '').toLowerCase()];
     if(idx !== undefined){
       const opts = Array.from(document.querySelectorAll('#optionsList .opt'));
       const btn = opts[idx];
       if(btn && !btn.disabled){ e.preventDefault(); btn.click(); }
     }
-  } else if(e.key === 'Enter' || e.key === ' '){
+  } else if(isConfirmKey(e.key)){
     const nextBtn = $('nextBtn');
     if(nextBtn && !nextBtn.classList.contains('hidden')){ e.preventDefault(); nextBtn.click(); }
   }
@@ -12654,9 +12944,25 @@ updateNavActiveState();
     $('pomodoroMenuBtn')?.setAttribute('aria-expanded', menuOpen ? 'true' : 'false');
   }
 
-  function loadState(){
+  // NOTE: this used to read appDataCache[POMODORO_KEY] directly and
+  // synchronously. appDataCache is only pre-populated from *localStorage*
+  // at parse time (see the APP_DATA_KEYS.forEach(...) line near the top of
+  // the file) — the actual up-to-date value lives in IndexedDB and only
+  // lands in appDataCache once the separate, async initAppDataStorage()
+  // promise resolves. On a real page reload (not just a backgrounded tab —
+  // iOS Safari/PWA routinely kills and reloads a backgrounded page), this
+  // module's init() ran before that promise resolved, so loadState() read
+  // an empty/stale cache and silently fell back to a fresh 25:00 focus
+  // timer — losing track of a running session or a break that was already
+  // due. That's the root cause behind "pomodoro doesn't force the break
+  // screen" / "break silently rolls into the next focus timer": the state
+  // needed to know a break was owed was never actually loaded. Using
+  // appDataGet() (which awaits IndexedDB when the cache doesn't have the
+  // key yet) instead of the raw cache read, and awaiting this in init()
+  // before doing anything else, fixes that.
+  async function loadState(){
     try{
-      const raw = appDataCache[POMODORO_KEY];
+      const raw = await appDataGet(POMODORO_KEY);
       if(!raw) return;
       const saved = JSON.parse(raw);
       if(saved && typeof saved === 'object') state = Object.assign(state, saved);
@@ -12830,7 +13136,7 @@ updateNavActiveState();
   // renderer) to refresh this half of the panel and get back a short
   // summary phrase for the collapsed pill — empty string when Focus is off.
   window.pomodoroSyncStudySession = function(){
-    return state.running ? ('⏱ ' + fmt(state.remaining)) : '';
+    return state.running ? ('🍅 ' + fmt(state.remaining)) : '';
   };
 
   // Called by showBrainBreak() (app-level) whenever the brain-break screen
@@ -12923,11 +13229,10 @@ updateNavActiveState();
     render();
   }
 
-  function init(){
-    loadState();
-    render();
-    if(state.running) startInterval();
-
+  async function init(){
+    // Bind everything that doesn't depend on the persisted state first, so
+    // the controls are wired up immediately rather than waiting on the
+    // IndexedDB read below.
     $('pomodoroSetupToggle')?.addEventListener('change', (e) => setRunning(e.target.checked));
     $('ssFocusToggle')?.addEventListener('change', (e) => setRunning(e.target.checked));
     $('pomodoroPlayPauseBtn')?.addEventListener('click', () => setRunning(!state.running));
@@ -12971,6 +13276,14 @@ updateNavActiveState();
       }
     });
     window.addEventListener('pagehide', persist);
+
+    // Now load the persisted state (awaiting IndexedDB if the cache isn't
+    // populated yet — see the comment on loadState()) and only then render
+    // / start the ticking interval, so we're never rendering off of the
+    // fresh-default state by mistake.
+    await loadState();
+    render();
+    if(state.running) startInterval();
   }
 
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
@@ -13014,7 +13327,7 @@ updateNavActiveState();
          Play/Pause below), its own length pills, its own countdown. -->
     <div class="ss-section">
       <div class="ss-section-head">
-        <span class="ss-section-title">⏱ Focus Timer</span>
+        <span class="ss-section-title">🍅 Focus Timer</span>
         <label class="switch ss-switch">
           <input type="checkbox" id="ssFocusToggle">
           <span class="switch-track"><span class="switch-thumb"></span></span>
