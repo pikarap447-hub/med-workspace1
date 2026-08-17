@@ -16,7 +16,7 @@
 <meta http-equiv="Expires" content="0">
 <title>Topic Review</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Baloo+2:wght@500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Baloo+2:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&display=swap');
 
   /* ---- Study-garden palette: the vine growth metaphor (still present
      in the vine border around the card) is promoted here to be the
@@ -67,6 +67,73 @@
     --radius-sm:12px;
     --radius-lg:26px;
     --nav-h:64px;
+
+    /* ---- Design-token layer v2: a real hierarchy (color / typography /
+       shape / elevation / interaction) sitting on top of the tile-* +
+       semantic layer above. Every --color-*, --text-*, --radius-*,
+       --shadow-*, --focus-ring and --transition-* value below is an
+       ALIAS onto an existing variable, so nothing has to be rewritten at
+       every call site — new and touched components should prefer these
+       names, while every pre-existing rule keeps working unchanged.
+       Per-theme blocks only need to override the underlying tile-*/bg/
+       surface/ink variables (as before) plus whichever shape/elevation/
+       type tokens give that theme its own character; the --color-* etc.
+       aliases cascade automatically. ---- */
+    --color-bg:var(--bg);
+    --color-surface:var(--surface);
+    --color-surface-2:var(--tile-blue-paler);
+    --color-surface-elevated:var(--surface-elevated);
+
+    --color-text:var(--text);
+    --color-text-muted:var(--text-muted);
+    --color-text-subtle:color-mix(in srgb, var(--text-muted) 62%, var(--surface));
+
+    --color-primary:var(--primary);
+    --color-primary-hover:var(--tile-blue);
+    --color-primary-soft:var(--primary-soft);
+
+    --color-accent:var(--accent);
+    --color-accent-soft:var(--tile-blue-paler);
+
+    --color-border:var(--border);
+    --color-border-strong:var(--tile-blue);
+
+    --color-success:var(--success);
+    --color-success-bg:var(--green-bg);
+    --color-warning:var(--gold);
+    --color-warning-bg:color-mix(in srgb, var(--gold) 16%, var(--surface));
+    --color-danger:var(--danger);
+    --color-danger-bg:var(--red-bg);
+
+    --font-body:var(--font);
+    /* --font-display / --font-mono already carry the token names spec'd */
+
+    --text-xs:11px;
+    --text-sm:12.5px;
+    --text-md:14.5px;
+    --text-lg:17px;
+    --text-xl:21px;
+    --text-2xl:27px;
+
+    --radius-md:var(--radius);
+    --radius-xl:32px;
+
+    --shadow-md:var(--shadow);
+    --shadow-lg:0 22px 52px rgba(30,50,40,.16);
+
+    --focus-ring:0 0 0 3px var(--primary-soft);
+    --transition-fast:150ms ease;
+    --transition-normal:220ms ease;
+
+    /* ---- Theme intensity: "Subtle \u2194 Expressive" (see Focus Mode in
+       Settings). These are the levers each theme's decorative language
+       is expressed through, so a single data-intensity switch on <body>
+       can turn any theme's decoration up or down without per-theme
+       JS. Defaults to the balanced/expressive value; the
+       data-intensity="subtle" block later in this stylesheet turns
+       these down uniformly. ---- */
+    --decoration-opacity:1;
+    --shadow-scale:1;
   }
 
   /* ---- Kawaii theme: an alternate palette+font+border skin, toggled in
@@ -84,7 +151,7 @@
      an all-pink wash, and ink darkened for contrast. ---- */
   body.theme-kawaii{
     --tile-white:#FFF9F6;
-    --tile-blue-deep:#E8567F;   /* strawberry — primary actions */
+    --tile-blue-deep:#E12258;   /* strawberry — primary actions */
     --tile-blue:#B06D93;        /* muted rose — labels, secondary emphasis */
     --tile-blue-mid:#E3A73B;    /* butter-gold — focus rings, highlights */
     --tile-blue-pale:#F3D8E2;   /* pale pink — borders */
@@ -105,38 +172,59 @@
     --accent:var(--grape);
     --shadow:0 10px 32px rgba(180,70,110,.10);
     --shadow-sm:0 2px 10px rgba(180,70,110,.08);
+    --shadow-md:var(--shadow);
+    --shadow-lg:0 24px 56px rgba(180,70,110,.16);
+    /* Shape: a touch rounder than Garden — soft stationery-sticker feel */
+    --radius:24px;
+    --radius-sm:15px;
+    --radius-lg:30px;
+    --radius-xl:36px;
   }
   body.theme-kawaii{ background:var(--bg); }
 
-  /* ---- Midnight theme: the masculine/dark counterpart — deep navy +
-     slate + muted electric blue. Same variable-swap mechanism as Kawaii,
-     so every existing component repaints automatically. Deliberately
-     calmer than the built-in filter-invert dark mode; the two can still
-     be combined since dark-mode is a separate toggle. ---- */
+  /* ---- Midnight Study: a "serious, focused, late-night studying"
+     identity — navy/slate/electric-blue/teal, sharper radii, lower
+     visual noise. Theme is now independent of Appearance Mode (see
+     section further down): this block is the LIGHT variant (pale
+     slate surfaces, deep navy ink); body.mode-dark.theme-midnight
+     below carries the dark variant Midnight is best known for. Because
+     a two-class selector always beats a one-class selector on
+     specificity, the dark override applies correctly regardless of
+     source order. Midnight still *defaults* to dark the first time a
+     user picks it (see applyTheme in the script), but the user can
+     switch it to light and it stays a coherent, deliberate theme. ---- */
   body.theme-midnight{
-    --tile-white:#131A26;
-    --tile-blue-deep:#5B9CE8;   /* muted electric blue — primary actions */
-    --tile-blue:#7C93B3;        /* slate — labels, secondary emphasis */
-    --tile-blue-mid:#4FD6C0;    /* silver-teal — focus rings, highlights */
-    --tile-blue-pale:#2A3548;   /* border */
-    --tile-blue-paler:#1B2333;  /* subtle fills */
-    --ink:#E8EDF6;
-    --ink-soft:#8C99B3;
-    --gold:#E3B04B;
-    --green:#4FD6A8;
-    --green-bg:#173229;
-    --red:#E8697B;
-    --red-bg:#3A2028;
-    --grape:#8E8FE8;
+    --tile-white:#EEF2F8;
+    --tile-blue-deep:#2A5FA8;   /* muted electric blue — primary actions */
+    --tile-blue:#4C6B93;        /* slate — labels, secondary emphasis */
+    --tile-blue-mid:#1E9E8C;    /* teal — focus rings, highlights */
+    --tile-blue-pale:#D3DCE8;   /* border */
+    --tile-blue-paler:#EEF2F8;  /* subtle fills */
+    --ink:#1A2433;
+    --ink-soft:#5C6B82;
+    --gold:#B9861F;
+    --green:#2F9E7A;
+    --green-bg:#DDF0E7;
+    --red:#C24C5E;
+    --red-bg:#F8E1E5;
+    --grape:#5D5FBE;
     --font-display:'Baloo 2', 'Quicksand', sans-serif;
-    --bg:#0D1420;
-    --surface:#161E2C;
-    --surface-elevated:#1B2434;
+    --bg:#F3F5F9;
+    --surface:#FFFFFF;
+    --surface-elevated:#FFFFFF;
     --primary:var(--tile-blue-deep);
     --primary-soft:var(--tile-blue-paler);
     --accent:var(--tile-blue-mid);
-    --shadow:0 10px 32px rgba(0,0,0,.35);
-    --shadow-sm:0 2px 10px rgba(0,0,0,.3);
+    --shadow:0 10px 30px rgba(30,50,80,.10);
+    --shadow-sm:0 2px 10px rgba(30,50,80,.07);
+    --shadow-md:var(--shadow);
+    --shadow-lg:0 24px 52px rgba(30,50,80,.16);
+    --focus-ring:0 0 0 3px rgba(30,158,140,.28);
+    /* Shape: sharper, lower-noise — a focused desk, not a plush card */
+    --radius:14px;
+    --radius-sm:9px;
+    --radius-lg:18px;
+    --radius-xl:22px;
   }
   body.theme-midnight{ background:var(--bg); }
   body.theme-ocean{
@@ -145,14 +233,24 @@
     --gold:#E3A84A; --green:#3E9275; --green-bg:#DDF3EB; --red:#C9575D; --red-bg:#F8E2E3;
     --grape:#697BC4; --bg:#F1FAFC; --surface:#FFFFFF; --surface-elevated:#FFFFFF; --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--tile-blue-mid);
     --shadow:0 10px 32px rgba(36,91,143,.10); --shadow-sm:0 2px 10px rgba(36,91,143,.07);
+    --shadow-md:var(--shadow); --shadow-lg:0 22px 50px rgba(36,91,143,.15);
+    /* Shape: clean and airy — soft corners, light borders */
+    --radius:18px; --radius-sm:11px; --radius-lg:24px; --radius-xl:30px;
   }
   body.theme-ocean{background:var(--bg);}
+  /* ---- Autumn Desk (was "Sunset"): reworked around a warm library/study
+     desk — terracotta + rust + cream + amber, instead of a coral/rose
+     sunset gradient. Class name kept as theme-sunset so existing
+     localStorage selections keep resolving to the same theme. ---- */
   body.theme-sunset{
-    --tile-white:#FFF8F2; --tile-blue-deep:#B84A6B; --tile-blue:#B96361; --tile-blue-mid:#E9785B;
-    --tile-blue-pale:#F2D5CA; --tile-blue-paler:#FFF0E8; --ink:#4B2E35; --ink-soft:#8C6D71;
-    --gold:#E3A64A; --green:#5A9870; --green-bg:#E5F2E7; --red:#C94C54; --red-bg:#F9E0E2; --grape:#9B6BB3;
-    --bg:#FFF7F1; --surface:#FFFDFC; --surface-elevated:#FFFDFC; --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--tile-blue-mid);
-    --shadow:0 10px 32px rgba(184,74,107,.10); --shadow-sm:0 2px 10px rgba(184,74,107,.07);
+    --tile-white:#FBF3E7; --tile-blue-deep:#A8461F; --tile-blue:#8C5A3B; --tile-blue-mid:#D68A3E;
+    --tile-blue-pale:#E8D2B8; --tile-blue-paler:#F6EBDA; --ink:#3E2A1E; --ink-soft:#8A6F5C;
+    --gold:#D68A3E; --green:#5E8A5A; --green-bg:#E6EEDE; --red:#B5493E; --red-bg:#F4DEDA; --grape:#8C6B93;
+    --bg:#FBF1E4; --surface:#FFFCF7; --surface-elevated:#FFFCF7; --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--tile-blue-mid);
+    --shadow:0 12px 34px rgba(90,45,20,.16); --shadow-sm:0 3px 12px rgba(90,45,20,.12);
+    --shadow-md:var(--shadow); --shadow-lg:0 24px 54px rgba(90,45,20,.22);
+    /* Shape: warm paper/editorial desk — slightly less round than Garden */
+    --radius:16px; --radius-sm:10px; --radius-lg:22px; --radius-xl:26px;
   }
   body.theme-sunset{background:var(--bg);}
   body.theme-lavender{
@@ -161,14 +259,29 @@
     --gold:#D9A84E; --green:#559477; --green-bg:#E3F2EA; --red:#C96575; --red-bg:#F8E2E7; --grape:#9B7FCB;
     --bg:#F8F4FC; --surface:#FFFFFF; --surface-elevated:#FFFFFF; --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--tile-blue-mid);
     --shadow:0 10px 32px rgba(103,83,156,.10); --shadow-sm:0 2px 10px rgba(103,83,156,.07);
+    --shadow-md:var(--shadow); --shadow-lg:0 22px 50px rgba(103,83,156,.16);
+    /* Shape: soft but mature — clean rounded surfaces, not candy-round */
+    --radius:19px; --radius-sm:12px; --radius-lg:26px; --radius-xl:31px;
   }
   body.theme-lavender{background:var(--bg);}
+  /* ---- Ink & Paper (was "Monochrome"): an academic/editorial
+     notebook feel — warm ivory + charcoal + graphite, a serif display
+     face, thin borders and near-flat shadows — rather than a flat gray
+     skin. Class name kept as theme-monochrome so existing localStorage
+     selections keep resolving to the same theme. The "zero distractions"
+     aesthetic: this is also the theme with the most restrained
+     shape/elevation values of the set. ---- */
   body.theme-monochrome{
-    --tile-white:#F7F7F7; --tile-blue-deep:#303030; --tile-blue:#555; --tile-blue-mid:#888;
-    --tile-blue-pale:#D8D8D8; --tile-blue-paler:#F1F1F1; --ink:#222; --ink-soft:#707070;
-    --gold:#666; --green:#4D7658; --green-bg:#E5EEE7; --red:#9A4A4A; --red-bg:#F4E4E4; --grape:#666;
-    --bg:#F4F4F4; --surface:#FFFFFF; --surface-elevated:#FFFFFF; --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--tile-blue-mid);
-    --shadow:0 10px 28px rgba(0,0,0,.08); --shadow-sm:0 2px 8px rgba(0,0,0,.06);
+    --tile-white:#FAF8F3; --tile-blue-deep:#2B2926; --tile-blue:#524E48; --tile-blue-mid:#8A8378;
+    --tile-blue-pale:#DAD5C9; --tile-blue-paler:#F2EFE7; --ink:#232220; --ink-soft:#6E6A62;
+    --gold:#8A8378; --green:#4D7658; --green-bg:#E5EEE7; --red:#9A4A4A; --red-bg:#F4E4E4; --grape:#6E675E;
+    --bg:#F4F1EA; --surface:#FFFFFE; --surface-elevated:#FFFFFE; --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--tile-blue-mid);
+    --shadow:0 6px 18px rgba(30,28,24,.07); --shadow-sm:0 1px 4px rgba(30,28,24,.06);
+    --shadow-md:var(--shadow); --shadow-lg:0 14px 32px rgba(30,28,24,.10);
+    --font-display:'Source Serif 4', Georgia, 'Times New Roman', serif;
+    /* Shape: minimal decoration, thin borders, restrained corners */
+    --radius:10px; --radius-sm:6px; --radius-lg:14px; --radius-xl:18px;
+    --color-border-strong:var(--tile-blue);
   }
   body.theme-monochrome{background:var(--bg);}
   body.theme-forest{
@@ -176,9 +289,150 @@
     --tile-blue-pale:#CFE0D3; --tile-blue-paler:#EDF5EE; --ink:#24352C; --ink-soft:#66796D;
     --gold:#B28C45; --green:#4F8A68; --green-bg:#E1F0E5; --red:#B85B57; --red-bg:#F5E3E1; --grape:#756A98;
     --bg:#F1F7F2; --surface:#FFFFFF; --surface-elevated:#FFFFFF; --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--gold);
-    --shadow:0 10px 32px rgba(35,74,56,.10); --shadow-sm:0 2px 10px rgba(35,74,56,.07);
+    --shadow:0 12px 34px rgba(35,74,56,.14); --shadow-sm:0 3px 11px rgba(35,74,56,.10);
+    --shadow-md:var(--shadow); --shadow-lg:0 24px 54px rgba(35,74,56,.20);
+    /* Shape: mature and organic — a touch richer contrast than Garden */
+    --radius:18px; --radius-sm:11px; --radius-lg:24px; --radius-xl:29px;
   }
   body.theme-forest{background:var(--bg);}
+
+  /* =====================================================================
+     APPEARANCE MODE — dark variants, decoupled from theme.
+     ---------------------------------------------------------------------
+     Theme (above) controls the aesthetic; Appearance Mode controls
+     light/dark. body.mode-dark is the fallback (applies when no
+     theme-* class is present, i.e. Garden — "Garden correctly
+     represents the default/no-theme state" per spec). Every
+     body.mode-dark.theme-X block below is a 2-class selector, which
+     always outranks the single-class light-mode block above on CSS
+     specificity, so these apply correctly regardless of source order.
+     Only color + shadow tokens are redeclared here — shape (radius) is
+     a theme property, not a mode property, so it simply cascades down
+     from the matching theme-X block untouched. This replaces the old
+     filter:invert(...) dark-mode hack, which repainted every theme
+     identically instead of giving each one its own considered dark
+     palette. ===================================================== */
+  body.mode-dark{
+    --tile-white:#141C16; --tile-blue-deep:#3F8258; --tile-blue:#8FBFA0; --tile-blue-mid:#D8B463;
+    --tile-blue-pale:#2B3A2F; --tile-blue-paler:#1D2921; --ink:#EAF0E7; --ink-soft:#9DB0A2;
+    --gold:#D8B463; --green:#6FCB93; --green-bg:#1B3226; --red:#E37B70; --red-bg:#3A211E; --grape:#B49AD6;
+    --bg:#101711; --surface:#182019; --surface-elevated:#1E271F;
+    --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--gold);
+    --shadow:0 14px 36px rgba(0,0,0,.40); --shadow-sm:0 3px 12px rgba(0,0,0,.32);
+    --shadow-md:var(--shadow); --shadow-lg:0 26px 58px rgba(0,0,0,.48);
+    background:var(--bg);
+  }
+  body.mode-dark.theme-kawaii{
+    --tile-white:#1E1620; --tile-blue-deep:#E41850; --tile-blue:#C98BAE; --tile-blue-mid:#E8B34C;
+    --tile-blue-pale:#3A2A38; --tile-blue-paler:#241A26; --ink:#F5E7EE; --ink-soft:#B79AB0;
+    --gold:#E8B34C; --green:#6FCBA0; --green-bg:#1C3229; --red:#F17C9C; --red-bg:#3A2028; --grape:#B79AE8;
+    --bg:#170F19; --surface:#211722; --surface-elevated:#281D2A;
+    --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--grape);
+    --shadow:0 14px 36px rgba(0,0,0,.38); --shadow-sm:0 3px 12px rgba(0,0,0,.3);
+    --shadow-md:var(--shadow); --shadow-lg:0 26px 58px rgba(0,0,0,.46);
+    background:var(--bg);
+  }
+  /* Midnight's dark variant is the palette this theme is best known
+     for — the original hand-tuned "deep navy + electric blue" values. */
+  body.mode-dark.theme-midnight{
+    --tile-white:#131A26; --tile-blue-deep:#1E74D9; --tile-blue:#7C93B3; --tile-blue-mid:#4FD6C0;
+    --tile-blue-pale:#2A3548; --tile-blue-paler:#1B2333; --ink:#E8EDF6; --ink-soft:#8C99B3;
+    --gold:#E3B04B; --green:#4FD6A8; --green-bg:#173229; --red:#E8697B; --red-bg:#3A2028; --grape:#8E8FE8;
+    --bg:#0D1420; --surface:#161E2C; --surface-elevated:#1B2434;
+    --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--tile-blue-mid);
+    --shadow:0 10px 32px rgba(0,0,0,.35); --shadow-sm:0 2px 10px rgba(0,0,0,.3);
+    --shadow-md:var(--shadow); --shadow-lg:0 26px 60px rgba(0,0,0,.45);
+    --focus-ring:0 0 0 3px rgba(79,214,192,.35);
+    background:var(--bg);
+  }
+  body.mode-dark.theme-ocean{
+    --tile-white:#0E1B22; --tile-blue-deep:#217CB1; --tile-blue:#6FA0B8; --tile-blue-mid:#3FD0C7;
+    --tile-blue-pale:#1E3540; --tile-blue-paler:#152A32; --ink:#E4F3F7; --ink-soft:#8FB2BF;
+    --gold:#E3B95E; --green:#4FBF97; --green-bg:#173229; --red:#E0757C; --red-bg:#3A2224; --grape:#8A9CE0;
+    --bg:#0B161C; --surface:#122029; --surface-elevated:#17272F;
+    --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--tile-blue-mid);
+    --shadow:0 14px 34px rgba(0,0,0,.36); --shadow-sm:0 3px 11px rgba(0,0,0,.28);
+    --shadow-md:var(--shadow); --shadow-lg:0 24px 54px rgba(0,0,0,.44);
+    background:var(--bg);
+  }
+  body.mode-dark.theme-sunset{
+    --tile-white:#1D140F; --tile-blue-deep:#B75C21; --tile-blue:#C79A78; --tile-blue-mid:#E6B15E;
+    --tile-blue-pale:#3A2A20; --tile-blue-paler:#251A14; --ink:#F3E6D8; --ink-soft:#BB9C84;
+    --gold:#E6B15E; --green:#7FAE7A; --green-bg:#213626; --red:#DD8570; --red-bg:#3B241E; --grape:#B694A0;
+    --bg:#170F0B; --surface:#201611; --surface-elevated:#271C15;
+    --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--tile-blue-mid);
+    --shadow:0 16px 38px rgba(0,0,0,.40); --shadow-sm:0 4px 13px rgba(0,0,0,.32);
+    --shadow-md:var(--shadow); --shadow-lg:0 28px 60px rgba(0,0,0,.48);
+    background:var(--bg);
+  }
+  body.mode-dark.theme-lavender{
+    --tile-white:#181423; --tile-blue-deep:#875CD9; --tile-blue:#9A87C4; --tile-blue-mid:#D9B4EE;
+    --tile-blue-pale:#312A47; --tile-blue-paler:#221D33; --ink:#EDE7F7; --ink-soft:#A79CC4;
+    --gold:#D9B25E; --green:#7BB894; --green-bg:#1E3327; --red:#DD8494; --red-bg:#3A2129; --grape:#B69CE8;
+    --bg:#120F1C; --surface:#1A1626; --surface-elevated:#211C2F;
+    --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--tile-blue-mid);
+    --shadow:0 14px 34px rgba(0,0,0,.38); --shadow-sm:0 3px 11px rgba(0,0,0,.3);
+    --shadow-md:var(--shadow); --shadow-lg:0 24px 54px rgba(0,0,0,.46);
+    background:var(--bg);
+  }
+  body.mode-dark.theme-monochrome{
+    --tile-white:#17140F; --tile-blue-deep:#8D721B; --tile-blue:#A39C8C; --tile-blue-mid:#C9A227;
+    --tile-blue-pale:#332F28; --tile-blue-paler:#221F1A; --ink:#EDE8DC; --ink-soft:#A39C8C;
+    --gold:#C9A227; --green:#7BAE85; --green-bg:#1E2E22; --red:#D08373; --red-bg:#332420; --grape:#9C8F7A;
+    --bg:#151310; --surface:#1C1915; --surface-elevated:#221E19;
+    --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--tile-blue-mid);
+    --shadow:0 8px 20px rgba(0,0,0,.30); --shadow-sm:0 2px 6px rgba(0,0,0,.26);
+    --shadow-md:var(--shadow); --shadow-lg:0 16px 36px rgba(0,0,0,.36);
+    background:var(--bg);
+  }
+  body.mode-dark.theme-forest{
+    --tile-white:#101913; --tile-blue-deep:#40825A; --tile-blue:#8FAE96; --tile-blue-mid:#D6B15E;
+    --tile-blue-pale:#28362B; --tile-blue-paler:#1A241C; --ink:#E8F0E9; --ink-soft:#94A896;
+    --gold:#D6B15E; --green:#7ABE95; --green-bg:#1C3126; --red:#DD8776; --red-bg:#372420; --grape:#9C8FB8;
+    --bg:#0D1510; --surface:#151F18; --surface-elevated:#1B281F;
+    --primary:var(--tile-blue-deep); --primary-soft:var(--tile-blue-paler); --accent:var(--gold);
+    --shadow:0 16px 38px rgba(0,0,0,.40); --shadow-sm:0 4px 13px rgba(0,0,0,.32);
+    --shadow-md:var(--shadow); --shadow-lg:0 28px 60px rgba(0,0,0,.48);
+    background:var(--bg);
+  }
+
+  /* =====================================================================
+     ACCENT — a small independent color choice layered on top of theme +
+     mode. Overrides only the primary/focus/highlight family (tile-blue-
+     deep/tile-blue-mid + primary/accent), never success/danger, so
+     correct/wrong states stay unambiguous no matter the accent chosen.
+     "Theme default" = no data-accent attribute = no override. ===== */
+  body[data-accent="sage"]{ --tile-blue-deep:#3F6E52; --tile-blue-mid:#6FA97F; --primary:var(--tile-blue-deep); --accent:var(--tile-blue-mid); }
+  body[data-accent="blue"]{ --tile-blue-deep:#2A5FA8; --tile-blue-mid:#4FA9DE; --primary:var(--tile-blue-deep); --accent:var(--tile-blue-mid); }
+  body[data-accent="rose"]{ --tile-blue-deep:#C2426B; --tile-blue-mid:#E8829F; --primary:var(--tile-blue-deep); --accent:var(--tile-blue-mid); }
+  body[data-accent="lavender"]{ --tile-blue-deep:#7059A6; --tile-blue-mid:#B79BE6; --primary:var(--tile-blue-deep); --accent:var(--tile-blue-mid); }
+  body[data-accent="amber"]{ --tile-blue-deep:#B5791F; --tile-blue-mid:#E6B15E; --primary:var(--tile-blue-deep); --accent:var(--tile-blue-mid); }
+
+  /* =====================================================================
+     THEME INTENSITY — "Subtle \u2194 Expressive". Subtle turns down
+     decorative language (borders, shadows, gradients, motion) without
+     removing any functionality, for cramming sessions. ===== */
+  body[data-intensity="subtle"]{
+    --decoration-opacity:0;
+    --shadow-scale:.4;
+    --shadow:0 2px 8px rgba(0,0,0,.08);
+    --shadow-sm:0 1px 4px rgba(0,0,0,.06);
+    --shadow-md:var(--shadow);
+    --shadow-lg:0 4px 14px rgba(0,0,0,.10);
+    --transition-fast:80ms ease;
+    --transition-normal:120ms ease;
+  }
+  body[data-intensity="subtle"] .vine-edge-top,
+  body[data-intensity="subtle"] .vine-edge-bottom,
+  body[data-intensity="subtle"] .vine-edge-left,
+  body[data-intensity="subtle"] .vine-edge-right,
+  body[data-intensity="subtle"] .vine-cluster{
+    display:none !important;
+  }
+  body[data-intensity="subtle"] .header-mark{
+    background:var(--color-primary) !important;
+  }
+
   body.theme-midnight .search-input,
   body.theme-midnight textarea,
   body.theme-midnight .header-title,
@@ -208,8 +462,18 @@ display:flex;
 justify-content:center;
 padding:28px clamp(16px, 4vw, 48px) 116px;
 overflow-x:auto;
-transition:background .25s ease, color .25s ease;
+transition:background var(--transition-normal), color var(--transition-normal), border-color var(--transition-normal);
 }
+  /* Theme-change polish: cards, surfaces, controls, and text all ease
+     between palettes together (~150-250ms) instead of snapping, while
+     respecting prefers-reduced-motion above. Layout/size is intentionally
+     excluded so switching themes never reflows the page. */
+  .card, .theme-preview-card, .sidebar-nav, .set-item, .stat-tile, .folder-tile,
+  .opt, .modal-input, .num-input, table.sheet td, .settings-nav-row, .btn-ghost,
+  .btn-primary, .switch-track, input, textarea, select{
+    transition:background var(--transition-normal), border-color var(--transition-normal),
+      color var(--transition-normal), box-shadow var(--transition-normal);
+  }
   @media (prefers-reduced-motion: reduce){
     *, *::before, *::after{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; }
   }
@@ -593,10 +857,10 @@ transition:background .25s ease, color .25s ease;
     font-family:var(--font); font-size:13px; font-weight:700; background:#fff;
   }
   .brain-break-countdown .bb-step:hover{ background:var(--ink); color:#fff; }
-  body.dark-mode .brain-break-countdown{
-    background:rgba(30,30,35,.95); border-color:#3a3a42; color:#e8e8f0;
+  body.mode-dark .brain-break-countdown{
+    background:var(--surface-elevated); border-color:var(--border); color:var(--ink);
   }
-  body.dark-mode .brain-break-countdown .bb-step{ background:#2a2a32; border-color:#e8e8f0; }
+  body.mode-dark .brain-break-countdown .bb-step{ background:var(--surface); border-color:var(--ink); }
   .progress-fill{height:100%; background:linear-gradient(90deg, var(--tile-blue-mid), var(--green)); border-radius:999px; transition:width .4s cubic-bezier(.34,1.1,.4,1);}
 
   .index-no{
@@ -1093,41 +1357,23 @@ html.pseudo-fullscreen .app-shell{
   transform-origin:top center;
 }
 
-/* --- Dark mode: filter-invert the whole page so every existing color
-   relationship (contrast, hierarchy) is preserved automatically, then
-   invert images/icons back so they read normally. --- */
-body.dark-mode{
-  background:#121215; /* Softer than pure black */
+/* --- Appearance Mode (dark): per-theme dark palettes are defined
+   earlier in the stylesheet as body.mode-dark[.theme-X] variable
+   overrides. This block only handles the handful of components that
+   use raw hex instead of theme variables (zoom controls, page bg). --- */
+body.mode-dark{
+  background:var(--bg, #121215);
 }
-body.dark-mode .app-shell{
-  filter:invert(0.92) hue-rotate(180deg) brightness(1.05) contrast(0.9);
+body.mode-dark .zoom-controls{
+  background:var(--surface-elevated);
+  border-color:var(--border);
 }
-body.dark-mode .app-shell img,
-body.dark-mode .app-shell svg,
-body.dark-mode .app-shell video{
-  /* Reverse the filter exactly so images/videos look normal */
-  filter:invert(0.92) hue-rotate(180deg) brightness(1.05) contrast(0.9);
+body.mode-dark .zoom-controls button{
+  background:var(--surface);
+  color:var(--ink);
 }
-body.dark-mode .app-shell .case-avatar-doctor::after,
-body.dark-mode .app-shell .case-avatar-patient-male::after,
-body.dark-mode .app-shell .case-avatar-patient-female::after,
-body.dark-mode .app-shell .plus-float{
-  /* These are real photos (CSS background-images) rendered as plain
-     text, so the img/svg/video counter-invert above never touched
-     them. Reverse the filter on just these so they read normally,
-     same trick as the avatar photos above. */
-  filter:invert(0.92) hue-rotate(180deg) brightness(1.05) contrast(0.9);
-}
-body.dark-mode .zoom-controls{
-  background:rgba(30,30,35,.95);
-  border-color:#3a3a42;
-}
-body.dark-mode .zoom-controls button{
-  background:#2a2a32;
-  color:#e8e8f0;
-}
-body.dark-mode .zoom-controls button:hover{
-  background:#3a3a45;
+body.mode-dark .zoom-controls button:hover{
+  background:var(--tile-blue-paler);
 }
 
 /* --- Local library / stats --- */
@@ -1216,17 +1462,53 @@ body.dark-mode .zoom-controls button:hover{
   transition:border-color .15s ease, transform .12s ease, box-shadow .15s ease;
 }
 .theme-preview-card:hover{ transform:translateY(-2px); box-shadow:var(--shadow-sm); }
-.theme-preview-swatch{
-  width:100%; height:30px; border-radius:9px; display:block;
+/* ---- Mini live previews: each card renders a tiny mock of the actual
+   app UI (top bar, a question line, an answer chip) using that theme's
+   own colors and corner radius, rather than a flat gradient swatch, so
+   picking a theme is an informed choice instead of a color guess. Each
+   .mock-<name> class only sets local --pv-* custom properties; the
+   shared .theme-preview-mock rules below do the actual rendering. ---- */
+.theme-preview-swatch, .theme-preview-mock{
+  width:100%; height:64px; border-radius:9px; display:block;
+  position:relative; overflow:hidden;
+  background:var(--pv-bg); border:1px solid var(--pv-border);
+  padding:7px 8px; box-sizing:border-box;
 }
-.swatch-garden{ background:linear-gradient(135deg,#DCD2B4,#3E7A5C,#C9A24E); }
-.swatch-kawaii{ background:linear-gradient(135deg,#FDF1F5,#E8567F,#E3A73B); }
-.swatch-midnight{ background:linear-gradient(135deg,#0D1420,#5B9CE8,#4FD6C0); }
-.swatch-ocean{ background:linear-gradient(135deg,#EAF7FA,#3B9AB0,#245B8F); }
-.swatch-sunset{ background:linear-gradient(135deg,#FFF1E8,#E9785B,#B84A6B); }
-.swatch-lavender{ background:linear-gradient(135deg,#F7F0FF,#9B7FCB,#67539C); }
-.swatch-monochrome{ background:linear-gradient(135deg,#F5F5F5,#888,#222); }
-.swatch-forest{ background:linear-gradient(135deg,#EEF6EF,#4F8A68,#234A38); }
+.theme-preview-mock .mock-topbar{
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom:6px;
+}
+.theme-preview-mock .mock-topbar::before{
+  content:""; display:block; width:20px; height:5px; border-radius:3px;
+  background:var(--pv-text); opacity:.55;
+}
+.theme-preview-mock .mock-dot{
+  width:7px; height:7px; border-radius:50%; background:var(--pv-primary); display:block;
+}
+.theme-preview-mock .mock-card{
+  background:var(--pv-surface); border:1px solid var(--pv-border);
+  border-radius:calc(var(--pv-radius) * .5); padding:5px 6px;
+  display:flex; flex-direction:column; gap:5px;
+}
+.theme-preview-mock .mock-line{
+  display:block; height:5px; width:70%; border-radius:3px;
+  background:var(--pv-text); opacity:.75;
+}
+.theme-preview-mock .mock-btn{
+  display:block; height:11px; width:46%; border-radius:calc(var(--pv-radius) * .35);
+  background:var(--pv-primary);
+}
+.mock-garden{ --pv-bg:#F7F1E1; --pv-surface:#fff; --pv-text:#2A2140; --pv-primary:#2C5A42; --pv-border:#DCD2B4; --pv-radius:20px; }
+.mock-kawaii{ --pv-bg:#FCF3F6; --pv-surface:#fffdfb; --pv-text:#4A3040; --pv-primary:#E8567F; --pv-border:#F3D8E2; --pv-radius:24px; }
+.mock-midnight{ --pv-bg:#0D1420; --pv-surface:#161E2C; --pv-text:#E8EDF6; --pv-primary:#5B9CE8; --pv-border:#2A3548; --pv-radius:14px; }
+.mock-ocean{ --pv-bg:#F1FAFC; --pv-surface:#fff; --pv-text:#17344A; --pv-primary:#245B8F; --pv-border:#C9E6EC; --pv-radius:18px; }
+.mock-sunset{ --pv-bg:#FBF1E4; --pv-surface:#FFFCF7; --pv-text:#3E2A1E; --pv-primary:#A8461F; --pv-border:#E8D2B8; --pv-radius:16px; }
+.mock-lavender{ --pv-bg:#F8F4FC; --pv-surface:#fff; --pv-text:#352A49; --pv-primary:#67539C; --pv-border:#E3D9F3; --pv-radius:19px; }
+.mock-monochrome{ --pv-bg:#F4F1EA; --pv-surface:#FFFFFE; --pv-text:#232220; --pv-primary:#2B2926; --pv-border:#DAD5C9; --pv-radius:10px; }
+.mock-forest{ --pv-bg:#F1F7F2; --pv-surface:#fff; --pv-text:#24352C; --pv-primary:#234A38; --pv-border:#CFE0D3; --pv-radius:18px; }
+/* legacy alias kept in case any other markup still references swatch-* */
+.swatch-garden, .swatch-kawaii, .swatch-midnight, .swatch-ocean, .swatch-sunset,
+.swatch-lavender, .swatch-monochrome, .swatch-forest{ height:30px; }
 .theme-preview-name{ font-family:var(--font-display); font-weight:700; font-size:13.5px; color:var(--text); }
 .theme-preview-desc{ font-size:11px; color:var(--text-muted); font-weight:600; }
 .theme-preview-check{
@@ -3973,57 +4255,90 @@ OUTCOME: NEG
         <div id="settingsPage-appearance" class="settings-page hidden">
         <button type="button" class="back-link settings-page-back">← Settings</button>
         <div class="backup-block">
-          <label class="field-label">Appearance theme</label>
-          <div class="hint" style="margin-top:0;">Switch the app's whole look — colors, border, and headline font. Your sets, stats, and progress aren't affected either way.</div>
+          <label class="field-label">Theme</label>
+          <div class="hint" style="margin-top:0;">Choose the atmosphere for your study space — palette, shape, and headline font. Your sets, stats, and progress aren't affected either way.</div>
           <div class="theme-preview-row" id="themeSwatchRow">
             <button type="button" class="theme-preview-card" id="themeGardenBtn" data-theme="garden">
-              <span class="theme-preview-swatch swatch-garden" aria-hidden="true"></span>
-              <span class="theme-preview-name">🌿 Garden</span>
-              <span class="theme-preview-desc">sage &amp; gold</span>
+              <span class="theme-preview-mock mock-garden" aria-hidden="true"><span class="mock-topbar"><span class="mock-dot"></span></span><span class="mock-card"><span class="mock-line"></span><span class="mock-btn"></span></span></span>
+              <span class="theme-preview-name">🌿 Study Garden</span>
+              <span class="theme-preview-desc">Calm · warm</span>
               <span class="theme-preview-check">✓</span>
             </button>
             <button type="button" class="theme-preview-card" id="themeKawaiiBtn" data-theme="kawaii">
-              <span class="theme-preview-swatch swatch-kawaii" aria-hidden="true"></span>
-              <span class="theme-preview-name">🎀 Kawaii</span>
-              <span class="theme-preview-desc">pink &amp; cream</span>
+              <span class="theme-preview-mock mock-kawaii" aria-hidden="true"><span class="mock-topbar"><span class="mock-dot"></span></span><span class="mock-card"><span class="mock-line"></span><span class="mock-btn"></span></span></span>
+              <span class="theme-preview-name">🎀 Kawaii Stationery</span>
+              <span class="theme-preview-desc">Cute · soft</span>
               <span class="theme-preview-check">✓</span>
             </button>
             <button type="button" class="theme-preview-card" id="themeMidnightBtn" data-theme="midnight">
-              <span class="theme-preview-swatch swatch-midnight" aria-hidden="true"></span>
-              <span class="theme-preview-name">🌌 Midnight</span>
-              <span class="theme-preview-desc">navy &amp; blue</span>
+              <span class="theme-preview-mock mock-midnight" aria-hidden="true"><span class="mock-topbar"><span class="mock-dot"></span></span><span class="mock-card"><span class="mock-line"></span><span class="mock-btn"></span></span></span>
+              <span class="theme-preview-name">🌙 Midnight Study</span>
+              <span class="theme-preview-desc">Focused</span>
               <span class="theme-preview-check">✓</span>
             </button>
             <button type="button" class="theme-preview-card" id="themeOceanBtn" data-theme="ocean">
-              <span class="theme-preview-swatch swatch-ocean" aria-hidden="true"></span>
-              <span class="theme-preview-name">🌊 Ocean</span>
-              <span class="theme-preview-desc">teal &amp; blue</span>
+              <span class="theme-preview-mock mock-ocean" aria-hidden="true"><span class="mock-topbar"><span class="mock-dot"></span></span><span class="mock-card"><span class="mock-line"></span><span class="mock-btn"></span></span></span>
+              <span class="theme-preview-name">🌊 Ocean Calm</span>
+              <span class="theme-preview-desc">Clean · airy</span>
               <span class="theme-preview-check">✓</span>
             </button>
             <button type="button" class="theme-preview-card" id="themeSunsetBtn" data-theme="sunset">
-              <span class="theme-preview-swatch swatch-sunset" aria-hidden="true"></span>
-              <span class="theme-preview-name">🌅 Sunset</span>
-              <span class="theme-preview-desc">coral &amp; rose</span>
+              <span class="theme-preview-mock mock-sunset" aria-hidden="true"><span class="mock-topbar"><span class="mock-dot"></span></span><span class="mock-card"><span class="mock-line"></span><span class="mock-btn"></span></span></span>
+              <span class="theme-preview-name">🍂 Autumn Desk</span>
+              <span class="theme-preview-desc">Warm library</span>
               <span class="theme-preview-check">✓</span>
             </button>
             <button type="button" class="theme-preview-card" id="themeLavenderBtn" data-theme="lavender">
-              <span class="theme-preview-swatch swatch-lavender" aria-hidden="true"></span>
-              <span class="theme-preview-name">💜 Lavender</span>
-              <span class="theme-preview-desc">soft violet</span>
+              <span class="theme-preview-mock mock-lavender" aria-hidden="true"><span class="mock-topbar"><span class="mock-dot"></span></span><span class="mock-card"><span class="mock-line"></span><span class="mock-btn"></span></span></span>
+              <span class="theme-preview-name">💜 Lavender Focus</span>
+              <span class="theme-preview-desc">Soft · elegant</span>
               <span class="theme-preview-check">✓</span>
             </button>
             <button type="button" class="theme-preview-card" id="themeMonochromeBtn" data-theme="monochrome">
-              <span class="theme-preview-swatch swatch-monochrome" aria-hidden="true"></span>
-              <span class="theme-preview-name">⚫ Monochrome</span>
-              <span class="theme-preview-desc">clean grayscale</span>
+              <span class="theme-preview-mock mock-monochrome" aria-hidden="true"><span class="mock-topbar"><span class="mock-dot"></span></span><span class="mock-card"><span class="mock-line"></span><span class="mock-btn"></span></span></span>
+              <span class="theme-preview-name">🖋 Ink &amp; Paper</span>
+              <span class="theme-preview-desc">Zero distractions</span>
               <span class="theme-preview-check">✓</span>
             </button>
             <button type="button" class="theme-preview-card" id="themeForestBtn" data-theme="forest">
-              <span class="theme-preview-swatch swatch-forest" aria-hidden="true"></span>
-              <span class="theme-preview-name">🌲 Forest</span>
-              <span class="theme-preview-desc">deep green</span>
+              <span class="theme-preview-mock mock-forest" aria-hidden="true"><span class="mock-topbar"><span class="mock-dot"></span></span><span class="mock-card"><span class="mock-line"></span><span class="mock-btn"></span></span></span>
+              <span class="theme-preview-name">🌲 Deep Forest</span>
+              <span class="theme-preview-desc">Rich · natural</span>
               <span class="theme-preview-check">✓</span>
             </button>
+          </div>
+        </div>
+
+        <div class="backup-block">
+          <label class="field-label">Appearance</label>
+          <div class="hint" style="margin-top:0;">Light or dark — independent of theme. Each theme has its own considered version of both.</div>
+          <div class="theme-preview-row" id="modeRow" style="grid-template-columns:repeat(3,1fr);">
+            <button type="button" class="theme-swatch-btn btn-ghost" id="modeLightBtn" data-mode="light">☀️ Light</button>
+            <button type="button" class="theme-swatch-btn btn-ghost" id="modeDarkBtn" data-mode="dark">🌙 Dark</button>
+            <button type="button" class="theme-swatch-btn btn-ghost" id="modeSystemBtn" data-mode="system">🖥️ System</button>
+          </div>
+        </div>
+
+        <div class="backup-block">
+          <label class="field-label">Accent</label>
+          <div class="hint" style="margin-top:0;">A small color choice layered on top of your theme — affects buttons, progress, and focus states only. Correct/wrong colors never change.</div>
+          <div class="theme-preview-row" id="accentRow" style="grid-template-columns:repeat(3,1fr);">
+            <button type="button" class="theme-swatch-btn btn-ghost" id="accentDefaultBtn" data-accent="default">● Theme default</button>
+            <button type="button" class="theme-swatch-btn btn-ghost" id="accentSageBtn" data-accent="sage">🟢 Sage</button>
+            <button type="button" class="theme-swatch-btn btn-ghost" id="accentBlueBtn" data-accent="blue">🔵 Blue</button>
+            <button type="button" class="theme-swatch-btn btn-ghost" id="accentRoseBtn" data-accent="rose">🌸 Rose</button>
+            <button type="button" class="theme-swatch-btn btn-ghost" id="accentLavenderBtn" data-accent="lavender">🟣 Lavender</button>
+            <button type="button" class="theme-swatch-btn btn-ghost" id="accentAmberBtn" data-accent="amber">🟡 Amber</button>
+          </div>
+        </div>
+
+        <div class="backup-block">
+          <label class="field-label">Theme intensity</label>
+          <div class="hint" style="margin-top:0;">Cramming? Subtle turns down borders, shadows, and motion so you can focus, without hiding anything.</div>
+          <div class="row" style="gap:12px; flex-wrap:nowrap; align-items:center; margin-top:10px;">
+            <span style="font-size:11px; font-weight:700; color:var(--text-muted);">Subtle</span>
+            <input type="range" id="intensitySlider" min="0" max="2" step="1" value="1" style="flex:1;">
+            <span style="font-size:11px; font-weight:700; color:var(--text-muted);">Expressive</span>
           </div>
         </div>
         </div>
@@ -6789,16 +7104,23 @@ function rgbToHsl(r, g, b){
   return {h: h * 360, s: s * 100, l: l * 100};
 }
 
+// ---- Background palette extraction, decoupled from the theme's core
+// semantic colors (bg/surface/text/borders) per the theming brief: a
+// custom background should feel like an *optional accent adaptation*,
+// not a silent re-theme. So this only ever nudges the same
+// primary/focus/highlight family the Accent picker uses (--tile-blue-
+// deep/-mid, plus -blue for hover states) — never --ink/--ink-soft
+// (body text) or the pale border/fill tones, which stay whatever the
+// chosen theme + mode say they should be. Inline styles on <html> still
+// win over the theme's class-based CSS (highest specificity), so an
+// uploaded photo's accent correctly layers on top of any theme/accent
+// choice, exactly like the Accent picker does.
 function applyPaletteFromHue(h, satPct){
   const s = Math.min(62, Math.max(30, satPct));
   const root = document.documentElement.style;
   root.setProperty('--tile-blue-deep', `hsl(${h.toFixed(1)},${s}%,24%)`);
   root.setProperty('--tile-blue', `hsl(${h.toFixed(1)},${Math.max(28, s - 4)}%,35%)`);
   root.setProperty('--tile-blue-mid', `hsl(${h.toFixed(1)},${Math.min(66, s + 8)}%,64%)`);
-  root.setProperty('--tile-blue-pale', `hsl(${h.toFixed(1)},${Math.min(60, s + 2)}%,89%)`);
-  root.setProperty('--tile-blue-paler', `hsl(${h.toFixed(1)},${Math.min(55, s - 2)}%,96.5%)`);
-  root.setProperty('--ink', `hsl(${h.toFixed(1)},42%,20%)`);
-  root.setProperty('--ink-soft', `hsl(${h.toFixed(1)},22%,46%)`);
 }
 
 function resetPalette(){
@@ -10508,27 +10830,31 @@ document.addEventListener('DOMContentLoaded',function(){
  document.getElementById('zoomOut').onclick=function(){scale=Math.max(0.8,scale-0.1);lsSet('topicReviewScale',scale);apply();};
  document.getElementById('zoomReset').onclick=function(){scale=1;lsSet('topicReviewScale',scale);apply();};
 
- /* ---- Dark mode: a filter-based invert keeps every existing color
-    correct relative to every other, without hand-overriding hundreds of
-    hard-coded hex values across the stylesheet. Images/icons get
-    inverted back so they still look normal. ---- */
- const darkBtn = document.getElementById('darkModeToggle');
- function applyDarkMode(on){
-   document.body.classList.toggle('dark-mode', on);
-   darkBtn.textContent = on ? '☀️' : '🌙';
-   darkBtn.title = on ? 'Switch to light mode' : 'Switch to dark mode';
- }
- applyDarkMode(lsGet('topicReviewDark') === '1');
- darkBtn.onclick = function(){
-   const on = !document.body.classList.contains('dark-mode');
-   lsSet('topicReviewDark', on ? '1' : '0');
-   applyDarkMode(on);
- };
+ /* =====================================================================
+    THEME SYSTEM v2
+    ---------------------------------------------------------------------
+    Four independently-persisted layers, each just a body class/attribute
+    plus a stored key — all the actual repainting is CSS variable
+    cascades (see the stylesheet), so none of this touches sets/stats/
+    study data:
 
- /* ---- Appearance theme: garden (default), kawaii, or midnight. Just a
-    body class plus a persisted key — the CSS variable overrides do the
-    rest, so this never touches sets/stats data. ---- */
+      Theme       body.theme-<name>        topicReviewTheme
+      Mode        body.mode-dark (or not)  topicReview_mode_v1     ('light'|'dark'|'system')
+      Accent      body[data-accent]        topicReview_accent_v1
+      Intensity   body[data-intensity]     topicReview_intensity_v1
+
+    Replaces the old filter:invert(...) dark-mode hack (which repainted
+    every theme identically) with real per-theme dark palettes, and
+    migrates the two old keys (topicReviewTheme stays as-is;
+    topicReviewDark '1'/'0' migrates into topicReview_mode_v1 the first
+    time this runs, then is left alone). ===================== */
+
  const THEME_KEY = 'topicReviewTheme';
+ const MODE_KEY = 'topicReview_mode_v1';
+ const ACCENT_KEY = 'topicReview_accent_v1';
+ const INTENSITY_KEY = 'topicReview_intensity_v1';
+ const INTENSITY_LEVELS = ['subtle','balanced','expressive'];
+
  const themeBtns = {
    garden: document.getElementById('themeGardenBtn'), kawaii: document.getElementById('themeKawaiiBtn'), midnight: document.getElementById('themeMidnightBtn'),
    ocean: document.getElementById('themeOceanBtn'), sunset: document.getElementById('themeSunsetBtn'), lavender: document.getElementById('themeLavenderBtn'),
@@ -10542,6 +10868,7 @@ document.addEventListener('DOMContentLoaded',function(){
  }
  let savedTheme = lsGet(THEME_KEY);
  let currentTheme = themeNames.includes(savedTheme) ? savedTheme : 'garden';
+ const isFirstEverThemePick = savedTheme === null;
  applyTheme(currentTheme);
  Object.entries(themeBtns).forEach(([name, btn]) => {
    if(!btn) return;
@@ -10549,8 +10876,97 @@ document.addEventListener('DOMContentLoaded',function(){
      currentTheme = name;
      lsSet(THEME_KEY, name);
      applyTheme(name);
+     // Picking Midnight for the first time defaults Appearance to dark,
+     // since that's the identity it's best known for — but only if the
+     // person hasn't already made an explicit mode choice this session.
+     if(name === 'midnight' && lsGet(MODE_KEY) === null){ currentMode = 'dark'; applyMode('dark'); }
    };
  });
+
+ /* ---- Appearance Mode: light / dark / system — fully independent of
+    theme. System follows the OS via matchMedia and keeps listening for
+    changes while 'system' is selected. ---- */
+ const darkBtn = document.getElementById('darkModeToggle');
+ const modeBtns = { light: document.getElementById('modeLightBtn'), dark: document.getElementById('modeDarkBtn'), system: document.getElementById('modeSystemBtn') };
+ const systemDarkMQ = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+ function resolvedDarkFor(mode){ return mode === 'dark' || (mode === 'system' && !!systemDarkMQ && systemDarkMQ.matches); }
+ function applyMode(mode){
+   const isDark = resolvedDarkFor(mode);
+   document.body.classList.toggle('mode-dark', isDark);
+   Object.entries(modeBtns).forEach(([name, btn]) => { if(btn) btn.classList.toggle('active', name === mode); });
+   if(darkBtn){
+     darkBtn.textContent = isDark ? '☀️' : '🌙';
+     darkBtn.title = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+   }
+ }
+ // Migrate the old on/off dark-mode key into the new light/dark/system
+ // key exactly once; afterwards topicReview_mode_v1 is authoritative.
+ let savedMode = lsGet(MODE_KEY);
+ if(savedMode === null){
+   const legacyDark = lsGet('topicReviewDark');
+   savedMode = legacyDark === '1' ? 'dark' : legacyDark === '0' ? 'light' : 'system';
+   lsSet(MODE_KEY, savedMode);
+ }
+ let currentMode = ['light','dark','system'].includes(savedMode) ? savedMode : 'system';
+ applyMode(currentMode);
+ Object.entries(modeBtns).forEach(([name, btn]) => {
+   if(!btn) return;
+   btn.onclick = function(){ currentMode = name; lsSet(MODE_KEY, name); applyMode(name); };
+ });
+ if(darkBtn){
+   darkBtn.onclick = function(){
+     // Quick toggle always sets an explicit light/dark choice (leaving
+     // "system" behind), matching a physical light-switch's behavior.
+     currentMode = resolvedDarkFor(currentMode) ? 'light' : 'dark';
+     lsSet(MODE_KEY, currentMode);
+     applyMode(currentMode);
+   };
+ }
+ if(systemDarkMQ){
+   const onSystemChange = () => { if(currentMode === 'system') applyMode('system'); };
+   if(systemDarkMQ.addEventListener) systemDarkMQ.addEventListener('change', onSystemChange);
+   else if(systemDarkMQ.addListener) systemDarkMQ.addListener(onSystemChange); // older Safari
+ }
+
+ /* ---- Accent: overrides only the primary/focus/highlight family (see
+    stylesheet) — never success/danger. "default" removes the override
+    entirely so the theme's own accent shows through. ---- */
+ const accentBtns = {
+   default: document.getElementById('accentDefaultBtn'), sage: document.getElementById('accentSageBtn'),
+   blue: document.getElementById('accentBlueBtn'), rose: document.getElementById('accentRoseBtn'),
+   lavender: document.getElementById('accentLavenderBtn'), amber: document.getElementById('accentAmberBtn')
+ };
+ function applyAccent(accent){
+   if(accent && accent !== 'default') document.body.setAttribute('data-accent', accent);
+   else document.body.removeAttribute('data-accent');
+   Object.entries(accentBtns).forEach(([name, btn]) => { if(btn) btn.classList.toggle('active', name === accent); });
+ }
+ let currentAccent = lsGet(ACCENT_KEY) || 'default';
+ applyAccent(currentAccent);
+ Object.entries(accentBtns).forEach(([name, btn]) => {
+   if(!btn) return;
+   btn.onclick = function(){ currentAccent = name; lsSet(ACCENT_KEY, name); applyAccent(name); };
+ });
+
+ /* ---- Theme intensity: a single 0–2 slider (Subtle / Balanced /
+    Expressive) mapped straight to data-intensity; "balanced" is simply
+    the absence of the attribute (today's normal look). ---- */
+ const intensitySlider = document.getElementById('intensitySlider');
+ function applyIntensity(level){
+   if(level === 'subtle') document.body.setAttribute('data-intensity', 'subtle');
+   else document.body.removeAttribute('data-intensity');
+ }
+ let savedIntensityIdx = parseInt(lsGet(INTENSITY_KEY), 10);
+ if(isNaN(savedIntensityIdx) || savedIntensityIdx < 0 || savedIntensityIdx > 2) savedIntensityIdx = 1;
+ applyIntensity(INTENSITY_LEVELS[savedIntensityIdx]);
+ if(intensitySlider){
+   intensitySlider.value = savedIntensityIdx;
+   intensitySlider.oninput = function(){
+     const idx = parseInt(intensitySlider.value, 10);
+     lsSet(INTENSITY_KEY, idx);
+     applyIntensity(INTENSITY_LEVELS[idx]);
+   };
+ }
 
  /* ---- Header greeting: time-of-day + theme-flavored, purely cosmetic
     text above the app name. ---- */
