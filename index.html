@@ -4491,6 +4491,13 @@ OUTCOME: NEG
             <input type="range" id="bgBlurSlider" min="0" max="30" step="1" value="9" style="flex:1;">
             <span id="bgBlurValue" style="font-weight:600; font-size:13px; min-width:34px; text-align:right;">9px</span>
           </div>
+
+          <label class="field-label" style="margin-top:18px;">Background brightness</label>
+          <div class="hint" style="margin-top:0;">The blurred background is darkened by default so text stays readable. Turn this up if it looks darker than your original image.</div>
+          <div class="row" style="gap:12px; flex-wrap:nowrap;">
+            <input type="range" id="bgBrightnessSlider" min="40" max="100" step="1" value="82" style="flex:1;">
+            <span id="bgBrightnessValue" style="font-weight:600; font-size:13px; min-width:34px; text-align:right;">82%</span>
+          </div>
         </div>
 
         <div class="backup-block">
@@ -4847,6 +4854,7 @@ const BG_KEY = 'topicReview_bg_v1';
 const BG_TYPE_KEY = 'topicReview_bgType_v1';
 const PALETTE_KEY = 'topicReview_palette_v1';
 const BG_BLUR_KEY = 'topicReview_bgBlur_v1';
+const BG_BRIGHTNESS_KEY = 'topicReview_bgBrightness_v1';
 const CARD_OPACITY_KEY = 'topicReview_cardOpacity_v1';
 function applyCardOpacity(pct){
   document.documentElement.style.setProperty('--card-alpha', (pct / 100));
@@ -7279,10 +7287,27 @@ function resetPalette(){
 // silently (swallowed by nearby try/catch blocks) and the slider's own
 // oninput handler had no try/catch, so it threw before it could even
 // update the "Xpx" label or save the value — the blur never actually changed.
-function applyBgBlur(px){
-  const n = Math.max(0, Math.min(30, parseInt(px, 10) || 0));
+// Blur and brightness are applied together as a single filter string, so each
+// setter needs to know the other's current value to avoid clobbering it. We
+// stash the last-applied values on the layer's dataset for that purpose.
+function applyBgFilter(blurPx, brightnessPct){
   const layer = $('bgLayer');
-  if(layer) layer.style.filter = `blur(${n}px) brightness(.82) saturate(1.15)`;
+  if(!layer) return;
+  const b = Math.max(0, Math.min(30, parseInt(blurPx, 10) || 0));
+  const br = Math.max(40, Math.min(100, parseInt(brightnessPct, 10) || 82));
+  layer.dataset.blur = b;
+  layer.dataset.brightness = br;
+  layer.style.filter = `blur(${b}px) brightness(${br / 100}) saturate(1.15)`;
+}
+function applyBgBlur(px){
+  const layer = $('bgLayer');
+  const currentBrightness = layer && layer.dataset.brightness ? layer.dataset.brightness : 82;
+  applyBgFilter(px, currentBrightness);
+}
+function applyBgBrightness(pct){
+  const layer = $('bgLayer');
+  const currentBlur = layer && layer.dataset.blur ? layer.dataset.blur : 9;
+  applyBgFilter(currentBlur, pct);
 }
 
 function applyBackgroundImage(dataUrl){
@@ -7319,10 +7344,13 @@ function resetBackground(){
   lsRemove(BG_TYPE_KEY);
   lsRemove(PALETTE_KEY);
 
-  applyBgBlur(9);
+  applyBgFilter(9, 82);
   lsRemove(BG_BLUR_KEY);
+  lsRemove(BG_BRIGHTNESS_KEY);
   if($('bgBlurSlider')){ $('bgBlurSlider').value = 9; }
   if($('bgBlurValue')){ $('bgBlurValue').textContent = '9px'; }
+  if($('bgBrightnessSlider')){ $('bgBrightnessSlider').value = 82; }
+  if($('bgBrightnessValue')){ $('bgBrightnessValue').textContent = '82%'; }
 }
 
 function handleBgImageFile(file){
@@ -7393,9 +7421,13 @@ function handleBgVideoFile(file){
     if(pal){ const p = JSON.parse(pal); applyPaletteFromHue(p.h, p.s); }
     const blur = lsGet(BG_BLUR_KEY);
     const blurPx = blur !== null ? blur : 9;
-    applyBgBlur(blurPx);
+    const brightness = lsGet(BG_BRIGHTNESS_KEY);
+    const brightnessPct = brightness !== null ? brightness : 82;
+    applyBgFilter(blurPx, brightnessPct);
     if($('bgBlurSlider')){ $('bgBlurSlider').value = blurPx; }
     if($('bgBlurValue')){ $('bgBlurValue').textContent = blurPx + 'px'; }
+    if($('bgBrightnessSlider')){ $('bgBrightnessSlider').value = brightnessPct; }
+    if($('bgBrightnessValue')){ $('bgBrightnessValue').textContent = brightnessPct + '%'; }
     const opacity = lsGet(CARD_OPACITY_KEY);
     const opacityPct = opacity !== null ? opacity : 100;
     applyCardOpacity(opacityPct);
@@ -7421,6 +7453,13 @@ $('bgBlurSlider').oninput = e => {
   lsSet(BG_BLUR_KEY, px);
 };
 
+$('bgBrightnessSlider').oninput = e => {
+  const pct = e.target.value;
+  applyBgBrightness(pct);
+  $('bgBrightnessValue').textContent = pct + '%';
+  lsSet(BG_BRIGHTNESS_KEY, pct);
+};
+
 $('cardOpacitySlider').oninput = e => {
   const pct = e.target.value;
   applyCardOpacity(pct);
@@ -7440,9 +7479,13 @@ $('cardOpacitySlider').oninput = e => {
     if(pal){ const p = JSON.parse(pal); applyPaletteFromHue(p.h, p.s); }
     const blur = lsGet(BG_BLUR_KEY);
     const blurPx = blur !== null ? blur : 9;
-    applyBgBlur(blurPx);
+    const brightness = lsGet(BG_BRIGHTNESS_KEY);
+    const brightnessPct = brightness !== null ? brightness : 82;
+    applyBgFilter(blurPx, brightnessPct);
     $('bgBlurSlider').value = blurPx;
     $('bgBlurValue').textContent = blurPx + 'px';
+    if($('bgBrightnessSlider')){ $('bgBrightnessSlider').value = brightnessPct; }
+    if($('bgBrightnessValue')){ $('bgBrightnessValue').textContent = brightnessPct + '%'; }
   }catch(e){}
 })();
 
@@ -9601,7 +9644,7 @@ async function collectBackgroundBackup(){
     const bg = await idbGet(BG_KEY);
     if(bg) data[BG_KEY] = bg;
   }catch(err){}
-  [BG_TYPE_KEY, PALETTE_KEY, BG_BLUR_KEY].forEach(k => {
+  [BG_TYPE_KEY, PALETTE_KEY, BG_BLUR_KEY, BG_BRIGHTNESS_KEY].forEach(k => {
     const v = lsGet(k);
     if(v !== null && v !== undefined) data[k] = v;
   });
@@ -9674,7 +9717,7 @@ $('importDataFile').onchange = e => {
 
     // Intentionally ignore all background keys, including them in old v2
     // backups. This preserves the background already installed on this device.
-    const backgroundKeys = new Set([BG_KEY, BG_TYPE_KEY, PALETTE_KEY, BG_BLUR_KEY]);
+    const backgroundKeys = new Set([BG_KEY, BG_TYPE_KEY, PALETTE_KEY, BG_BLUR_KEY, BG_BRIGHTNESS_KEY]);
     const entries = Object.entries(parsed.data).filter(([k]) => !backgroundKeys.has(k));
     const failedKeys = [];
     const appWrites = [];
@@ -9817,7 +9860,7 @@ $('importBgFile').onchange = e => {
     }
     try{
       await idbSet(BG_KEY, parsed.data[BG_KEY]);
-      for(const k of [BG_TYPE_KEY, PALETTE_KEY, BG_BLUR_KEY]){
+      for(const k of [BG_TYPE_KEY, PALETTE_KEY, BG_BLUR_KEY, BG_BRIGHTNESS_KEY]){
         if(Object.prototype.hasOwnProperty.call(parsed.data, k)) lsSet(k, parsed.data[k]);
       }
       const bg = parsed.data[BG_KEY];
@@ -9827,9 +9870,13 @@ $('importBgFile').onchange = e => {
       if(pal){ const p = JSON.parse(pal); applyPaletteFromHue(p.h, p.s); }
       const blur = lsGet(BG_BLUR_KEY);
       const blurPx = blur !== null ? blur : 9;
-      applyBgBlur(blurPx);
+      const brightness = lsGet(BG_BRIGHTNESS_KEY);
+      const brightnessPct = brightness !== null ? brightness : 82;
+      applyBgFilter(blurPx, brightnessPct);
       if($('bgBlurSlider')) $('bgBlurSlider').value = blurPx;
       if($('bgBlurValue')) $('bgBlurValue').textContent = blurPx + 'px';
+      if($('bgBrightnessSlider')) $('bgBrightnessSlider').value = brightnessPct;
+      if($('bgBrightnessValue')) $('bgBrightnessValue').textContent = brightnessPct + '%';
       e.target.value = '';
       alert('Background imported.');
     }catch(err){
@@ -9877,7 +9924,7 @@ async function runStorageCheck(){
   lines.push(roundTripOk ? '✅ Storage write/read test passed.' : '⚠️ Storage write/read test FAILED — writes here are not actually persisting, even though no error was thrown. This matches "import doesn\'t reflect."');
 
   // How much of this app's own data is already stored.
-  const appKeys = [SETS_KEY, STATS_KEY, GLOBAL_KEY, SESSIONS_KEY, CASE_PROGRESS_KEY, BG_KEY, BG_TYPE_KEY, PALETTE_KEY, BG_BLUR_KEY, BRAINBREAK_ENABLED_KEY, BRAINBREAK_INTERVAL_KEY];
+  const appKeys = [SETS_KEY, STATS_KEY, GLOBAL_KEY, SESSIONS_KEY, CASE_PROGRESS_KEY, BG_KEY, BG_TYPE_KEY, PALETTE_KEY, BG_BLUR_KEY, BG_BRIGHTNESS_KEY, BRAINBREAK_ENABLED_KEY, BRAINBREAK_INTERVAL_KEY];
   let appBytes = 0;
   appKeys.forEach(k => { const v = lsGet(k); if(v) appBytes += v.length; });
   lines.push(`This app is currently using: ${formatBytes(appBytes)}`);
