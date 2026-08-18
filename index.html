@@ -523,6 +523,19 @@ transition:background var(--transition-normal), color var(--transition-normal), 
     align-items:center;
     min-width:0;
     width:100%;
+    /* The zoom-controls script (see 'topicReviewScale' handling) always
+       applies an inline transform:scale(...) to this element, even at the
+       default 1.0 — and any transform creates a new stacking context. That
+       silently trapped .card-inner's z-index (see its own comment) inside
+       .app-shell's local stacking order, so raising .card-inner's z-index
+       alone never actually beat #studyPetOverlay (fixed, z-index:9990,
+       and NOT confined to one corner — it roams the screen). Explicit
+       position + z-index here makes .app-shell itself — as a whole unit,
+       transform or not — outrank the pet overlay in the shared root
+       stacking context, so wherever the pet wanders, real app content
+       underneath it stays clickable. */
+    position:relative;
+    z-index:9991;
   }
 
   /* ---- App shell header: a real application header rather than a
@@ -970,6 +983,40 @@ transition:background var(--transition-normal), color var(--transition-normal), 
   @keyframes optShake{ 0%,100%{transform:translateX(0);} 25%{transform:translateX(-3px);} 75%{transform:translateX(3px);} }
   @media (prefers-reduced-motion: reduce){ .opt.correct, .opt.wrong{ animation:none; } }
 
+  /* ---- Post-answer review mode: once a question is answered, every
+     choice stays enabled (see selectAnswer/restoreAnsweredView, which no
+     longer disable the buttons) so the student can keep tapping A/B/C/D
+     as a mini review menu. #optionsList.reviewable is toggled on at that
+     point purely for this affordance styling — the little chevron and
+     pointer cursor — never for scoring. .opt.reviewing marks whichever
+     choice's explanation is currently showing below; it's independent of
+     (and layered on top of) the permanent .correct/.wrong marks so
+     re-tapping never disturbs the original answer record. ---- */
+  #optionsList.reviewable .opt{ cursor:pointer; }
+  #optionsList.reviewable .opt::after{
+    content:'\203A';
+    margin-left:auto;
+    padding-left:8px;
+    opacity:.38;
+    font-weight:700;
+    font-size:17px;
+    line-height:1;
+  }
+  .opt.reviewing{
+    box-shadow:0 0 0 3px color-mix(in srgb, var(--grape) 42%, transparent);
+    border-color:var(--grape);
+  }
+  .review-hint{
+    font-family:var(--font);
+    font-size:11px;
+    font-weight:600;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--ink-soft);
+    text-align:center;
+    margin:2px 0 4px;
+  }
+
   .tip-box{
     margin-top:18px;
     padding:14px 16px;
@@ -994,6 +1041,53 @@ transition:background var(--transition-normal), color var(--transition-normal), 
     display:block;
     margin-bottom:5px;
   }
+
+  /* Option-specific feedback box: sits between the answer choices and the
+     broader Exam Tip box. Uses the SAME red/green pairing as the answer
+     buttons themselves (--red-bg/--wrong-text, --green-bg/--correct-text)
+     so "this option is wrong" reads unmistakably, not just via a thin
+     border accent. .ofb-mixed is the initial (before any tap) view for a
+     wrong first attempt, which holds both a "your answer" and a "correct
+     answer" block — the box itself stays neutral there since it's not
+     committing to one color, and each inner .ofb-block carries its own
+     tint instead (see below). */
+  .option-feedback-box{ border-left-color:var(--grape); margin-top:10px; }
+  .option-feedback-box .tip-label{ color:var(--grape); }
+  .option-feedback-box.ofb-correct{
+    background:var(--green-bg);
+    border-left-color:var(--success);
+    color:var(--correct-text,#284D38);
+  }
+  .option-feedback-box.ofb-correct .tip-label{ color:var(--correct-text,#284D38); }
+  .option-feedback-box.ofb-incorrect{
+    background:var(--red-bg);
+    border-left-color:var(--danger);
+    color:var(--wrong-text,#6B2A21);
+  }
+  .option-feedback-box.ofb-incorrect .tip-label{ color:var(--wrong-text,#6B2A21); }
+  .option-feedback-box.ofb-mixed{ border-left-color:var(--gold); }
+  .option-feedback-box.ofb-mixed .tip-label{ color:var(--gold); }
+  .ofb-para{ display:block; white-space:pre-wrap; }
+  .ofb-block{
+    padding:10px 12px;
+    border-radius:0 10px 10px 0;
+    margin-bottom:10px;
+    border-left:3px solid transparent;
+  }
+  .ofb-block:last-child{ margin-bottom:0; }
+  .ofb-block-wrong{ background:var(--red-bg); border-left-color:var(--danger); color:var(--wrong-text,#6B2A21); }
+  .ofb-block-correct{ background:var(--green-bg); border-left-color:var(--success); color:var(--correct-text,#284D38); }
+  .ofb-block-label{
+    display:block;
+    font-family:var(--font);
+    font-weight:700;
+    font-size:10.5px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    margin-bottom:4px;
+  }
+  .ofb-wrong-label{ color:var(--wrong-text,#6B2A21); }
+  .ofb-correct-label{ color:var(--correct-text,#284D38); }
   .footer-row{
     display:flex; justify-content:space-between; align-items:center; margin-top:22px;
     flex-wrap:wrap; gap:10px;
@@ -3988,6 +4082,11 @@ OUTCOME: NEG
         </div>
         <div class="question" id="questionText"></div>
         <div class="options" id="optionsList"></div>
+        <div class="review-hint hidden" id="reviewHint">Tap an option to review it</div>
+        <div class="tip-box option-feedback-box hidden" id="optionFeedbackBox">
+          <span class="tip-label" id="optionFeedbackLabel">Review</span>
+          <span id="optionFeedbackText"></span>
+        </div>
 
         <div class="card-edit-panel hidden" id="cardEditPanel">
           <label class="field-label">Question</label>
@@ -4852,6 +4951,8 @@ let score = 0;
 let missedSet = new Map();
 let flaggedSet = new Set(); // card keys the user has marked for review mid-quiz
 let answered = false;
+let currentChosen = null;   // the option text the student actually submitted
+let currentIsCorrect = false;
 
 const $ = id => document.getElementById(id);
 const tableBody = document.getElementById('tableBody');
@@ -10405,12 +10506,12 @@ $('saveCardEditBtn').onclick = () => {
   current.options = newOptions;
   current.mode = 'full'; // now hand-authored — stop regenerating distractors for this card
   // The single "Exam tip" box in this editor is the only tip field a
-  // person can actually see and edit here. But buildFeedbackText() prefers
-  // per-option tips + a separate rationale (card.optionTips/card.rationale)
-  // over card.tip whenever they're present — which every Samplex-imported
-  // card has. That meant an edit made here (including bolding) saved fine
-  // into card.tip but was then silently ignored during the quiz, which
-  // kept showing the untouched original optionTips/rationale text instead.
+  // person can actually see and edit here. But buildExamTipText() prefers
+  // card.rationale over card.tip whenever it's present — which every
+  // Samplex-imported card has. That meant an edit made here (including
+  // bolding) saved fine into card.tip but was then silently ignored during
+  // the quiz, which kept showing the untouched original rationale text
+  // instead.
   // Clearing them makes this one box the single source of truth for the
   // tip shown after answering, matching what the editor actually lets you
   // change.
@@ -10455,6 +10556,8 @@ $('saveCardEditBtn').onclick = () => {
 
 function showCard(restoreOptions){
   answered = false;
+  currentChosen = null;
+  currentIsCorrect = false;
   const card = current;
   startQuestionTimer();
   hideConfidenceRow();
@@ -10476,21 +10579,38 @@ function showCard(restoreOptions){
   $('nextBtn').classList.add('hidden');
   const notice = $('learningNotice');
   if(notice) notice.classList.add('hidden');
+  $('reviewHint').classList.add('hidden');
+  const ofb = $('optionFeedbackBox');
+  ofb.classList.add('hidden');
+  ofb.style.display = 'none';
+  ofb.classList.remove('ofb-correct','ofb-incorrect','ofb-mixed');
 
   const letters = ['A','B','C','D'];
   const options = restoreOptions && restoreOptions.length ? restoreOptions : buildOptions(card);
   currentOptions = options;
   const list = $('optionsList');
+  list.classList.remove('reviewable');
   list.innerHTML = '';
   options.forEach((opt, i) => {
     const btn = document.createElement('button');
     btn.className = 'opt';
     btn.dataset.value = opt;
     btn.innerHTML = `<span class="letter">${letters[i]}</span><span>${escapeHtml(opt)}</span>`;
-    btn.onclick = () => selectAnswer(btn, opt, card);
+    btn.onclick = () => handleOptionClick(btn, opt, i, card);
     list.appendChild(btn);
   });
   saveSession();
+}
+
+// Every answer-choice button routes through here for the whole life of a
+// card. Before the student has answered, a tap submits and scores the
+// question (selectAnswer). After that, the buttons stay enabled — see
+// selectAnswer/restoreAnsweredView, which no longer disable() them — so
+// further taps just switch which option's explanation is showing
+// (reviewOption) without touching the score or the recorded answer.
+function handleOptionClick(btn, opt, idx, card){
+  if(!answered){ selectAnswer(btn, opt, card); return; }
+  reviewOption(btn, opt, idx, card);
 }
 
 function escapeHtml(s){
@@ -10509,27 +10629,98 @@ function mdBoldToHtml(s){
   return escapeHtml(s || '').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
 }
 
-// For Samplex cards (per-option tips + rationale), build the feedback text
-// shown after answering: the exam tip for whichever option was chosen,
-// followed by the overall rationale. Falls back to the plain card.tip for
-// Classic/Full MC cards, which don't have per-option tips.
-function buildFeedbackText(card, chosen){
-  if(card.optionTips && card.options){
-    const idx = card.options.findIndex(o => o.toLowerCase() === chosen.toLowerCase());
-    const optTip = idx >= 0 ? (card.optionTips[idx] || '') : '';
-    const parts = [];
-    if(optTip) parts.push(optTip);
-    if(card.rationale) parts.push(card.rationale);
-    return parts.join('\n\n');
+// The Exam Tip box is the broader, whole-question takeaway — completely
+// separate from any single option's box below. Samplex cards carry this
+// as card.rationale; Classic/Full MC cards only ever had the single
+// card.tip, so that's still the fallback for them.
+function buildExamTipText(card){
+  return card.rationale || card.tip || '';
+}
+
+// Looks up a specific option's authored Samplex content — for every
+// option A-D this is a real, question-specific explanation of why that
+// option is (or isn't) the best answer, not just a generic fact (see
+// SAMPLEX_LLM_PROMPT_TEMPLATE). Matches by option TEXT rather than array
+// position, because the on-screen choices are a shuffled copy of
+// card.options (buildOptions -> shuffle), so a displayed option's index
+// never reliably matches its index in card.options/card.optionTips.
+function optionTipFor(card, optText){
+  if(!card.optionTips || !Array.isArray(card.options)) return '';
+  const idx = card.options.findIndex(o => o.toLowerCase() === optText.toLowerCase());
+  return idx >= 0 ? (card.optionTips[idx] || '') : '';
+}
+
+// Builds the inner HTML for one option's slot in the review area: that
+// option's own authored explanation. Falls back to a plain notice only
+// for older/Classic cards that were never authored with per-option tips.
+function optionBodyHtml(card, optText){
+  const content = optionTipFor(card, optText);
+  if(content) return `<span class="ofb-para">${mdBoldToHtml(content)}</span>`;
+  return `<span class="ofb-para">No additional notes for this option — see the exam tip below.</span>`;
+}
+
+// The combined view shown the moment a question is answered, before the
+// student has tapped anything else: their own pick plus the correct
+// answer side by side (each clearly marked right/wrong) when they got it
+// wrong, or just the single correct block when they got it right.
+// Tapping any option afterward (see reviewOption) replaces this with
+// that option's single-block view.
+function renderInitialOptionFeedback(card, chosen, isCorrect){
+  const letters = ['A','B','C','D'];
+  const chosenIdx = currentOptions.findIndex(o => o.toLowerCase() === chosen.toLowerCase());
+  const correctIdx = currentOptions.findIndex(o => o.toLowerCase() === card.back.toLowerCase());
+  const box = $('optionFeedbackBox');
+  box.classList.remove('ofb-correct','ofb-incorrect','ofb-mixed');
+  if(isCorrect){
+    $('optionFeedbackLabel').textContent = `✓ ${letters[chosenIdx]} — Correct`;
+    $('optionFeedbackText').innerHTML = optionBodyHtml(card, chosen);
+    box.classList.add('ofb-correct');
+  } else {
+    $('optionFeedbackLabel').textContent = 'Review your answer';
+    $('optionFeedbackText').innerHTML =
+      `<div class="ofb-block ofb-block-wrong"><span class="ofb-block-label ofb-wrong-label">✕ ${letters[chosenIdx]} — Your answer</span>${optionBodyHtml(card, chosen)}</div>` +
+      `<div class="ofb-block ofb-block-correct"><span class="ofb-block-label ofb-correct-label">✓ ${letters[correctIdx]} — Correct answer</span>${optionBodyHtml(card, card.back)}</div>`;
+    box.classList.add('ofb-mixed');
   }
-  return card.tip || '';
+  box.classList.remove('hidden');
+  box.style.display = 'block';
+  $('optionsList').classList.add('reviewable');
+  $('reviewHint').classList.remove('hidden');
+}
+
+// Tapping any choice after the question is answered: swap the review
+// box over to that single option's view — its own authored explanation,
+// clearly marked correct or incorrect. Never touches score, the
+// recorded answer, or the permanent correct/wrong marks on the buttons —
+// .opt.reviewing is purely a "this is what's showing below" ring, so the
+// student can freely click through A, B, C, D and back again.
+function reviewOption(btn, opt, idx, card){
+  const letters = ['A','B','C','D'];
+  document.querySelectorAll('.opt').forEach(o => o.classList.remove('reviewing'));
+  btn.classList.add('reviewing');
+  const isCorrect = opt.toLowerCase() === card.back.toLowerCase();
+  const isChosen = currentChosen !== null && opt.toLowerCase() === currentChosen.toLowerCase();
+  const label = isCorrect
+    ? `✓ ${letters[idx]} — Correct`
+    : (isChosen ? `✕ ${letters[idx]} — Your answer` : `✕ ${letters[idx]} — Why it's incorrect`);
+  $('optionFeedbackLabel').textContent = label;
+  $('optionFeedbackText').innerHTML = optionBodyHtml(card, opt);
+  const box = $('optionFeedbackBox');
+  box.classList.remove('hidden','ofb-correct','ofb-incorrect','ofb-mixed');
+  box.style.display = 'block';
+  box.classList.add(isCorrect ? 'ofb-correct' : 'ofb-incorrect');
 }
 
 function selectAnswer(btn, chosen, card){
   if(answered) return;
   answered = true;
+  currentChosen = chosen;
   const isCorrect = chosen.toLowerCase() === card.back.toLowerCase();
-  document.querySelectorAll('.opt').forEach(o => o.disabled = true);
+  currentIsCorrect = isCorrect;
+  // Buttons deliberately stay enabled here (previously: disabled = true)
+  // so every choice remains tappable as a review menu after answering —
+  // see handleOptionClick/reviewOption. Score/recorded-answer are safe
+  // because handleOptionClick only calls selectAnswer while !answered.
   recordAnswer(card, isCorrect);
   const responseTimeMs = readQuestionTimer();
   const attempt = recordAttempt({card, chosen, isCorrect, responseTimeMs});
@@ -10551,9 +10742,10 @@ function selectAnswer(btn, chosen, card){
   $('scoreText').textContent = `Score ${score}`;
   $('progressText').textContent = `Mastered ${masteredCount} / ${totalCards}`;
   $('progressFill').style.width = (masteredCount / totalCards * 100) + '%';
-  const feedbackText = buildFeedbackText(card, chosen);
-  if(feedbackText){
-    $('tipText').innerHTML = mdBoldToHtml(feedbackText);
+  renderInitialOptionFeedback(card, chosen, isCorrect);
+  const examTipText = buildExamTipText(card);
+  if(examTipText){
+    $('tipText').innerHTML = mdBoldToHtml(examTipText);
     $('tipBox').style.display = 'block';
   } else {
     $('tipBox').style.display = 'none';
@@ -10637,8 +10829,12 @@ function applyConfidence(attempt, level, btnsWrap, chosenBtn){
 
 function restoreAnsweredView(card, chosen, isCorrect){
   answered = true;
+  currentChosen = chosen;
+  currentIsCorrect = isCorrect;
   const optButtons = Array.from(document.querySelectorAll('.opt'));
-  optButtons.forEach(o => o.disabled = true);
+  // Buttons stay enabled (previously: disabled = true) so a resumed,
+  // already-answered card is just as tappable-for-review as one answered
+  // live in this session — see handleOptionClick/reviewOption.
   optButtons.forEach(o => {
     const label = o.dataset.value;
     if(label === chosen){
@@ -10647,9 +10843,10 @@ function restoreAnsweredView(card, chosen, isCorrect){
       o.classList.add('correct');
     }
   });
-  const feedbackText = buildFeedbackText(card, chosen);
-  if(feedbackText){
-    $('tipText').innerHTML = mdBoldToHtml(feedbackText);
+  renderInitialOptionFeedback(card, chosen, isCorrect);
+  const examTipText = buildExamTipText(card);
+  if(examTipText){
+    $('tipText').innerHTML = mdBoldToHtml(examTipText);
     $('tipBox').style.display = 'block';
   } else {
     $('tipBox').style.display = 'none';
