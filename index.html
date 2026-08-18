@@ -3891,6 +3891,19 @@ OUTCOME: NEG
           <div class="hint" id="pasteHint">
             Click any cell and paste your table straight in — copied from Excel, Sheets, Docs, or Notion. Multi-cell pastes fill across and add rows automatically. Or just type directly into the cells.
           </div>
+
+          <div id="samplexPromptWrap" class="hidden">
+            <label class="field-label" style="margin-top:14px;">Don't have questions typed up yet?</label>
+            <div class="hint" style="margin-top:0;">
+              Copy a ready-made prompt to paste into ChatGPT, Claude, or any LLM, along with your source material (notes, a past exam, a textbook chapter) — it explains the exact Samplex table format so the reply can be pasted straight into the grid below.
+            </div>
+            <input type="text" class="text-field" id="samplexPromptTopic" placeholder="Describe the subject/source material here (or paste/attach it directly to the LLM)">
+            <div class="row" style="justify-content:flex-start; margin-top:10px;">
+              <button class="btn-ghost" id="copySamplexPromptBtn">📋 Copy prompt for an LLM</button>
+              <span id="samplexPromptStatus" style="font-size:12.5px; font-weight:600;"></span>
+            </div>
+          </div>
+
           <div class="sheet-actions">
             <div class="row">
               <button class="btn-ghost" id="addRowBtn">+ Add row</button>
@@ -8432,6 +8445,39 @@ $('copyAlgoPromptBtn').onclick = async () => {
   }
 };
 
+/* ---- Master prompt users can paste into any LLM to generate a Samplex
+   table — columns match COLS_SAMPLEX below, and the reply pastes straight
+   into the grid via onCellPaste's markdown-table support. ---- */
+const SAMPLEX_LLM_PROMPT_TEMPLATE = `Please output the results as a Markdown table using exactly these columns: Front | A | B | C | D | Answer (A-D) | Exam Tip A | Exam Tip B | Exam Tip C | Exam Tip D | Rationale
+
+Strict Content Rules:
+
+1. Front: The exact question stem.
+2. A, B, C, D: Extract and output the full text of each corresponding choice. Do not just put the letter.
+3. Answer (A-D): Output ONLY the single letter of the correct answer (e.g., A, B, C, or D).
+4. Exam Tips (A-D): Must be high-yield. Provide a specific, testable fact, mnemonic, or key distinguishing clinical feature for that specific option. CRITICAL: Do not just repeat the option text, and do not just say "This is incorrect because...".
+5. Rationale: Must be high-yield. Explain the underlying core concept, mechanism, or clinical reasoning behind the question. CRITICAL: Do not simply restate the correct answer. Focus on why it is correct and the broad takeaway.
+
+Output ONLY the markdown table. No preamble, no commentary, no code fences around it.
+
+===== SOURCE MATERIAL / TOPIC =====
+
+{TOPIC}`;
+
+$('copySamplexPromptBtn').onclick = async () => {
+  const topicEl = $('samplexPromptTopic');
+  const topic = (topicEl && topicEl.value.trim()) || '[paste or describe the subject/source material here]';
+  const text = SAMPLEX_LLM_PROMPT_TEMPLATE.replace('{TOPIC}', topic);
+  const statusEl = $('samplexPromptStatus');
+  try{
+    await navigator.clipboard.writeText(text);
+    statusEl.textContent = '✓ Prompt copied — paste it into ChatGPT, Claude, or any LLM, then paste its reply into the grid below.';
+    statusEl.style.color = 'var(--green)';
+  }catch(e){
+    window.prompt('Copy this prompt:', text);
+  }
+};
+
 /* ---- Input mode: classic (auto-generated distractors) vs full MC (A–D given) ---- */
 const COLS_CLASSIC = [
   {key:'front', label:'Front', placeholder:'Front'},
@@ -8493,13 +8539,15 @@ function updateModeUI(){
   const hint = $('pasteHint');
   if(hint){
     if(inputMode === 'samplex'){
-      hint.textContent = 'Click any cell and paste your table straight in. Columns: Front, A, B, C, D, Answer (A–D), Exam Tip A, Exam Tip B, Exam Tip C, Exam Tip D, Rationale. Multi-cell pastes fill across and add rows automatically.';
+      hint.textContent = 'Click any cell and paste your table straight in — from Excel/Sheets, or a markdown table reply straight from an LLM. Columns: Front, A, B, C, D, Answer (A–D), Exam Tip A, Exam Tip B, Exam Tip C, Exam Tip D, Rationale. Multi-cell pastes fill across and add rows automatically.';
     } else if(inputMode === 'full'){
       hint.textContent = 'Click any cell and paste your table straight in. Columns: Front, A, B, C, D, Correct (A–D), Tip. Multi-cell pastes fill across and add rows automatically.';
     } else {
       hint.textContent = 'Click any cell and paste your table straight in — copied from Excel, Sheets, Docs, or Notion. Multi-cell pastes fill across and add rows automatically. Or just type directly into the cells.';
     }
   }
+  const promptWrap = $('samplexPromptWrap');
+  if(promptWrap) promptWrap.classList.toggle('hidden', inputMode !== 'samplex');
 }
 
 function setInputMode(mode){
@@ -8643,11 +8691,39 @@ function parseClipboardGrid(text){
   return rows;
 }
 
+// Detects a GitHub-flavored markdown table — the shape an LLM's reply
+// takes when asked for "Front | A | B | ... | Rationale" columns (see the
+// Samplex prompt above). Recognized by a header separator row made only of
+// dashes/colons/pipes, e.g. "|---|---|---|" or "---|---|---".
+function looksLikeMarkdownTable(text){
+  const lines = text.split(/\r\n|\r|\n/).map(l => l.trim()).filter(l => l.length);
+  if(lines.length < 2) return false;
+  return lines.some(l => /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$/.test(l));
+}
+
+// Splits each row on '|', dropping the leading/trailing empty cell that a
+// wrapping "| ... |" produces, skipping the dashes-only separator row, and
+// dropping a leading header row (its first cell reads "Front") since the
+// grid already carries its own column headers.
+function parseMarkdownTable(text){
+  const lines = text.split(/\r\n|\r|\n/).map(l => l.trim()).filter(l => l.length);
+  const rows = [];
+  for(const line of lines){
+    if(/^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$/.test(line)) continue;
+    let cells = line.split('|');
+    if(cells.length && cells[0].trim() === '') cells.shift();
+    if(cells.length && cells[cells.length - 1].trim() === '') cells.pop();
+    rows.push(cells.map(c => c.trim()));
+  }
+  if(rows.length && /^front$/i.test((rows[0][0] || '').replace(/\*/g, ''))) rows.shift();
+  return rows;
+}
+
 function onCellPaste(e){
   e.preventDefault();
   const text = (e.clipboardData || window.clipboardData).getData('text/plain');
   if(!text) return;
-  const grid = parseClipboardGrid(text);
+  const grid = looksLikeMarkdownTable(text) ? parseMarkdownTable(text) : parseClipboardGrid(text);
 
   if(grid.length === 1 && grid[0].length === 1){
     document.execCommand('insertText', false, grid[0][0]);
