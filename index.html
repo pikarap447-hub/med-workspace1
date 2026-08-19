@@ -4368,7 +4368,7 @@ OUTCOME: NEG
         </div>
 
 
-        <div class="pet-log" id="petLog">Mochi is waiting for you.</div>
+        <div class="pet-log" id="petLog">Your pet is waiting for you.</div>
         </div><!-- /.pet-control-panel -->
 
         </div><!-- /.pet-layout -->
@@ -12361,7 +12361,7 @@ document.addEventListener('DOMContentLoaded',function(){
       ['social','curious','What is that? 👀']
     ];
     const [group,name,msg]=choices[Math.floor(Math.random()*choices.length)];
-    setPetSceneCaption('Mochi noticed you.');
+    setPetSceneCaption(`${pet.name||'Mochi'} noticed you.`);
     const seq=getPetAnimation(group,name);
     if(!seq)return;
     clearTimeout(petStageReturnTimer);
@@ -12639,6 +12639,11 @@ document.addEventListener('DOMContentLoaded',function(){
   }
 
   function petQuizBehavior(kind,responseMs){ playPetReaction(kind,responseMs); }
+  // Quiz code lives outside this closure (same reason awardPetCarePoints
+  // needs a window bridge, see the comment near recordAnswer) — without
+  // this, `typeof petQuizBehavior==='function'` in the quiz code always
+  // evaluates to false and the pet silently never reacts to answers.
+  window.petQuizBehavior=petQuizBehavior;
 
   function playPetReaction(kind,responseMs){
     const isCorrect=(kind==='correct');
@@ -12986,7 +12991,7 @@ document.addEventListener('DOMContentLoaded',function(){
     };
 
     if(action==='feed'){
-      setPetSceneCaption('Mochi heard the snack bag.');
+      setPetSceneCaption(`${pet.name||'Mochi'} heard the snack bag.`);
       /* Full eating beat:
          1) ask/beg
          2) food arrives and stays visible
@@ -12998,11 +13003,11 @@ document.addEventListener('DOMContentLoaded',function(){
         showRandomPetFood(()=>{
           clearTimeout(petFeedTimer);
           $('petFeedItem')?.classList.remove('show');
-          setPetSceneCaption('Yum! Mochi ate it.');
+          setPetSceneCaption(`Yum! ${pet.name||'Mochi'} ate it.`);
           playPetStageSequence('actions','lick',()=>{
             setTimeout(()=>{
               fx('petFeedReaction',true);
-              setPetSceneCaption('Mochi is very happy. ♥');
+              setPetSceneCaption(`${pet.name||'Mochi'} is very happy. ♥`);
               playPetStageSequence('reactions','celebrate',finish);
             },140);
           });
@@ -13010,13 +13015,13 @@ document.addEventListener('DOMContentLoaded',function(){
         // Let the food settle first, then use the verified ground-sniff cycle.
         setTimeout(()=>{
           if($('petStage')?.classList.contains('pet-acting')){
-            setPetSceneCaption('Mochi is sniffing the snack…');
+            setPetSceneCaption(`${pet.name||'Mochi'} is sniffing the snack…`);
             playPetStageSequence('actions','sniff');
           }
         },700);
       });
     }else if(action==='play'){
-      setPetSceneCaption('Mochi wants to play.');
+      setPetSceneCaption(`${pet.name||'Mochi'} wants to play.`);
       fx('petPlayBall',true);
       playPetStageSequence('actions','play_bow',()=>{
         setPetSceneCaption('Zoomies!');
@@ -13032,11 +13037,11 @@ document.addEventListener('DOMContentLoaded',function(){
         // Mochi acts personally offended by the whole experience.
         const happyBath=Math.random()>=0.42;
         if(happyBath){
-          setPetSceneCaption('All clean! Mochi is proud of the sparkle.');
+          setPetSceneCaption(`All clean! ${pet.name||'Mochi'} is proud of the sparkle.`);
           fx('petFeedReaction',true);
           playPetStageSequence('reactions','celebrate',finish);
         }else{
-          setPetSceneCaption('Mochi… did NOT enjoy that bath. 🥺');
+          setPetSceneCaption(`${pet.name||'Mochi'}… did NOT enjoy that bath. 🥺`);
           stageFx('pet-bath-sad',true);
           fx('petBathReaction',true);
           playPetStageSequence('reactions','bath_sad',()=>{
@@ -13045,7 +13050,7 @@ document.addEventListener('DOMContentLoaded',function(){
         }
       });
     }else if(action==='sleep'){
-      setPetSceneCaption('Shhh… Mochi is settling down.');
+      setPetSceneCaption(`Shhh… ${pet.name||'Mochi'} is settling down.`);
       playPetStageSequence('transitions','lie_down',()=>{
         stageFx('pet-sleeping',true);
         fx('petSleepFx',true);
