@@ -525,17 +525,17 @@ transition:background var(--transition-normal), color var(--transition-normal), 
     width:100%;
     /* The zoom-controls script (see 'topicReviewScale' handling) always
        applies an inline transform:scale(...) to this element, even at the
-       default 1.0 — and any transform creates a new stacking context. That
-       silently trapped .card-inner's z-index (see its own comment) inside
-       .app-shell's local stacking order, so raising .card-inner's z-index
-       alone never actually beat #studyPetOverlay (fixed, z-index:9990,
-       and NOT confined to one corner — it roams the screen). Explicit
-       position + z-index here makes .app-shell itself — as a whole unit,
-       transform or not — outrank the pet overlay in the shared root
-       stacking context, so wherever the pet wanders, real app content
-       underneath it stays clickable. */
+       default 1.0 — and any transform creates a new stacking context. An
+       earlier attempt to fix that gave .app-shell itself z-index:9991,
+       higher than the pet overlay's 9990 — but since .app-shell wraps the
+       ENTIRE app (every screen, edge to edge), that made the pet render
+       behind all app content everywhere, all the time, with no way to
+       ever see or grab it again. #studyPetOverlay is pointer-events:none
+       except while actually grabbable (see is-grabbable below), so it
+       never blocks clicks on the content underneath it regardless of
+       which one paints on top — the fix belongs on the pet's own z-index
+       instead (see #studyPetOverlay), not here. */
     position:relative;
-    z-index:9991;
   }
 
   /* ---- App shell header: a real application header rather than a
@@ -2432,7 +2432,13 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
   #petStage.adoption-mode{min-height:760px;background-size:cover;background-position:center center;}
 
   /* ---- Virtual pet prototype: calm companion ---- */
-  #studyPetOverlay{position:fixed;left:0;bottom:76px;width:112px;height:112px;z-index:9990;pointer-events:none;opacity:0;transition:opacity .35s ease;will-change:left,bottom,opacity}
+  /* Fixed + a z-index above every screen's own content (see .app-shell's
+     comment for why this needs to win at the shared root stacking level,
+     not just locally) so the pet is always visible and reachable while it
+     roams, however it wanders. Stays pointer-events:none except while
+     is-grabbable is applied below, so it never blocks clicks on whatever
+     it happens to be standing in front of. */
+  #studyPetOverlay{position:fixed;left:0;bottom:76px;width:112px;height:112px;z-index:99990;pointer-events:none;opacity:0;transition:opacity .35s ease;will-change:left,bottom,opacity}
   #studyPetOverlay.is-visible{opacity:1}
   #studyPetOverlay.is-grabbable{pointer-events:auto;cursor:grab}
   #studyPetOverlay.is-grabbable.dragging{cursor:grabbing}
@@ -9598,6 +9604,7 @@ function leaveBrainBreak(){
   const resumeSameCard = $('brainBreak').dataset.resumeSameCard === '1';
   const finishAfterBreak = $('brainBreak').dataset.finishAfterBreak === '1';
   $('brainBreak').classList.add('hidden');
+  if(typeof window.pomodoroEndBreak === 'function') window.pomodoroEndBreak();
   if(finishAfterBreak){ finishQuiz(); return; }
   $('quiz').classList.remove('hidden');
   if(resumeSameCard) showCard(); else advanceToNextCard();
@@ -9615,6 +9622,10 @@ $('breakContinueBtn').onclick = leaveBrainBreak;
 
 $('quitFromBreakBtn').onclick = () => {
   // Ending from a brain break also saves the paused quiz and returns Home.
+  // The Focus timer must be told the break is over too — otherwise it's
+  // left stuck showing a running "Break" countdown instead of resetting
+  // to a normal focus countdown (see pomodoroEndBreak).
+  if(typeof window.pomodoroEndBreak === 'function') window.pomodoroEndBreak();
   saveSession({onBreak: true});
   showLanding();
   renderRecentActivity();
@@ -10505,17 +10516,19 @@ $('saveCardEditBtn').onclick = () => {
   current.tip = newTip;
   current.options = newOptions;
   current.mode = 'full'; // now hand-authored — stop regenerating distractors for this card
-  // The single "Exam tip" box in this editor is the only tip field a
-  // person can actually see and edit here. But buildExamTipText() prefers
+  // The single "Exam tip" box in this editor is the only *combined*-tip
+  // field a person can see and edit here. But buildExamTipText() prefers
   // card.rationale over card.tip whenever it's present — which every
   // Samplex-imported card has. That meant an edit made here (including
   // bolding) saved fine into card.tip but was then silently ignored during
   // the quiz, which kept showing the untouched original rationale text
-  // instead.
-  // Clearing them makes this one box the single source of truth for the
-  // tip shown after answering, matching what the editor actually lets you
-  // change.
-  delete current.optionTips;
+  // instead. Setting rationale here too makes this box the single source
+  // of truth for that combined tip.
+  // NOTE: card.optionTips holds the separate, per-option (A/B/C/D) exam
+  // tips — this editor has no field for those, so it must never touch
+  // them. It previously deleted optionTips on every save, silently wiping
+  // out every per-option tip the moment any other field on the card (or
+  // even just the front text) was edited.
   current.rationale = newTip;
   current.topic = newTopic || undefined;
   current.subtopic = newSubtopic || undefined;
@@ -10525,20 +10538,30 @@ $('saveCardEditBtn').onclick = () => {
 
   // The in-memory quiz session runs on a deep-cloned copy of the set's
   // cards (see launchQuiz), so an edit here doesn't touch the saved set
-  // on disk automatically — look the card up by its original question
-  // text and write the change back so it sticks for future sessions too.
+  // on disk automatically — write the change back so it sticks for future
+  // sessions too. Prefer the card's position in the session's own `cards`
+  // array (which started life as a straight clone of s.cards, in the same
+  // order) over matching by front text: two cards in the same deck can
+  // legitimately share identical front text (e.g. two "True or False?"
+  // questions), and matching by text would silently overwrite the WRONG
+  // card — the first one with that text — corrupting a different question
+  // than the one actually being edited. Only fall back to a text search if
+  // the set has since been resized/reordered from under us.
   if(activeSetId){
     const setsData = loadSets();
     const s = setsData[activeSetId];
     if(s && Array.isArray(s.cards)){
-      const idx = s.cards.findIndex(c => c.front === originalFront);
+      const posIdx = cards.indexOf(current);
+      let idx = (posIdx !== -1 && s.cards.length === cards.length) ? posIdx : -1;
+      if(idx === -1) idx = s.cards.findIndex(c => c.front === originalFront);
       if(idx !== -1){
         s.cards[idx].front = newFront;
         s.cards[idx].back = newBack;
         s.cards[idx].tip = newTip;
         s.cards[idx].options = newOptions;
         s.cards[idx].mode = 'full';
-        delete s.cards[idx].optionTips;
+        // See the matching comment above `current.rationale = newTip;` —
+        // optionTips (per-option A/B/C/D tips) must be preserved here too.
         s.cards[idx].rationale = newTip;
         s.cards[idx].topic = newTopic || undefined;
         s.cards[idx].subtopic = newSubtopic || undefined;
@@ -13620,13 +13643,44 @@ updateNavActiveState();
   // running 'break' segment sized to the configured break length, so the
   // break screen always has a real countdown behind it that matches "the
   // break time indicated" instead of sitting there indefinitely.
+  // Whether the Focus timer was actually driving the study session when
+  // the break started. showBrainBreak() calls this unconditionally
+  // whenever a break screen is shown — including breaks triggered purely
+  // by the separate "Card Breaks" (card-count) feature, which have nothing
+  // to do with the Focus timer and may fire while it's off. Remembering
+  // this lets pomodoroEndBreak() tell the two cases apart.
+  let wasFocusRunningBeforeBreak = false;
   window.pomodoroStartBreak = function(){
     stopTicking();
     tickingPlayed = false;
+    wasFocusRunningBeforeBreak = state.running && state.mode === 'focus';
     state.mode = 'break';
     state.remaining = LEN_OPTIONS.break * 60;
     state.running = true;
     startInterval();
+    persist();
+    render();
+  };
+
+  // Called whenever the brain-break screen is dismissed, however that
+  // happens (Continue, or Quit/end-page from the break) — see
+  // leaveBrainBreak() and quitFromBreakBtn. Without this, a break that was
+  // only ever triggered by the card-count feature (Focus timer off, or not
+  // already in a break of its own) left the widget stuck showing a
+  // running "Break" countdown forever afterward, since nothing else ever
+  // set it back. If the Focus timer really was the one driving the break,
+  // hand it a fresh focus segment (stays running); otherwise reset to a
+  // normal, un-drifted, stopped focus countdown.
+  window.pomodoroEndBreak = function(){
+    if(state.mode !== 'break') return;
+    stopTicking();
+    tickingPlayed = false;
+    state.mode = 'focus';
+    state.remaining = state.focusMinutes * 60;
+    if(!wasFocusRunningBeforeBreak){
+      stopInterval();
+      state.running = false;
+    }
     persist();
     render();
   };
@@ -13674,6 +13728,15 @@ updateNavActiveState();
     if(!state.running) return;
     applyElapsed(1, true, true);
     render();
+    // A finished focus segment only gets ONE shot at showing the
+    // brain-break screen (see notifySegmentDone -> triggerPomodoroBreak),
+    // and that call is a no-op if the quiz isn't on screen yet or a card
+    // is mid-edit at that exact moment — after which state.mode is 'break'
+    // but the screen never appeared, and nothing ever asked again, so the
+    // whole break silently ticks away unseen in the background. Retry on
+    // every tick while we're in that state so the break screen shows up
+    // the moment it's actually safe to show it.
+    if(state.mode === 'break' && typeof triggerPomodoroBreak === 'function') triggerPomodoroBreak();
   }
 
   function startInterval(){
