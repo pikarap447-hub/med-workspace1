@@ -3843,7 +3843,11 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
    All rules below are scoped under .index-calendar / #uermExamCalendar,
    so they can't leak into or collide with the rest of the app's styles. */
 
-.index-calendar {--day:150px;--border:#e2e5ea;--text:#303640;--muted:#7d8490;--bg:#f4f5f7}
+.index-calendar {--day:150px;--muted:var(--text-muted)}
+/* --border/--text/--bg are intentionally NOT redeclared here: leaving them
+   unset lets this whole subtree inherit the app's real theme variables
+   (--border/--text/--bg from :root, re-themed per body.theme-*) instead of
+   the calendar's old hardcoded light-only palette. */
 .index-calendar *{box-sizing:border-box}
 .index-calendar {margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .index-calendar header {position:sticky;top:0;z-index:30;background:rgba(255,255,255,.97);border-bottom:1px solid var(--border);padding:16px 20px}
@@ -4067,6 +4071,201 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
   .index-calendar .countdown-value{font-size:12px !important}
 }
 
+/* =====================================================================
+   VISUAL CLEANUP PASS
+   - More breathing room everywhere (header, toolbar, cards, panel).
+   - Toolbar groups get their own soft "chip" background so related
+     buttons read as one control instead of a wall of buttons.
+   - Slightly larger, more legible type across the board.
+   Layered last so it wins ties in the cascade without touching the
+   structural/responsive rules above.
+   ===================================================================== */
+.index-calendar header{padding:18px 22px}
+.index-calendar .sub{margin-top:5px}
+
+.index-calendar .toolbar{gap:14px;margin-top:16px}
+.index-calendar .tool-group{
+  gap:6px;background:#f6f7f8;border:1px solid #edeef0;
+  border-radius:10px;padding:5px 6px;
+}
+.index-calendar .tool-group.primary-tools{background:transparent;border-color:transparent;padding:0;gap:8px}
+.index-calendar .tool-divider{display:none} /* chip backgrounds already separate the groups */
+.index-calendar .tool-label{margin:0 4px 0 3px;color:#8a919b}
+
+.index-calendar button, .index-calendar .import{
+  padding:8px 12px;font-size:10.5px;border-radius:7px;
+}
+.index-calendar .add-exam{padding-left:14px;padding-right:14px}
+.index-calendar .exam-nav button{min-width:38px}
+.index-calendar .exam-nav button:last-child{min-width:50px}
+.index-calendar .zoom{min-width:42px}
+
+.index-calendar .wrap{padding:22px 20px 40px}
+.index-calendar .scroller{border-radius:14px;box-shadow:0 6px 22px rgba(20,25,35,.06)}
+
+.index-calendar .day{padding:7px 8px}
+.index-calendar .num{font-size:17px}
+
+.index-calendar .exam{padding:8px 9px 8px 10px;margin-bottom:8px;border-radius:8px}
+.index-calendar .time{font-size:9.5px;margin-bottom:4px}
+.index-calendar .name{font-size:10.5px;line-height:13px}
+.index-calendar .code{font-size:8.5px;margin-top:3px}
+.index-calendar .type{font-size:7.5px;padding:2px 6px;margin-top:5px}
+
+.index-calendar .legend{padding:12px 4px;gap:16px}
+
+.index-calendar .subject-panel{padding:18px;margin-top:18px}
+.index-calendar .subjects{gap:9px;margin-top:13px}
+.index-calendar .subject{padding:9px;gap:9px;border-radius:8px}
+.index-calendar .swatch{width:7px}
+.index-calendar .sname{font-size:9.5px}
+.index-calendar .scode{font-size:7.5px}
+
+@media(max-width:800px){
+  .index-calendar .tool-group{padding:4px 5px}
+}
+@media (max-width:600px){
+  .index-calendar header{padding:16px}
+  .index-calendar .wrap{padding:18px 14px 32px}
+}
+
+/* =====================================================================
+   TYPOGRAPHY CONSISTENCY PASS
+   The calendar was built as a standalone component with its own font
+   stack (Inter) and very heavy weights (800–900) at very small sizes
+   (7–11px). The rest of the app uses --font (Quicksand) for body text,
+   --font-display (Baloo 2) for headings, and tops out around 700
+   weight. This block brings the calendar in line without touching
+   layout/structure rules above.
+   ===================================================================== */
+.index-calendar{font-family:var(--font)}
+.index-calendar h1{font-family:var(--font-display);font-weight:700;font-size:21px}
+.index-calendar .subject-head h2{font-family:var(--font-display);font-weight:700;font-size:15px}
+
+.index-calendar .sub{font-weight:500;font-size:12px}
+.index-calendar .badge{font-weight:700;font-size:10px}
+
+.index-calendar .countdown-label{font-weight:700;font-size:9px;letter-spacing:.06em}
+.index-calendar .countdown-value{font-weight:700 !important}
+.index-calendar .countdown-sub{font-weight:600}
+
+.index-calendar .tool-label{font-weight:700;font-size:9px;letter-spacing:.06em}
+.index-calendar button, .index-calendar .import{font-family:var(--font);font-weight:600}
+.index-calendar button.primary{font-weight:700}
+.index-calendar .zoom.active,.index-calendar #holidayToggle.active{font-weight:700}
+
+.index-calendar .month{font-weight:700;font-size:11px}
+.index-calendar .num{font-weight:700}
+.index-calendar .dow{font-weight:700;font-size:9px}
+.index-calendar .school-label,.index-calendar .holiday-label{font-weight:700}
+.index-calendar .school-event{font-weight:600;font-size:10px}
+
+.index-calendar .time{font-weight:700;font-size:10px}
+.index-calendar .name{font-weight:600;font-size:11.5px}
+.index-calendar .code{font-weight:600;font-size:9.5px}
+.index-calendar .type{font-weight:700;font-size:8.5px}
+.index-calendar .overlap{font-weight:600;font-size:9.5px}
+
+.index-calendar .holiday-name{font-weight:600;font-size:9px}
+
+.index-calendar .legend{font-size:10.5px}
+
+.index-calendar .sname{font-weight:700;font-size:10.5px}
+.index-calendar .scode{font-weight:600;font-size:8.5px}
+.index-calendar .subject-head p{font-size:10.5px}
+
+.index-calendar .modal-box h2{font-family:var(--font-display);font-weight:700}
+.index-calendar .modal-box p{font-size:11px}
+.index-calendar .form label{font-weight:700;font-size:9px}
+.index-calendar .form input,.index-calendar .form select{font-family:var(--font);font-size:11.5px}
+
+/* =====================================================================
+   THEME CONSISTENCY + ROUNDED-CORNERS PASS
+   The calendar was skinned with its own hardcoded light palette
+   (white surfaces, #303640 "primary", grey borders) that ignored
+   whichever of the app's 8 themes (incl. Midnight/dark) is active.
+   Everything below is repointed at the same --surface/--border/--text/
+   --primary/--danger tokens the rest of the app uses, so switching
+   themes now re-skins the calendar too.
+
+   This also gives the sticky header real rounded corners + a border/
+   shadow like every other panel in the app (.card, .scroller, the
+   subject panel) — previously it was a flat, square-cornered white
+   slab sitting above everything else, which is the "random box" with
+   no rounding.
+   ===================================================================== */
+.index-calendar header{
+  position:sticky;top:0;z-index:30;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:16px;
+  box-shadow:var(--shadow-sm);
+  margin-bottom:2px;
+}
+.index-calendar .badge{color:var(--text-muted);border-color:var(--border)}
+
+.index-calendar .countdown{background:var(--primary-soft);border-color:var(--border);color:var(--text)}
+.index-calendar .countdown-label{color:var(--text-muted)}
+.index-calendar .countdown-sub{color:var(--text-muted)}
+
+.index-calendar .tool-group{background:var(--primary-soft);border-color:var(--border)}
+.index-calendar .tool-label{color:var(--text-muted)}
+.index-calendar button, .index-calendar .import{
+  border-color:var(--border);background:var(--surface);color:var(--text)
+}
+.index-calendar button:hover, .index-calendar .import:hover{
+  background:var(--primary-soft);border-color:var(--tile-blue)
+}
+.index-calendar button.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+.index-calendar button.primary:hover{background:color-mix(in srgb, var(--primary) 85%, black);border-color:color-mix(in srgb, var(--primary) 85%, black)}
+.index-calendar .today-btn{background:var(--primary-soft);border-color:var(--border);color:var(--text)}
+.index-calendar .today-btn:hover{background:var(--primary-soft);border-color:var(--tile-blue)}
+.index-calendar .today-dot-ui{background:var(--danger)}
+.index-calendar #holidayToggle.active{background:var(--primary-soft);color:var(--text);border-color:var(--border)}
+.index-calendar #holidayToggle:not(.active){color:var(--text-muted);background:var(--surface)}
+.index-calendar .zoom.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.index-calendar .clear-btn{color:var(--danger)}
+
+.index-calendar .scroller{background:var(--surface);border-color:var(--border);box-shadow:var(--shadow-sm)}
+.index-calendar .months, .index-calendar .days{background:var(--surface)}
+.index-calendar .month{border-color:var(--border);color:var(--text-muted)}
+.index-calendar .day{border-color:var(--border)}
+.index-calendar .day.weekend, .index-calendar .column.weekend{background:var(--primary-soft)}
+.index-calendar .day.today, .index-calendar .column.today{background:var(--primary-soft)}
+.index-calendar .school{background:var(--primary-soft);border-color:var(--border)}
+.index-calendar .school-label{color:var(--text-muted)}
+.index-calendar .school-event{background:var(--primary-soft);border-color:var(--border);color:var(--text)}
+
+.index-calendar .exam{background:var(--surface);border-top-color:var(--border);border-right-color:var(--border);border-bottom-color:var(--border);box-shadow:var(--shadow-sm)}
+.index-calendar .time{color:var(--text)}
+.index-calendar .code{color:var(--text-muted)}
+.index-calendar .type{background:var(--primary-soft);color:var(--text-muted)}
+.index-calendar .overlap{color:var(--danger);background:var(--red-bg);border-color:var(--danger)}
+.index-calendar .today-line{background:var(--danger)}
+.index-calendar .today-tag{background:var(--danger);color:#fff}
+
+.index-calendar .subject-panel{background:var(--surface);border-color:var(--border)}
+.index-calendar .subject{border-color:var(--border);background:var(--primary-soft)}
+.index-calendar .scode{color:var(--text-muted)}
+
+.index-calendar .modal-box{background:var(--surface);border-color:var(--border);box-shadow:var(--shadow-lg)}
+.index-calendar .form label{color:var(--text-muted)}
+.index-calendar .form input, .index-calendar .form select{border-color:var(--border);background:var(--surface);color:var(--text)}
+
+.index-calendar .holiday-row{background:var(--surface);border-color:var(--border)}
+.index-calendar .holiday-mark{background:var(--primary-soft);border-color:var(--border);border-left-color:var(--text-muted)}
+.index-calendar .holiday-mark:hover{background:var(--primary-soft);border-color:var(--tile-blue)}
+.index-calendar .holiday-name{color:var(--text-muted)}
+.index-calendar .holiday-label{color:var(--text-muted)}
+
+/* The decorative vine-frame border wraps around whichever view is
+   currently visible inside .card. On the calendar (a much taller,
+   internally-scrolling view) its absolutely-positioned edges don't
+   stretch to match — it collapses to a short stray "pill" sitting on
+   top of the Back button instead of framing the content. It's purely
+   decorative, so simplest correct fix is to not render it while the
+   calendar view is open. */
+.card:has(#calendarView:not(.hidden)) > .card-inner > .vine-frame{display:none}
 
 </style>
 
