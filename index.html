@@ -15,10 +15,133 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Topic Review</title>
+
+<!--
+=====================================================================
+AI / DEVELOPER NAVIGATION MAP  (verified against the actual code below —
+see the "MAP ACCURACY NOTES" section at the bottom for what's genuinely
+tagged vs. what doesn't split into a single clean block)
+=====================================================================
+
+PURPOSE
+-------
+This is a single-file application. The goal of this map is to make
+targeted edits safe and predictable for both humans and AI assistants.
+
+GOLDEN RULES
+------------
+1. Preserve existing behavior unless the task explicitly changes it.
+2. Search this map / the module marker before editing.
+3. Modify the smallest relevant module.
+4. Do not casually rename element IDs.
+5. Do not casually rename localStorage keys.
+6. Search before creating a new function to avoid duplicates.
+7. Responsive and accessibility rules are NOT centralized — see notes below.
+8. Calendar is not built yet — see notes below.
+9. Avoid changing unrelated modules while fixing one feature.
+10. If a change crosses modules, identify the affected modules first.
+
+HIGH-LEVEL MODULES
+------------------
+CSS
+  CSS-01 Design Tokens
+  CSS-02 Themes
+  CSS-03 Appearance / Dark Mode
+  CSS-04 Global / Reset
+  CSS-05 App Shell / Header
+  CSS-06 Navigation
+  CSS-07 Shared Components / Forms (also: decorative frame, zoom/undo
+         controls, landing/folders, study-session/pomodoro widget —
+         these ended up here rather than a category of their own)
+  CSS-08 Quiz UI (also: countdown widget, case-vignette game, results)
+  CSS-09 Settings UI
+  CSS-10 Virtual Pet UI
+  CSS-11 Calendar UI - DOES NOT EXIST YET. No calendar CSS has been
+         written; the feature is unbuilt. Don't search for this marker.
+  CSS-12 Responsive / Mobile - NOT a separate block. Media queries live
+         inline, next to the component they adjust. Grep "@media" and
+         read nearby context instead of looking for a CSS-12 marker.
+  CSS-13 Accessibility / Reduced Motion - NOT a separate block either,
+         same reasoning as CSS-12. Grep "prefers-reduced-motion".
+
+HTML
+  HTML-01 App Shell
+  HTML-02 Landing / Sets
+  HTML-03 Quiz
+  HTML-04 Settings
+  HTML-05 Virtual Pet
+  HTML-06 Modals / Overlays - DOES NOT EXIST YET. No modal dialogs in
+         the markup; only .modal-input/.modal-hint styled form fields
+         embedded inline in Quiz/Settings. Not a real section.
+  HTML-07 Calendar - DOES NOT EXIST YET, unbuilt feature.
+  (Stats view sits between HTML-03 and HTML-04 and isn't in this list
+  at all — it's its own <div id="statsView">, unlabeled in the
+  original taxonomy.)
+
+JAVASCRIPT
+  JS-01 Bootstrap / Constants
+  JS-02 Storage / Persistence
+  JS-03 App State
+  JS-04 Navigation (also covers the zoom/scale toolbar init, which
+         lives in the second inline script block, not physically
+         adjacent to the rest of JS-04)
+  JS-05 Sets / Folders / Cards
+  JS-06 Learning / Statistics
+  JS-07 Quiz Engine - core (buildOptions/launchQuiz) is clearly marked,
+         but ~1,600 lines just before it interleave Settings, vine-
+         border animation, the case-game parser, and card-table
+         editing in a way that doesn't reduce to one module. Search by
+         function name in that stretch rather than trusting a marker.
+  JS-08 Settings
+  JS-09 Themes / Appearance
+  JS-10 Background / Display
+  JS-11 Virtual Pet (also contains the small JS-16 Developer/Debug
+         block and, further down, the entire JS-14 Pomodoro module —
+         both physically nested inside this section)
+  JS-12 Backup / Import / Export
+  JS-13 Keyboard
+  JS-14 Controller — realized as a self-contained pomodoro/focus-timer
+         IIFE nested inside JS-11's section, not a standalone block
+  JS-15 Calendar - RESERVED STUB ONLY, no real code yet (see the stub
+         comment block at the very end of the script, just above
+         </script>)
+  JS-16 Developer / Debug Tools — tiny, embedded inside JS-11
+  JS-17 Initialization - NOT a single function. The app bootstraps via
+         several independent DOMContentLoaded listeners scattered
+         through the file (search "DOMContentLoaded" directly).
+
+MAP ACCURACY NOTES (added during a markers-only cleanup pass)
+---------------------------------------------------------------------
+- Every module above marked "DOES NOT EXIST YET" was aspirational in
+  the original map — the feature was never built. Don't spend time
+  searching for those markers.
+- CSS-12/13 and JS-17 are intentionally NOT centralized in this
+  codebase — grep for the underlying pattern (@media, keydown, etc.)
+  rather than a module marker.
+- Everything else listed has a real, verified "===== CSS-xx =====",
+  "HTML-xx" comment, or "/* ===== JS-xx ===== */" comment at its
+  actual start in the code below.
+
+QUICK DEBUG ROUTING
+-------------------
+"Text / spacing looks wrong"       -> CSS + relevant HTML module
+"Mobile is broken"                 -> grep "@media" near the relevant CSS module (not centralized)
+"Theme is broken"                  -> CSS-02 / CSS-03 / JS-09
+"Quiz behavior is broken"          -> JS-07 (see note above on the messy zone just before it)
+"Data disappeared"                 -> JS-02
+"Settings don't persist"           -> JS-02 / JS-08
+"Pet animation is broken"          -> JS-11 / CSS-10
+"Pomodoro/focus timer is broken"   -> JS-14 (nested inside JS-11's section)
+"Calendar anything"                -> not built yet; see JS-15 stub for the intended shape
+"Feature works but UI overflows"  -> relevant CSS module, then grep "@media" nearby
+=====================================================================
+-->
+
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&family=Baloo+2:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&display=swap');
 
-  /* ---- Study-garden palette: the vine growth metaphor (still present
+  /* ===== CSS-01 DESIGN TOKENS ===== */
+/* ---- Study-garden palette: the vine growth metaphor (still present
      in the vine border around the card) is promoted here to be the
      app's actual brand system, instead of living only in decoration
      while an unrelated indigo ran the real UI. Variable names are kept as
@@ -144,7 +267,8 @@
     --wrong-text:#6B2A21;
   }
 
-  /* ---- Kawaii theme: an alternate palette+font+border skin, toggled in
+  /* ===== CSS-02 THEMES ===== */
+/* ---- Kawaii theme: an alternate palette+font+border skin, toggled in
      Settings and stored separately from the study-garden default. Every
      value below is a straight swap for the variable of the same name
      above, so every existing call site (buttons, text, the vine-cluster
@@ -304,6 +428,7 @@
   }
   body.theme-forest{background:var(--bg);}
 
+  /* ===== CSS-03 APPEARANCE / DARK MODE ===== */
   /* =====================================================================
      APPEARANCE MODE — dark variants, decoupled from theme.
      ---------------------------------------------------------------------
@@ -420,6 +545,7 @@
     background:var(--bg);
   }
 
+  /* ===== CSS-03B ACCENT / INTENSITY ===== */
   /* =====================================================================
      ACCENT — a small independent color choice layered on top of theme +
      mode. Overrides only the primary/focus/highlight family (tile-blue-
@@ -483,7 +609,8 @@
   body.mode-dark .card{ background:var(--surface); }
   body.mode-dark .sidebar-nav{ background:color-mix(in srgb, var(--surface-elevated) 75%, transparent); }
 
-  *{box-sizing:border-box;}
+  /* ===== CSS-04 GLOBAL / RESET ===== */
+*{box-sizing:border-box;}
   html{-webkit-text-size-adjust:100%; text-size-adjust:100%;}
   body{
 margin:0;
@@ -514,7 +641,8 @@ transition:background var(--transition-normal), color var(--transition-normal), 
   .frame{width:100%; max-width:680px;}
   .frame.wide{max-width:1020px; min-width:0; justify-self:center; width:100%;}
 
-  /* ---- App shell: single centered column. Nav lives under the title
+  /* ===== CSS-05 APP SHELL / HEADER ===== */
+/* ---- App shell: single centered column. Nav lives under the title
      as a compact horizontal pill row instead of a separate rail, so it
      reads as part of the header rather than floating off to the side. ---- */
   .app-shell{
@@ -591,6 +719,7 @@ transition:background var(--transition-normal), color var(--transition-normal), 
     line-height:1.15;
   }
 
+  /* ===== CSS-06 NAVIGATION ===== */
   .sidebar-nav{
     display:flex; flex-direction:row; flex-wrap:wrap; gap:2px;
     justify-content:center;
@@ -646,6 +775,7 @@ transition:background var(--transition-normal), color var(--transition-normal), 
   .tile-border{display:none;}
 .tile-border.bottom{display:none;}
 
+  /* ===== CSS-07 SHARED COMPONENTS / FORMS ===== */
   .card{
     min-width:0;
     max-width:100%;
@@ -879,7 +1009,8 @@ transition:background var(--transition-normal), color var(--transition-normal), 
     white-space:pre-wrap; font-family:ui-monospace, SFMono-Regular, Menlo, monospace;
   }
 
-  /* --- Quiz screen --- */
+  /* ===== CSS-08 QUIZ UI ===== */
+/* --- Quiz screen --- */
   .progress-row{
     display:flex; justify-content:space-between; align-items:center;
     font-family:var(--font-mono); font-weight:600; font-size:11.5px; color:var(--ink-soft);
@@ -889,6 +1020,7 @@ transition:background var(--transition-normal), color var(--transition-normal), 
   .progress-track{
     height:8px; background:var(--tile-blue-paler); border-radius:999px; overflow:hidden; margin-bottom:22px;
   }
+  /* ===== CSS-08 QUIZ UI (cont'd: countdown widget + quiz index/flag chrome) ===== */
   .brain-break-countdown{
     position:fixed; left:18px; bottom:18px; z-index:99999;
     display:flex; align-items:center; gap:8px; width:fit-content;
@@ -1098,6 +1230,7 @@ transition:background var(--transition-normal), color var(--transition-normal), 
   }
   .score-tag{font-family:var(--font); font-weight:600; font-size:12px; color:var(--ink-soft);}
 
+  /* ===== CSS-08 QUIZ UI: case vignette game ===== */
   /* --- Case vignette game --- */
   .case-log{
     display:flex; flex-direction:column; gap:12px;
@@ -1197,6 +1330,7 @@ transition:background var(--transition-normal), color var(--transition-normal), 
     font-family:var(--font); font-weight:700; font-size:15px; letter-spacing:.02em;
   }
 
+  /* ===== CSS-08 QUIZ UI: results screen ===== */
   /* --- Results --- */
   .result-hero{
     display:flex;
@@ -1279,6 +1413,7 @@ transition:background var(--transition-normal), color var(--transition-normal), 
 
   .hidden{display:none !important;}
 
+  /* ===== CSS-07 SHARED COMPONENTS / FORMS: decorative frame + zoom/undo controls ===== */
   /* --- Vine border --- */
   .vine-frame{
     position:absolute;
@@ -1947,6 +2082,7 @@ body.theme-midnight .set-item-menu{background:var(--surface-elevated);}
 .acc-bar-wrap{height:6px; background:var(--tile-blue-paler); border-radius:3px; overflow:hidden;}
 .acc-bar-fill{height:100%; background:linear-gradient(90deg, var(--tile-blue-mid), var(--tile-blue-deep)); border-radius:3px; transition:width .4s ease;}
 
+/* ===== CSS-07 SHARED COMPONENTS / FORMS: landing, folders & set-list rows ===== */
 /* --- Landing & folders --- */
 .landing-intro{font-size:12.5px; color:var(--ink-soft); line-height:1.5; margin:0 0 16px;}
 .landing-actions{display:flex; gap:10px; flex-wrap:wrap; flex-shrink:0;}
@@ -2049,6 +2185,7 @@ body.theme-midnight .set-item-menu{background:var(--surface-elevated);}
 }
 .folder-review-count-custom:focus{outline:none; border-color:var(--tile-blue-mid); box-shadow:0 0 0 3px var(--primary-soft);}
 
+/* ===== CSS-09 SETTINGS UI ===== */
 /* --- Settings: category menu + sub-pages, so Settings opens to a short
    list instead of one long scrolling page. --- */
 .settings-menu-list{display:flex; flex-direction:column; gap:10px; margin-top:14px;}
@@ -2081,6 +2218,7 @@ body.theme-midnight .set-item-menu{background:var(--surface-elevated);}
 .settings-page .settings-page-back{margin-bottom:4px;}
 .settings-page .backup-block:first-of-type{margin-top:14px;}
 
+/* ===== CSS-07 SHARED COMPONENTS / FORMS: landing 2-column layout ===== */
 /* --- Landing: Continue studying + Your sets side-by-side ---
    Single column (stacked) by default so the phone layout keeps working
    exactly as before; becomes a two-up desk layout once there's room. */
@@ -2431,6 +2569,7 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
 
   #petStage.adoption-mode{min-height:760px;background-size:cover;background-position:center center;}
 
+  /* ===== CSS-10 VIRTUAL PET UI ===== */
   /* ---- Virtual pet prototype: calm companion ---- */
   /* Fixed + a z-index above every screen's own content (see .app-shell's
      comment for why this needs to win at the shared root stacking level,
@@ -2589,6 +2728,7 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
      Focus Timer) share this one container/collapse mechanism but never
      share state — see the JS glue in renderBrainBreakCountdown() and
      the pomodoro module's window.pomodoroSyncStudySession(). */
+  /* ===== CSS-07 SHARED COMPONENTS / FORMS: study session timer + focus/pomodoro widget (embedded mid-pet-CSS in source order) ===== */
   .study-session-widget{
     position:fixed;
     left:50%;
@@ -2880,6 +3020,7 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
       linear-gradient(0deg,rgba(30,42,35,.08),transparent 38%);
   }
 
+  /* ===== CSS-10 VIRTUAL PET UI (resumes) ===== */
   .pet-scene-hud{
     position:absolute;
     z-index:8;
@@ -3697,9 +3838,240 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
     animation-iteration-count:1!important;
   }
 }
+
+/* ===== CSS-11 CALENDAR (embedded UERM exam calendar component) =====
+   All rules below are scoped under .index-calendar / #uermExamCalendar,
+   so they can't leak into or collide with the rest of the app's styles. */
+
+.index-calendar {--day:150px;--border:#e2e5ea;--text:#303640;--muted:#7d8490;--bg:#f4f5f7}
+.index-calendar *{box-sizing:border-box}
+.index-calendar {margin:0;background:var(--bg);color:var(--text);font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.index-calendar header {position:sticky;top:0;z-index:30;background:rgba(255,255,255,.97);border-bottom:1px solid var(--border);padding:16px 20px}
+.index-calendar .title {display:flex;justify-content:space-between;gap:15px;align-items:center}
+.index-calendar h1 {font-size:20px;margin:0}.index-calendar .sub{font-size:11px;color:var(--muted);margin-top:4px}
+.index-calendar .badge {font-size:9px;font-weight:800;color:#69717d;border:1px solid var(--border);border-radius:99px;padding:6px 9px}
+
+.index-calendar .countdown {
+  display:flex;align-items:center;gap:8px;min-width:175px;justify-content:center;
+  padding:7px 10px;border:1px solid #d9dde3;border-radius:8px;
+  background:#f8f9fa;color:#303640;white-space:nowrap
+}
+.index-calendar .countdown-label {font-size:8px;font-weight:900;letter-spacing:.5px;color:#8a919b}
+.index-calendar .countdown-value {font-size:11px;font-weight:900}
+.index-calendar .countdown {
+  display:flex;align-items:center;gap:8px;min-width:185px;justify-content:center;
+  padding:7px 10px;border:1px solid #d9dde3;border-radius:8px;
+  background:#f8f9fa;color:#303640;white-space:nowrap
+}
+.index-calendar .countdown-label {font-size:8px;font-weight:900;letter-spacing:.5px;color:#8a919b}
+.index-calendar .countdown-value {font-size:clamp(10px,1.5vw,12px);font-weight:900}
+.index-calendar .countdown-sub {font-size:8px;color:#7d8490;font-weight:750}
+
+.index-calendar .toolbar {display:flex;gap:10px;flex-wrap:wrap;margin-top:13px;align-items:center}
+.index-calendar .tool-group {display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.index-calendar .tool-divider {width:1px;height:24px;background:var(--border);margin:0 2px}
+.index-calendar .tool-label {font-size:8px;font-weight:900;letter-spacing:.7px;color:#969da8;margin:0 3px}
+.index-calendar button, .index-calendar .import {
+  border:1px solid var(--border);background:#fff;color:#555e6b;border-radius:7px;
+  padding:7px 10px;font-size:10px;font-weight:800;cursor:pointer;transition:.12s ease
+}
+.index-calendar button:hover, .index-calendar .import:hover {background:#f8f9fa;border-color:#b9c0c9;transform:translateY(-1px)}
+.index-calendar button.primary {background:#303640;color:#fff;border-color:#303640}
+.index-calendar button.primary:hover {background:#242a33;border-color:#242a33}
+.index-calendar .add-exam {padding-left:12px;padding-right:12px}
+.index-calendar .exam-nav button {min-width:36px}
+.index-calendar .exam-nav button:last-child {min-width:48px}
+.index-calendar .today-btn {
+  background:#eef2f5;border-color:#c8ced6;color:#303640;
+  padding-left:11px;padding-right:11px
+}
+.index-calendar .today-btn:hover {background:#e5e9ed;border-color:#aeb6c1}
+.index-calendar .today-dot-ui {
+  display:inline-block;width:6px;height:6px;border-radius:50%;
+  background:#c55e66;margin-right:5px;vertical-align:1px
+}
+.index-calendar #holidayToggle.active {background:#f3f4f6;color:#4f5864;border-color:#cdd2d9}
+.index-calendar #holidayToggle:not(.active) {color:#9aa1ab;background:#fff}
+.index-calendar .zoom {min-width:40px}
+.index-calendar .zoom.active {background:#303640;color:#fff;border-color:#303640}
+.index-calendar .clear-btn {color:#8a6064}
+
+.index-calendar .wrap {padding:18px 18px 35px}
+.index-calendar .scroller {overflow:auto;background:#fff;border:1px solid var(--border);border-radius:12px;box-shadow:0 5px 20px rgba(20,25,35,.05)}
+.index-calendar .timeline {position:relative;min-width:calc(var(--day) * 340)}
+.index-calendar .months, .index-calendar .days {display:flex;background:#fff;position:sticky;z-index:20}
+.index-calendar .months {top:0;height:40px;border-bottom:1px solid var(--border)}
+.index-calendar .days {top:40px;height:46px;border-bottom:1px solid var(--border);z-index:19}
+.index-calendar .month {height:40px;min-width:calc(var(--day)*30.4375);border-right:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;color:#606875}
+.index-calendar .day {width:var(--day);min-width:var(--day);border-right:1px solid var(--border);padding:6px 7px}
+.index-calendar .day.weekend, .index-calendar .column.weekend {background:#fafbfc}
+.index-calendar .day.today, .index-calendar .column.today {background:#f3f5f7}
+.index-calendar .num {font-size:16px;font-weight:850;line-height:17px}.index-calendar .dow{font-size:8px;color:var(--muted);font-weight:800;text-transform:uppercase}
+.index-calendar .school {height:78px;position:relative;border-bottom:1px solid var(--border);background:#fafbfc}
+.index-calendar .school-label {position:absolute;top:7px;left:7px;font-size:8px;color:#8b929d;font-weight:850;z-index:2}
+.index-calendar .school-event {position:absolute;top:27px;height:34px;background:#dde2e7;border:1px solid #cbd1d8;border-radius:6px;padding:0 8px;display:flex;align-items:center;font-size:9px;font-weight:850;color:#46505c;white-space:nowrap;overflow:hidden}
+.index-calendar .grid {display:flex;position:relative;min-height:430px}
+.index-calendar .column {width:var(--day);min-width:var(--day);padding:7px;border-right:1px solid var(--border);position:relative}
+.index-calendar .exam {border-left:4px solid var(--subject,#64748b);border-top:1px solid #e5e7eb;border-right:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;border-radius:7px;background:#fff;padding:7px 7px 7px 8px;margin-bottom:6px;box-shadow:0 2px 6px rgba(20,25,35,.06);cursor:pointer}
+.index-calendar .exam:hover {box-shadow:0 5px 12px rgba(20,25,35,.1)}
+.index-calendar .exam {overflow:hidden;min-width:0;max-width:100%;}
+.index-calendar .name, .index-calendar .time, .index-calendar .code, .index-calendar .type {max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.index-calendar .type {width:max-content;max-width:100%;}
+
+.index-calendar .time {font-size:9px;font-weight:850;color:#4d5561;margin-bottom:3px}.index-calendar .name{font-size:10px;font-weight:850;line-height:12px}.index-calendar .code{font-size:8px;color:#9299a3;font-weight:800;margin-top:2px}.index-calendar .type{display:inline-block;margin-top:4px;padding:2px 5px;background:#f0f1f3;border-radius:4px;color:#737b87;font-size:7px;font-weight:850}
+.index-calendar .overlap {font-size:8px;font-weight:850;color:#a45158;background:#fff7f7;border:1px dashed #d68b91;border-radius:5px;padding:4px;margin-bottom:6px}
+.index-calendar .today-line {position:absolute;top:0;bottom:0;width:2px;background:#c55e66;z-index:10;pointer-events:none}.today-tag{position:absolute;top:4px;transform:translateX(-50%);background:#c55e66;color:white;border-radius:99px;padding:3px 6px;font-size:7px;font-weight:900;z-index:11}
+.index-calendar .legend {font-size:9px;color:var(--muted);padding:10px 2px;display:flex;gap:12px;flex-wrap:wrap}
+.index-calendar .subject-panel {margin-top:14px;background:white;border:1px solid var(--border);border-radius:12px;padding:14px}
+.index-calendar .subject-head {display:flex;justify-content:space-between;align-items:center}.index-calendar .subject-head h2{font-size:13px;margin:0}.index-calendar .subject-head p{font-size:9px;color:var(--muted);margin:3px 0}
+.index-calendar .subjects {display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:11px}.index-calendar .subject{display:flex;gap:8px;align-items:center;border:1px solid #eceef1;border-radius:7px;padding:7px;background:#fafbfc}.index-calendar .swatch{width:6px;height:27px;border-radius:4px}.index-calendar .sname{font-size:9px;font-weight:850}.index-calendar .scode{font-size:7px;color:#9097a2;font-weight:800;margin-top:2px}
+.index-calendar .modal {position:fixed;inset:0;background:rgba(25,30,38,.38);display:none;align-items:center;justify-content:center;z-index:50;padding:18px}.index-calendar .modal.show{display:flex}.index-calendar .modal-box{background:#fff;border:1px solid var(--border);border-radius:12px;padding:17px;width:min(500px,100%);box-shadow:0 20px 60px rgba(20,25,35,.2)}.index-calendar .modal-box h2{font-size:16px;margin:0 0 5px}.index-calendar .modal-box p{font-size:10px;color:var(--muted);margin:4px 0}.index-calendar .form{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}.index-calendar .form label{font-size:8px;font-weight:850;color:#69717d}.index-calendar .form input,.index-calendar .form select{width:100%;margin-top:4px;padding:8px;border:1px solid var(--border);border-radius:7px;background:white;font-size:10px}.index-calendar .full{grid-column:1/-1}.index-calendar .actions{display:flex;justify-content:flex-end;gap:6px;margin-top:12px}
+@media(max-width:800px){.index-calendar .countdown{min-width:0}.index-calendar .subjects{grid-template-columns:repeat(2,1fr)}}@media(max-width:500px){.index-calendar .subjects{grid-template-columns:1fr}}
+
+.index-calendar .holiday-row {position:relative;width:100%;height:46px;z-index:4;pointer-events:none;background:#fff;border-bottom:1px solid var(--border)}
+.index-calendar .holiday-mark {
+  position:absolute;top:6px;height:32px;
+  background:#f1f3f5;border:1px solid #d8dce2;border-left:3px solid #9299a3;
+  border-radius:6px;pointer-events:auto;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  padding:0 6px;overflow:hidden;z-index:3
+}
+.index-calendar .holiday-mark:hover {background:#e9ecef;border-color:#c7ccd3}
+.index-calendar .holiday-dot {display:none}
+.index-calendar .holiday-name {
+  position:static;transform:none;writing-mode:horizontal-tb;
+  font-size:8px;font-weight:800;color:#68717d;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  max-width:100%;display:block;text-align:center
+}
+.index-calendar .holiday-label {
+  position:absolute;top:7px;left:7px;font-size:8px;color:#9299a3;
+  font-weight:850;z-index:2
+}
+.index-calendar .holiday-off {display:none!important}
+
+
+.index-calendar .holiday-label {
+  position:absolute;left:7px;top:4px;font-size:7px;font-weight:850;
+  color:#9aa1ab;z-index:5;pointer-events:none
+}
+
+
+/* =====================================================================
+   FINAL COMPONENT HARDENING
+   - Uses the ACTUAL calendar markup (not the older calendar-* class names).
+   - Keeps all responsive behavior inside .index-calendar.
+   - Makes Week/Month zoom fit the visible viewport instead of using
+     hard-coded day widths.
+   - Prevents the live countdown from ever forcing the header wider.
+   ===================================================================== */
+.index-calendar{width:100%;max-width:100%;min-width:0;overflow:hidden}
+.index-calendar header{width:100%;max-width:100%;min-width:0;overflow:hidden}
+.index-calendar .title{
+  display:grid !important;
+  grid-template-columns:minmax(0,1fr) auto auto;
+  align-items:center;
+  gap:12px;
+  width:100%;
+  min-width:0;
+}
+.index-calendar .title > div:first-child{min-width:0;max-width:100%}
+.index-calendar h1,.index-calendar .sub,.index-calendar .badge{min-width:0;max-width:100%}
+.index-calendar h1{overflow-wrap:anywhere;line-height:1.15}
+.index-calendar .sub{line-height:1.35;overflow-wrap:anywhere}
+
+/* Countdown: label + timer + target date are allowed to shrink independently. */
+.index-calendar .countdown{
+  display:grid !important;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:7px;
+  width:clamp(220px,30vw,330px);
+  min-width:0 !important;
+  max-width:100% !important;
+  padding:8px 10px !important;
+  overflow:hidden !important;
+  white-space:normal !important;
+}
+.index-calendar .countdown-label,
+.index-calendar .countdown-value,
+.index-calendar .countdown-sub{
+  min-width:0 !important;
+  max-width:100% !important;
+  overflow:hidden !important;
+}
+.index-calendar .countdown-label{white-space:nowrap}
+.index-calendar .countdown-value{
+  display:block !important;
+  text-align:center;
+  white-space:nowrap !important;
+  text-overflow:clip;
+  font-size:clamp(10px,1.25vw,13px) !important;
+  line-height:1.15 !important;
+  letter-spacing:0 !important;
+}
+.index-calendar .countdown-sub{
+  white-space:nowrap !important;
+  text-overflow:ellipsis;
+  text-align:right;
+}
+
+/* Toolbar is allowed to wrap without creating page-level horizontal overflow. */
+.index-calendar .toolbar{width:100%;max-width:100%;min-width:0;overflow:hidden}
+.index-calendar .tool-group{min-width:0;max-width:100%}
+.index-calendar .tool-divider{flex:0 0 auto}
+
+/* Timeline: only this region may scroll horizontally. */
+.index-calendar .scroller{width:100%;max-width:100%;overflow-x:auto;overflow-y:hidden}
+.index-calendar .timeline{width:max-content;min-width:0 !important}
+.index-calendar .months,.index-calendar .days,.index-calendar .holiday-row,
+.index-calendar .school,.index-calendar .grid{width:max-content;min-width:0}
+.index-calendar .month,.index-calendar .day,.index-calendar .column{flex:0 0 var(--day)}
+.index-calendar .month{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.index-calendar .day{min-width:var(--day)}
+.index-calendar .column{min-width:var(--day)}
+
+/* Month view: keep labels legible even when a month becomes compact. */
+.index-calendar[data-view-level="0"] .month{font-size:9px}
+.index-calendar[data-view-level="0"] .day .num{font-size:13px;line-height:14px}
+.index-calendar[data-view-level="0"] .day .dow{font-size:7px}
+
+/* Small screens: stack the countdown and badge rather than squeezing them. */
+@media (max-width:900px){
+  .index-calendar .title{
+    grid-template-columns:minmax(0,1fr) auto;
+  }
+  .index-calendar .countdown{grid-column:1/-1;width:100%}
+  .index-calendar .badge{justify-self:end}
+}
+@media (max-width:600px){
+  .index-calendar .title{grid-template-columns:minmax(0,1fr) auto;gap:8px}
+  .index-calendar h1{font-size:18px !important}
+  .index-calendar .countdown{
+    grid-column:1/-1;
+    grid-template-columns:auto minmax(0,1fr);
+    width:100%;
+    padding:8px 9px !important;
+  }
+  .index-calendar .countdown-sub{
+    grid-column:1/-1;
+    text-align:left;
+    font-size:8px;
+  }
+  .index-calendar .countdown-value{font-size:clamp(11px,4.2vw,17px) !important}
+  .index-calendar .badge{font-size:8px;padding:5px 7px}
+}
+@media (max-width:390px){
+  .index-calendar .title{grid-template-columns:minmax(0,1fr)}
+  .index-calendar .badge{justify-self:start}
+  .index-calendar .countdown-value{font-size:12px !important}
+}
+
+
 </style>
 
 </head>
+<!-- ===== HTML-01 APP SHELL ===== -->
 <body>
 <div id="studyPetOverlay" aria-hidden="true"><div id="studyPetBubble"></div><canvas id="studyPetCanvas" width="128" height="128"></canvas><img id="studyPetImg" alt="Virtual pet" aria-hidden="true"><div id="studyPetShadow"></div></div>
 <div id="bgLayer"><video id="bgVideoEl" muted loop autoplay playsinline></video></div>
@@ -3726,6 +4098,7 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
       <button class="btn-ghost stats-toggle" id="statsToggleBtn" title="Stats" aria-label="Stats">📊 <span>Stats</span></button>
       <button class="btn-ghost stats-toggle" id="settingsToggleBtn" title="Settings" aria-label="Settings">⚙️ <span>Settings</span></button>
       <button class="btn-ghost stats-toggle" id="petToggleBtn" title="Pet" aria-label="Pet">🐶 <span>Pet</span></button>
+      <button class="btn-ghost stats-toggle" id="calendarToggleBtn" title="Calendar" aria-label="Calendar">🗓️ <span>Calendar</span></button>
     </nav>
   </div>
 
@@ -3795,6 +4168,7 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
         </svg>
       </div>
 
+      <!-- ===== HTML-02 LANDING / SETS ===== -->
       <!-- LANDING -->
       <div id="landing">
         <div class="landing-toolbar">
@@ -3876,6 +4250,10 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
               <option value="MED2">MED2</option>
               <option value="NEU2">NEU2</option>
               <option value="SUR2">SUR2</option>
+              <option value="GYN">GYN</option>
+              <option value="ORL">ORL</option>
+              <option value="CPT">CPT</option>
+              <option value="CMD">CMD</option>
             </select>
             <select id="setLESelect">
               <option value="">LE…</option>
@@ -3995,7 +4373,7 @@ OUTCOME: NEG
           <div id="samplexPromptWrap" class="hidden">
             <label class="field-label" style="margin-top:14px;">Don't have questions typed up yet?</label>
             <div class="hint" style="margin-top:0;">
-              Copy a ready-made prompt to paste into ChatGPT, Claude, or any LLM, along with your source material (notes, a past exam, a textbook chapter) — it explains the exact Samplex table format so the reply can be pasted straight into the grid below.
+              Copy a ready-made prompt to paste into ChatGPT, Claude, or any LLM, along with your source material (notes, a past exam, a textbook chapter) — it explains the exact Samplex table format to use. Export/paste the LLM's reply into an Excel sheet (or Google Sheets) first, then copy the rows from there into the grid below — pasting straight from the chat window can garble rows whenever a tip or rationale itself contains a "|" character or a line break.
             </div>
             <input type="text" class="text-field" id="samplexPromptTopic" placeholder="Describe the subject/source material here (or paste/attach it directly to the LLM)">
             <div class="row" style="justify-content:flex-start; margin-top:10px;">
@@ -4070,6 +4448,7 @@ OUTCOME: NEG
         </div>
       </div>
 
+      <!-- ===== HTML-03 QUIZ ===== -->
       <!-- QUIZ -->
       <div id="quiz" class="hidden">
         <div class="progress-row">
@@ -4155,6 +4534,16 @@ OUTCOME: NEG
         <div class="tip-box hidden" id="confidenceRow" style="align-items:center; gap:8px; flex-wrap:wrap;">
           <span class="tip-label" style="margin:0;">How confident were you?</span>
           <div id="confidenceBtns" style="display:flex; gap:6px;"></div>
+        </div>
+
+        <!-- Shown instead of auto-jumping into the brain-break screen the
+             instant Focus time hits zero — the person may be mid-read on
+             the exam tip above. Stays up (see showBreakReadyPrompt, called
+             on every pomodoro tick while a break is owed) until they
+             actually tap through. -->
+        <div class="tip-box hidden" id="breakReadyBanner" style="align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; border-color:var(--gold); margin-top:8px;">
+          <span>🍅 Focus time's up — ready for your break?</span>
+          <button type="button" class="btn-primary" id="breakReadyBtn" style="padding:6px 14px; font-size:13px; white-space:nowrap;">Take a break →</button>
         </div>
 
         <div class="footer-row">
@@ -4248,6 +4637,7 @@ OUTCOME: NEG
       </div>
 
 
+      <!-- ===== HTML-05 VIRTUAL PET ===== -->
       <!-- VIRTUAL PET PROTOTYPE -->
       <div id="petView" class="hidden">
         <div class="pet-header-row">
@@ -4384,6 +4774,7 @@ OUTCOME: NEG
         </div>
       </div>
 
+      <!-- ===== STATS VIEW (not listed as its own module in the original map; sits between HTML-03 Quiz and HTML-04 Settings) ===== -->
       <!-- STATS -->
       <div id="statsView" class="hidden">
         <div id="studyNowCard" class="hint hidden" style="margin-bottom:14px; padding:12px; border-radius:10px;"></div>
@@ -4433,6 +4824,7 @@ OUTCOME: NEG
         </div>
       </div>
 
+      <!-- ===== HTML-04 SETTINGS ===== -->
       <!-- SETTINGS -->
       <div id="settingsView" class="hidden">
         <label class="field-label">Settings</label>
@@ -4794,17 +5186,108 @@ OUTCOME: NEG
 
     </div>
   </div>
+
+      <!-- ===== HTML-07 CALENDAR ===== -->
+      <div id="calendarView" class="hidden">
+        <div class="row" style="margin-bottom:14px;">
+          <button class="btn-ghost" id="backFromCalendarBtn">← Back</button>
+        </div>
+<div class="index-calendar" id="uermExamCalendar">
+<header>
+  <div class="title">
+    <div><h1>UERM 3rd Year · Exam Timeline</h1><div class="sub">SY 2026–2027 · Long Exams, Finals & individual subject schedules</div></div>
+    <div class="countdown" id="nextLECountdown">
+          <span class="countdown-label">NEXT LE</span>
+          <span class="countdown-value" id="nextLEValue">—</span>
+          <span class="countdown-sub" id="nextLESub">—</span>
+        </div>
+        <div class="badge" id="count">9 subject exams</div>
+  </div>
+  <div class="toolbar">
+    <div class="tool-group primary-tools">
+      <button class="primary add-exam" id="addBtn">＋ Add exam</button>
+      <label class="import">Import ICS<input id="ics" type="file" accept=".ics,text/calendar" hidden></label>
+    </div>
+
+    <div class="tool-divider"></div>
+
+    <div class="tool-group exam-nav">
+      <span class="tool-label">EXAMS</span>
+      <button data-jump="2026-08-05">LE 1</button>
+      <button data-jump="2026-09-23">LE 2</button>
+      <button data-jump="2026-11-03">LE 3</button>
+      <button data-jump="2027-01-18">LE 4</button>
+      <button data-jump="2027-03-01">LE 5</button>
+      <button data-jump="2027-04-14">LE 6</button>
+      <button data-jump="2027-04-23">Finals</button>
+    </div>
+
+    <div class="tool-divider"></div>
+
+    <div class="tool-group utility-tools">
+      <button class="today-btn" data-jump="TODAY"><span class="today-dot-ui"></span>Today</button>
+      <button id="holidayToggle" class="active">Holidays on</button>
+      <span class="tool-label">VIEW</span>
+      <button class="zoom active" data-level="2">Day</button>
+      <button class="zoom" data-level="1">Week</button>
+      <button class="zoom" data-level="0">Month</button>
+      <button id="clearBtn" class="clear-btn">Clear added</button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="scroller" id="scroller">
+    <div class="timeline" id="timeline">
+      <div class="months" id="months"></div>
+      <div class="days" id="days"></div>
+      <div class="holiday-row" id="holidayRow"></div>
+      <div class="school" id="school"></div>
+      <div class="grid" id="grid"></div>
+    </div>
+  </div>
+  <div class="legend"><span>■ School-wide LE / Finals period</span><span>Subject exams use their assigned subject color</span></div>
+  <section class="subject-panel">
+    <div class="subject-head"><div><h2>3rd Year Subjects</h2><p>Colors are reserved for individual subject exam schedules.</p></div><div class="badge">MANUAL + ICS</div></div>
+    <div class="subjects" id="subjects"></div><div style="font-size:8px;color:#9aa0aa;margin-top:8px">
+Holiday data based on the Philippines iCalendar maintained by Office Holidays.
+</div>
+  </section>
+</main>
+
+<div class="modal" id="modal">
+  <div class="modal-box">
+    <button id="closeBtn" style="float:right">×</button>
+    <h2 id="modalTitle">Add Subject Exam</h2>
+    <p id="modalSub">Enter an exact date and time. Dates are saved in local calendar time.</p>
+    <div class="form">
+      <label>Subject<select id="subject"></select></label>
+      <label>Exam<select id="exam"><option>LE 1</option><option>LE 2</option><option>LE 3</option><option>LE 4</option><option>LE 5</option><option>LE 6</option><option>FINAL</option><option>OTHER</option></select></label>
+      <label>Date<input id="date" type="date"></label>
+      <label>Start<input id="start" type="time"></label>
+      <label>End<input id="end" type="time"></label>
+      <label class="full">Notes<input id="notes" type="text" placeholder="Optional"></label>
+    </div>
+    <div class="actions"><button id="deleteBtn" class="clear-btn" style="display:none;margin-right:auto">Delete Event</button><button id="cancelBtn">Cancel</button><button class="primary" id="saveBtn">Add Exam</button></div>
+  </div>
+</div>
+</div>
+
+      </div>
+
   <div class="tile-border bottom"></div>
   </div>
 </div>
 
 <script>
+/* ===== JS-01 BOOTSTRAP / CONSTANTS ===== */
 /* Bump this string every time this file is edited/pushed. It's plain text
    baked into the page, so if Settings shows an OLD value, that's proof the
    browser is serving a stale cached copy rather than the real thing — use
    the "Force refresh" button in Settings to break out of it. */
 const APP_VERSION = '2026-08-17 debug-fixes v1';
 
+/* ===== JS-02 STORAGE / PERSISTENCE ===== */
 /* Safe localStorage wrapper — some iOS contexts (e.g. Quick Look previews
    opened straight from the Files app) restrict or disable localStorage.
    These helpers keep the app running in-memory for the session instead
@@ -4947,11 +5430,22 @@ Highest-yield ASD management pearl|Early diagnosis + early behavioral interventi
 Three autism board buzzwords that almost guarantee the diagnosis|Poor eye contact + poor response to name + repetitive behaviors (lining up toys)|These are among the most recognizable exam clues in Developmental Pediatrics II.`;
 
 
+/* ===== JS-03 APP STATE ===== */
 let cards = [];
 let queue = [];
 let current = null;
 let totalCards = 0;
 let masteredCount = 0;
+// Cards that have already counted toward masteredCount this session,
+// tracked by object identity (not cardKey/front text, which can change if
+// the card gets edited). Guards against masteredCount ever exceeding
+// totalCards: normally selectAnswer() can only run once per card thanks to
+// the `answered` flag, but editing a card that's already been answered
+// correctly (openCardEditor has no guard against opening on an answered
+// card) resets `answered` back to false via showCard(), which otherwise let
+// the same still-current card be answered — and counted as mastered — a
+// second time.
+let masteredCards = new Set();
 let askedCount = 0;
 let score = 0;
 let missedSet = new Map();
@@ -5110,6 +5604,7 @@ const PRACTICE_ID = '__practice__'; // bucket for an ad-hoc "weak cards" practic
 const SCRATCH_ID = '__scratch__'; // bucket for an in-progress quiz that isn't tied to a saved set
 let currentOptions = [];
 
+/* ===== JS-04 NAVIGATION / SCREEN CONTROL ===== */
 /* ---- Navigation between landing / folder / setup / quiz / results / stats ---- */
 const UNFILED = '__unfiled__';
 // Brain-break state must be declared before showLanding() runs below (it
@@ -5173,10 +5668,11 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pagehide', saveBeforeNavigation);
 
 function hideAllScreens(){
-  ['landing','folderView','setup','quiz','caseGame','brainBreak','results','statsView','settingsView','petView'].forEach(id => {
+  ['landing','folderView','setup','quiz','caseGame','brainBreak','results','statsView','settingsView','petView','calendarView'].forEach(id => {
     const el = $(id);
     if(el) el.classList.add('hidden');
   });
+  hideBreakReadyPrompt();
   renderBrainBreakCountdown();
 }
 function showLanding(){
@@ -5320,6 +5816,7 @@ function clearSession(id){
   saveAllSessions(all);
 }
 
+/* ===== JS-05 SETS / FOLDERS / CARDS ===== */
 function loadSets(){ try{ return JSON.parse(appDataCache[SETS_KEY] || 'null') || {}; }catch(e){ return {}; } }
 function saveSetsData(obj){ appDataSet(SETS_KEY, JSON.stringify(obj)); }
 function loadStatsData(){ try{ return JSON.parse(appDataCache[STATS_KEY] || 'null') || {}; }catch(e){ return {}; } }
@@ -5477,7 +5974,7 @@ const SUBJECT_TAB_COLORS = ['#7A4E9E','#3E7A5C','#C9A24E','#B5493E','#4A7A9E','#
 // explicitly for guaranteed-distinct colors; anything else (e.g. an
 // imported set with a custom subject, or an LE number) falls back to a hash
 // of the string.
-const SUBJECT_COLOR_MAP = {PED2:'#B5493E', PSY2:'#9E6B4E', LEG:'#C9A24E', OB:'#7A4E9E', OPT:'#3F8A82', MED2:'#4A7A9E', NEU2:'#A85C7A', SUR2:'#3E7A5C'};
+const SUBJECT_COLOR_MAP = {PED2:'#B5493E', PSY2:'#9E6B4E', LEG:'#C9A24E', OB:'#7A4E9E', OPT:'#3F8A82', MED2:'#4A7A9E', NEU2:'#A85C7A', SUR2:'#3E7A5C', GYN:'#CD2678', ORL:'#2C6AE7', CPT:'#6233C1', CMD:'#622A0F'};
 function subjectColor(id){
   if(SUBJECT_COLOR_MAP[id]) return SUBJECT_COLOR_MAP[id];
   let hash = 5381;
@@ -5544,7 +6041,11 @@ function renderLanding(){
     OPT: '👁️',   // Ophthalmology
     MED2: '🩺',   // Internal Medicine
     NEU2: '🧠',   // Neurology
-    SUR2: '🔪'    // Surgery
+    SUR2: '🔪',   // Surgery
+    GYN: '🌸',    // Gynecology
+    ORL: '👂',    // Otorhinolaryngology
+    CPT: '🧪',    // Clinical Pathology
+    CMD: '🏘️'    // Community Medicine
   };
   function folderIcon(key){
     if(SUBJECT_ICONS[key]) return SUBJECT_ICONS[key];
@@ -6343,6 +6844,7 @@ function hideUndoToast(){
   if(toast) toast.classList.remove('show');
 }
 
+/* ===== JS-06 LEARNING / STATISTICS ===== */
 function recordAnswer(card, isCorrect){
   const g = loadGlobalStats();
   g.studyDays = g.studyDays || {};
@@ -7470,6 +7972,7 @@ function renderLearningDashboardSections(allTrackedCards, dash){
   }
 }
 
+/* ===== JS-10 BACKGROUND / DISPLAY ===== */
 /* ---- Background image + auto color palette (all local, no upload anywhere) ---- */
 
 /* IndexedDB Wrapper to bypass the 5MB localStorage limit for large animated backgrounds */
@@ -7825,6 +8328,7 @@ async function maybeShowTipImage(card){
   }catch(e){ /* quota hit, offline, or blocked — fail silently, tip text still shows */ }
 }
 
+/* ===== JS-08 SETTINGS ===== */
 function populateSettingsFields(){
   $('imgFeatureToggle').checked = imgFeatureEnabled;
   try{
@@ -8553,8 +9057,14 @@ $('copyAlgoPromptBtn').onclick = async () => {
 };
 
 /* ---- Master prompt users can paste into any LLM to generate a Samplex
-   table — columns match COLS_SAMPLEX below, and the reply pastes straight
-   into the grid via onCellPaste's markdown-table support. ---- */
+   table — columns match COLS_SAMPLEX below. The LLM's raw markdown-table
+   reply CAN be pasted directly into the grid (onCellPaste's markdown-table
+   support), but that parser splits naively on "|", so any tip/rationale
+   that itself contains a "|" or a line break silently misaligns the row.
+   The instructions below tell the person to stage the reply in an actual
+   Excel sheet first and copy from there instead, which is both a clean
+   tab-delimited paste (parseClipboardGrid) and a chance to eyeball the
+   rows before they land in the grid. ---- */
 const SAMPLEX_LLM_PROMPT_TEMPLATE = `Please output the results as a Markdown table using exactly these columns: Front | A | B | C | D | Answer (A-D) | Exam Tip A | Exam Tip B | Exam Tip C | Exam Tip D | Rationale
 
 Strict Content Rules:
@@ -8567,6 +9077,8 @@ Strict Content Rules:
 
 Output ONLY the markdown table. No preamble, no commentary, no code fences around it.
 
+After you produce the table, I will paste it into an Excel sheet (one column per "|"-separated field) and copy the finished rows from there — so keep every field's text free of unnecessary "|" characters and line breaks so nothing crosses into the wrong column.
+
 ===== SOURCE MATERIAL / TOPIC =====
 
 {TOPIC}`;
@@ -8578,7 +9090,7 @@ $('copySamplexPromptBtn').onclick = async () => {
   const statusEl = $('samplexPromptStatus');
   try{
     await navigator.clipboard.writeText(text);
-    statusEl.textContent = '✓ Prompt copied — paste it into ChatGPT, Claude, or any LLM, then paste its reply into the grid below.';
+    statusEl.textContent = '✓ Prompt copied — paste it into ChatGPT, Claude, or any LLM. Then export/paste its reply into an Excel sheet and copy the rows from there into the grid below.';
     statusEl.style.color = 'var(--green)';
   }catch(e){
     window.prompt('Copy this prompt:', text);
@@ -9436,6 +9948,7 @@ function weightedSample(items, weights, k){
   return picked;
 }
 
+/* ===== JS-07 QUIZ ENGINE (core: option-building, launching, and running a quiz. Note: the case-vignette game parser, card-table editing, and screen-nav wiring functions in the preceding ~1,600 lines are genuinely interleaved with JS-05/JS-08 content and don't split into a single clean block — search by function name there rather than relying on a marker) ===== */
 function buildOptions(card){
   // Full MC cards already come with their own answer choices — use those
   // directly instead of generating TF-IDF-based distractors.
@@ -9586,6 +10099,7 @@ function showBrainBreak(opts){
   const resumeSameCard = !!opts.resumeSameCard;
   const finishAfterBreak = !!opts.finishAfterBreak;
   cardsSinceBreak = 0;
+  hideBreakReadyPrompt(); // the confirmation prompt's job is done once the break actually starts
   const cardsLeft = queue.length + 1; // the current card (unfinished either way) plus whatever's queued
   $('brainBreakStats').textContent = `Mastered ${masteredCount} / ${totalCards} so far · ${cardsLeft} card${cardsLeft === 1 ? '' : 's'} left`;
   $('brainBreakMessage').textContent = BRAIN_BREAK_MESSAGES[Math.floor(Math.random() * BRAIN_BREAK_MESSAGES.length)];
@@ -9599,6 +10113,23 @@ function showBrainBreak(opts){
   // sitting there indefinitely until someone notices and taps Continue.
   if(typeof window.pomodoroStartBreak === 'function') window.pomodoroStartBreak();
 }
+
+// Confirmation prompt shown in the quiz screen when Focus time hits zero,
+// instead of the old behavior of yanking straight into the brain-break
+// screen (see triggerPomodoroBreak in the pomodoro module). Left up to the
+// person to act on so they're never pulled away mid-read on an exam tip.
+function showBreakReadyPrompt(){
+  const banner = $('breakReadyBanner');
+  if(banner) banner.classList.remove('hidden');
+}
+function hideBreakReadyPrompt(){
+  const banner = $('breakReadyBanner');
+  if(banner) banner.classList.add('hidden');
+}
+$('breakReadyBtn').onclick = () => {
+  hideBreakReadyPrompt();
+  showBrainBreak({resumeSameCard: true});
+};
 
 function leaveBrainBreak(){
   const resumeSameCard = $('brainBreak').dataset.resumeSameCard === '1';
@@ -9669,7 +10200,7 @@ function launchQuiz(cardArr, setId){
   totalCards = cards.length;
   buildSimilarityIndex(cards);
   queue = orderedQueue(cards);
-  masteredCount = 0; askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
+  masteredCount = 0; masteredCards = new Set(); askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
   // Fresh quiz: clear the pet's running session signals (streaks, slumps)
   // so its reactions reflect this session, not a leftover run.
   if(typeof window.petStartStudySession === 'function') window.petStartStudySession();
@@ -9988,6 +10519,7 @@ async function collectBackgroundBackup(){
   return {app: 'topicReview', version: 1, type: 'background', exportedAt: new Date().toISOString(), data};
 }
 
+/* ===== JS-12 BACKUP / IMPORT / EXPORT ===== */
 $('exportDataBtn').onclick = async () => {
   const payload = JSON.stringify(await collectBackupData(), null, 2);
   const blob = new Blob([payload], {type: 'application/json'});
@@ -10511,10 +11043,32 @@ $('saveCardEditBtn').onclick = () => {
   const correctIdx = Math.min(editCorrectIndex, newOptions.length - 1);
   const newBack = newOptions[correctIdx];
 
+  // card.optionTips is a *positional* array aligned to card.options — but
+  // openCardEditor seeds this editor from currentOptions (the shuffled
+  // on-screen copy), so newOptions above is very rarely in the same order
+  // the existing card.options/optionTips were saved in. Saving newOptions
+  // as-is while leaving the old optionTips array untouched left
+  // optionTipFor()'s position lookup (card.options.findIndex ->
+  // card.optionTips[idx]) reading the WRONG option's tip for every option
+  // whose position moved — most visibly the newly-correct answer after
+  // changing which letter is correct, whose A-D exam tip would appear to
+  // just vanish. Re-derive optionTips in the new order by matching each new
+  // option's text back to its old position, so an option that wasn't
+  // itself retyped keeps its authored tip no matter where it landed; only a
+  // genuinely retyped option's tip is dropped, which is expected since the
+  // old tip no longer describes the new text.
+  const oldOptions = current.options || [];
+  const oldOptionTips = current.optionTips || [];
+  const newOptionTips = newOptions.map(opt => {
+    const oldIdx = oldOptions.findIndex(o => (o || '').toLowerCase() === opt.toLowerCase());
+    return oldIdx >= 0 ? (oldOptionTips[oldIdx] || '') : '';
+  });
+
   current.front = newFront;
   current.back = newBack;
   current.tip = newTip;
   current.options = newOptions;
+  current.optionTips = newOptionTips;
   current.mode = 'full'; // now hand-authored — stop regenerating distractors for this card
   // The single "Exam tip" box in this editor is the only *combined*-tip
   // field a person can see and edit here. But buildExamTipText() prefers
@@ -10559,6 +11113,10 @@ $('saveCardEditBtn').onclick = () => {
         s.cards[idx].back = newBack;
         s.cards[idx].tip = newTip;
         s.cards[idx].options = newOptions;
+        // See the matching comment above `current.optionTips = newOptionTips;` —
+        // optionTips must be re-aligned to newOptions' order, not just
+        // carried over as-is, or per-option tips desync from their options.
+        s.cards[idx].optionTips = newOptionTips;
         s.cards[idx].mode = 'full';
         // See the matching comment above `current.rationale = newTip;` —
         // optionTips (per-option A/B/C/D tips) must be preserved here too.
@@ -10752,7 +11310,13 @@ function selectAnswer(btn, chosen, card){
   if(isCorrect){
     btn.classList.add('correct');
     score++;
-    masteredCount++;
+    // Only the first time this exact card is answered correctly should
+    // move the mastered count — see masteredCards' declaration for why
+    // that isn't already guaranteed by the `answered` flag alone.
+    if(!masteredCards.has(card)){
+      masteredCards.add(card);
+      masteredCount++;
+    }
     renderPlant(masteredCount / totalCards, {bump:true});
   } else {
     btn.classList.add('wrong');
@@ -10899,6 +11463,12 @@ function resumeSession(id){
 
   totalCards = s.totalCards || cards.length;
   masteredCount = s.masteredCount || 0;
+  // Which specific cards contributed to masteredCount isn't persisted
+  // (only the running total is), so this can't be reconstructed exactly on
+  // resume — start empty. Worst case, the double-count guard simply doesn't
+  // apply to cards answered before this particular resume, same as before
+  // this guard existed.
+  masteredCards = new Set();
   askedCount = s.askedCount || 0;
   score = s.score || 0;
   cardsSinceBreak = s.cardsSinceBreak || 0;
@@ -11107,7 +11677,7 @@ $('retryFlaggedBtn').onclick = () => {
   if(flaggedCards.length === 0) return;
   totalCards = flaggedCards.length;
   queue = shuffle(flaggedCards);
-  masteredCount = 0; askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
+  masteredCount = 0; masteredCards = new Set(); askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
   window.__quizStartTime = Date.now();
   window.__quizActiveMs = 0;
   window.__quizSegmentStart = Date.now();
@@ -11119,7 +11689,7 @@ $('retryFlaggedBtn').onclick = () => {
 
 $('retryAllBtn').onclick = () => {
   queue = orderedQueue(cards);
-  masteredCount = 0; askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
+  masteredCount = 0; masteredCards = new Set(); askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
   window.__quizStartTime = Date.now();
   window.__quizActiveMs = 0;
   window.__quizSegmentStart = Date.now();
@@ -11133,7 +11703,7 @@ $('retryMissedBtn').onclick = () => {
   if(missedSet.size === 0) return;
   totalCards = missedSet.size;
   queue = shuffle(Array.from(missedSet.values()));
-  masteredCount = 0; askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
+  masteredCount = 0; masteredCards = new Set(); askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
   window.__quizStartTime = Date.now();
   window.__quizActiveMs = 0;
   window.__quizSegmentStart = Date.now();
@@ -11265,6 +11835,7 @@ $('editBtn').onclick = () => {
   renderKbSettings();
 })();
 
+/* ===== JS-13 KEYBOARD ===== */
 /* ---- Keyboard shortcuts during the quiz: 1-4 / A-D / U-P (plus any
    custom keys set above) to pick, Enter/Space for next ---- */
 document.addEventListener('keydown', e => {
@@ -11613,6 +12184,7 @@ document.addEventListener('keydown', e => {
 </div>
 
 <script>
+/* ===== JS-04 NAVIGATION / SCREEN CONTROL (cont'd): zoom/scale toolbar — not its own category in the original map, grouped here since it's page-level chrome, not a theme/quiz/data concern ===== */
 document.addEventListener('DOMContentLoaded',function(){
  let scale=parseFloat(lsGet('topicReviewScale')||'1');
  function apply(){
@@ -11661,6 +12233,7 @@ document.addEventListener('DOMContentLoaded',function(){
  const INTENSITY_KEY = 'topicReview_intensity_v1';
  const INTENSITY_LEVELS = ['subtle','balanced','expressive'];
 
+ /* ===== JS-09 THEMES / APPEARANCE ===== */
  const themeBtns = {
    garden: document.getElementById('themeGardenBtn'), kawaii: document.getElementById('themeKawaiiBtn'), midnight: document.getElementById('themeMidnightBtn'),
    ocean: document.getElementById('themeOceanBtn'), sunset: document.getElementById('themeSunsetBtn'), lavender: document.getElementById('themeLavenderBtn'),
@@ -12244,6 +12817,7 @@ document.addEventListener('DOMContentLoaded',function(){
     dogSheet.src=src;
   };
 
+  /* ===== JS-11 VIRTUAL PET ===== */
   dogSheet.onerror=()=>console.error('Virtual pet sprite sheet failed to load');
   const petStageCanvas=document.getElementById('petSprite');
   const petStageCtx=petStageCanvas?.getContext('2d');
@@ -12573,8 +13147,20 @@ document.addEventListener('DOMContentLoaded',function(){
     petMode='quiz';
     clearTimeout(petMoveTimer);
     petMoving=false;
-    petDirection=-1;
-    positionPet(8,0,getPetBaseBottom());
+    petDirection=1;
+    // Default to the top-right corner instead of the bottom-left shelf.
+    // Bottom-left sat directly on top of the answer options and the
+    // End quiz/Next card footer buttons, which made the pet obstruct the
+    // question content — and, since its reactions (playPetReaction) fire
+    // right where the wrong/correct highlighting also appears, made those
+    // reactions easy to miss under/behind it rather than read as the pet
+    // actually responding. positionPet's default vertical clamp only
+    // allows a small 96px hop above the resting shelf, so freeVertical=true
+    // (with an explicit generous reach) is needed to actually let it sit up
+    // near the top rather than getting clamped back down near the bottom.
+    // Still fully draggable afterward via the existing pointer-drag
+    // handling (beginPetHold etc.) if someone wants it elsewhere.
+    positionPet(getPetMaxX(),0,getPetTopCeiling(),window.innerHeight,true);
     setPetAction('idle','stand');
     // A brief, situational check-in when a study session comes into view —
     // e.g. a gentle "it's late" nudge at night, or a streak cheer. Throttled
@@ -12616,7 +13202,8 @@ document.addEventListener('DOMContentLoaded',function(){
     });
   }
 
-  function isDevModeEnabled(){return lsGet('topicReviewDevMode')==='1'}
+  /* ===== JS-16 DEVELOPER / DEBUG (small, embedded inside JS-11 Virtual Pet — dev-mode only affects pet visibility) ===== */
+function isDevModeEnabled(){return lsGet('topicReviewDevMode')==='1'}
   function applyDevModeVisibility(){
     const on=isDevModeEnabled();
     document.querySelectorAll('.dev-only-feature').forEach(el=>el.classList.toggle('hidden',!on));
@@ -12890,6 +13477,20 @@ document.addEventListener('DOMContentLoaded',function(){
     document.querySelectorAll('.pet-intro-breed').forEach(b=>b.classList.toggle('active',b.dataset.introBreed===introSelectedBreed));
     if(!isPetAdopted()){$('petIntro').classList.remove('hidden');$('petIntroName').value='';} syncPetIntroLayout();
   };
+
+  $('calendarToggleBtn').onclick=()=>{
+    saveBeforeNavigation();hideAllScreens();$('calendarView').classList.remove('hidden');
+    // The calendar's own script rendered once already, while this view was
+    // still hidden (so the scroller had no real width to measure). Force
+    // one more render now that it's visible so day/week widths are correct.
+    if(typeof window.uermCalendarRefresh==='function') window.uermCalendarRefresh();
+    // Re-center on today now that the view is actually visible — while it
+    // was hidden the scroller had no real scrollWidth, so any earlier jump
+    // to today couldn't take effect yet.
+    if(typeof window.uermCalendarJumpToday==='function') window.uermCalendarJumpToday();
+  };
+  $('backFromCalendarBtn').onclick=()=>{ showLanding(); };
+
   let introSelectedBreed='cavalier';
   document.querySelectorAll('.pet-intro-breed').forEach(btn=>btn.addEventListener('click',()=>{
     introSelectedBreed=btn.dataset.introBreed||'cavalier';
@@ -13381,6 +13982,7 @@ updateNavActiveState();
    floating on screen (fixed to the viewport) even if they navigate away,
    until they close it. State persists across reloads via the same
    appData cache/IndexedDB path everything else uses. */
+/* ===== JS-14 CONTROLLER: pomodoro/focus-timer module (self-contained IIFE) ===== */
 (function(){
   const LEN_OPTIONS = {focus:25, break:5}; // default minutes; focus length is adjustable via the length pills, break is always 5
   let state = {
@@ -13469,6 +14071,10 @@ updateNavActiveState();
       if(!raw) return;
       const saved = JSON.parse(raw);
       if(saved && typeof saved === 'object') state = Object.assign(state, saved);
+      // Restore in-memory breakInProgress from the persisted mode so a
+      // reload mid-break doesn't leave pomodoroEndBreak() thinking no break
+      // is active (breakInProgress itself isn't persisted — only state is).
+      breakInProgress = state.mode === 'break';
       // Catch up on time that passed while the tab was closed/backgrounded,
       // so the timer doesn't silently drift or appear frozen on return.
       if(state.running && state.lastTick){
@@ -13573,9 +14179,19 @@ updateNavActiveState();
       const quizVisible = quizEl && !quizEl.classList.contains('hidden');
       const editingCard = editPanel && !editPanel.classList.contains('hidden');
       const alreadyOnBreak = breakEl && !breakEl.classList.contains('hidden');
-      if(quizVisible && !editingCard && !alreadyOnBreak && typeof showBrainBreak === 'function'){
-        showBrainBreak({resumeSameCard: true});
+      if(editingCard || alreadyOnBreak){
+        if(typeof hideBreakReadyPrompt === 'function') hideBreakReadyPrompt();
+        return;
       }
+      // Don't yank the person straight into the brain-break screen the
+      // instant focus time hits zero — they're very possibly mid-read on
+      // the exam tip for the card they just answered. Surface a
+      // confirmation instead (see showBreakReadyPrompt/#breakReadyBanner)
+      // and let its button hand off to showBrainBreak(). This function
+      // keeps getting retried every tick (see tick()) so the prompt stays
+      // up — same "skipped now, re-offered on the next check" pattern
+      // already used for the mid-edit case above.
+      if(quizVisible && typeof showBreakReadyPrompt === 'function') showBreakReadyPrompt();
     }catch(e){}
   }
 
@@ -13655,10 +14271,24 @@ updateNavActiveState();
   // to do with the Focus timer and may fire while it's off. Remembering
   // this lets pomodoroEndBreak() tell the two cases apart.
   let wasFocusRunningBeforeBreak = false;
+  // Tracks "is a break currently the thing pomodoroEndBreak still needs to
+  // clean up after" — deliberately NOT the same thing as `state.mode ===
+  // 'break'`. When a break's 5 minutes elapse naturally, applyElapsed()
+  // already flips state.mode from 'break' back to 'focus' *before*
+  // notifySegmentDone -> endBrainBreakIfShowing -> leaveBrainBreak calls
+  // pomodoroEndBreak() — so a guard checking state.mode there was reading
+  // the post-flip value and always finding it already 'focus', silently
+  // skipping the whole cleanup (including the running/stopInterval reset)
+  // every time a break ended on its own instead of via a manual tap. This
+  // flag is only ever true from the moment a break actually starts to the
+  // moment pomodoroEndBreak actually processes it, regardless of what
+  // state.mode has since moved on to.
+  let breakInProgress = false;
   window.pomodoroStartBreak = function(){
     stopTicking();
     tickingPlayed = false;
     wasFocusRunningBeforeBreak = state.running && state.mode === 'focus';
+    breakInProgress = true;
     state.mode = 'break';
     state.remaining = LEN_OPTIONS.break * 60;
     state.running = true;
@@ -13677,7 +14307,8 @@ updateNavActiveState();
   // hand it a fresh focus segment (stays running); otherwise reset to a
   // normal, un-drifted, stopped focus countdown.
   window.pomodoroEndBreak = function(){
-    if(state.mode !== 'break') return;
+    if(!breakInProgress) return;
+    breakInProgress = false;
     stopTicking();
     tickingPlayed = false;
     state.mode = 'focus';
@@ -13851,6 +14482,391 @@ updateNavActiveState();
 
   if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
+})();
+
+  /* ================================================================
+     CALENDAR MODULE
+     ================================================================
+     RESERVED FOR THE CALENDAR.
+     Keep calendar CSS/HTML/JS isolated here or in a clearly marked
+     companion module. Do not mix calendar state with quiz state.
+     ================================================================ */
+
+  /* ================================================================
+     JS-15 CALENDAR
+     ---------------------------------------------------------------
+     Calendar logic belongs here.
+
+     Recommended internal order:
+       1. Calendar state / event data
+       2. Date normalization
+       3. Event CRUD / drag handling
+       4. Month renderer
+       5. Week renderer
+       6. Countdown renderer
+       7. Responsive helpers
+       8. Calendar initialization
+
+     Keep all calendar-specific selectors/functions together.
+     ================================================================ */
+
+  /* Embedded UERM exam calendar component. Wrapped in its own IIFE (see
+     inside) so none of its function/const names can collide with the rest
+     of this file. It reads/writes its own localStorage keys (uermExams,
+     uermHolidayLayer) and renders into #uermExamCalendar, which lives
+     inside #calendarView. window.uermCalendarRefresh is exposed below so
+     the nav handler can force a re-layout once the view becomes visible
+     (its first render happens while #calendarView is still hidden, so the
+     scroller has no real width to measure yet). */
+(function(){ // scoped so these names can never collide with index.html's own script
+const START=new Date('2026-07-01T00:00:00');
+const END=new Date('2027-06-05T00:00:00');
+function localToday(){
+  const d=new Date();
+  const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function localTimeFraction(){
+  const d=new Date();
+  return (d.getHours()*3600+d.getMinutes()*60+d.getSeconds()+d.getMilliseconds()/1000)/86400;
+}
+function dateKey(d){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+let level=2;
+let DAY=150;
+
+const SUBJECTS={
+ MED2:{name:'Medicine II',color:'#6aa84f'},SUR2:{name:'Surgery II',color:'#2bbf86'},
+ PED2:{name:'Pediatrics II',color:'#f1cc1a'},NEU2:{name:'Neurology II',color:'#c01d1d'},
+ PSY2:{name:'Psychiatry II',color:'#e57b45'},OB:{name:'Obstetrics',color:'#cd2678'},
+ GYN:{name:'Gynecology',color:'#cd2678'},ORL:{name:'Otorhinolaryngology',color:'#2c6ae7'},
+ OPT:{name:'Ophthalmology',color:'#2c6ae7'},CPT:{name:'Clinical Pathology',color:'#6233c1'},
+ CMD:{name:'Community Medicine',color:'#622a0f'},LEG:{name:'Legal Medicine',color:'#d4961a'}
+};
+
+
+const HOLIDAYS=[
+ ['2026-08-06','Provincial Charter Day','Regional · Cebu'],
+ ['2026-08-19','Birthday of Manuel L. Quezon','Regional · Quezon / Aurora'],
+ ['2026-08-21','Ninoy Aquino Day','National'],
+ ['2026-08-31',"National Heroes' Day",'National'],
+ ['2026-09-09','Osmeña Day','Regional · Cebu'],
+ ['2026-11-01',"All Saints' Day",'National'],
+ ['2026-11-02',"All Souls' Day",'National'],
+ ['2026-11-30','Bonifacio Day','National'],
+ ['2026-12-08','Immaculate Conception Day','National'],
+ ['2026-12-24','Christmas Eve','National'],
+ ['2026-12-25','Christmas Day','National'],
+ ['2026-12-30','Rizal Day','National'],
+ ['2026-12-31',"New Year's Eve",'National'],
+ ['2027-01-01',"New Year's Day",'National'],
+ ['2027-02-06','Chinese New Year','National'],
+ ['2027-02-24','Cebu City Charter Day','Regional · Cebu'],
+ ['2027-02-25','People Power Revolution','Not a Public Holiday'],
+ ['2027-03-09',"Eid'l Fitr",'National · date subject to confirmation'],
+ ['2027-03-16','Davao City Day','Regional · Davao'],
+ ['2027-03-25','Maundy Thursday','National'],
+ ['2027-03-26','Good Friday','National'],
+ ['2027-03-27','Black Saturday','National'],
+ ['2027-04-09','The Day of Valor','National'],
+ ['2027-05-01','Labor Day','National'],
+ ['2027-05-16','Eidul Adha','National · date subject to confirmation'],
+ ['2027-06-12','Independence Day','National'],
+ ['2027-06-24','Manila Day','Regional · Manila'],
+ ['2027-08-06','Provincial Charter Day','Regional · Cebu'],
+ ['2027-08-19','Birthday of Manuel L. Quezon','Regional · Quezon / Aurora'],
+ ['2027-08-21','Ninoy Aquino Day','National'],
+ ['2027-08-30',"National Heroes' Day",'National'],
+ ['2027-09-09','Osmeña Day','Regional · Cebu'],
+ ['2027-11-01',"All Saints' Day",'National'],
+ ['2027-11-30','Bonifacio Day','National'],
+ ['2027-12-08','Immaculate Conception Day','National'],
+ ['2027-12-25','Christmas Day','National'],
+ ['2027-12-30','Rizal Day','National'],
+ ['2027-12-31',"New Year's Eve",'National']
+];
+
+const SCHOOL=[
+ ['LE 1','2026-08-05','2026-08-12'],['LE 2','2026-09-23','2026-09-30'],
+ ['LE 3 · Semestral','2026-11-03','2026-11-04'],['LE 3 / Final · Annual','2026-11-06','2026-11-13'],
+ ['LE 4','2027-01-18','2027-02-01'],['LE 5','2027-03-01','2027-03-08'],
+ ['LE 6','2027-04-14','2027-04-20'],['FINALS','2027-04-23','2027-04-30']
+];
+
+/* Sample schedule from the screenshot you supplied. */
+const SAMPLE=[
+ {subject:'PED2',exam:'LE 1',date:'2026-08-05',start:'13:00',end:'16:00'},
+ {subject:'OB',exam:'LE 1',date:'2026-08-07',start:'10:30',end:'12:00'},
+ {subject:'OPT',exam:'LE 1',date:'2026-08-07',start:'14:00',end:'16:00'},
+ {subject:'ORL',exam:'LE 1',date:'2026-08-07',start:'14:00',end:'16:00'},
+ {subject:'NEU2',exam:'LE 1',date:'2026-08-11',start:'10:30',end:'12:30'},
+ {subject:'SUR2',exam:'LE 1',date:'2026-08-12',start:'13:30',end:'16:30'},
+ {subject:'LEG',exam:'LE 1',date:'2026-08-13',start:'10:30',end:'12:30'},
+ {subject:'PSY2',exam:'LE 1',date:'2026-08-13',start:'13:00',end:'15:00'},
+ {subject:'MED2',exam:'LE 1',date:'2026-08-14',start:'11:00',end:'13:00'}
+];
+
+function added(){return JSON.parse(localStorage.getItem('uermExams')||'[]')}
+function saveAdded(a){localStorage.setItem('uermExams',JSON.stringify(a))}
+function exams(){return SAMPLE.concat(added())}
+function diff(a,b){return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000)}
+function index(date){return diff('2026-07-01',date)}
+function fmtTime(t){const [h,m]=t.split(':').map(Number);return `${h%12||12}:${m} ${h>=12?'PM':'AM'}`}
+function label(date){return new Date(date+'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'})}
+
+
+function updateNextLECountdown(){
+  const now = new Date();
+
+  const upcoming = SCHOOL
+    .filter(e => /^LE\s*\d/i.test(e[0]))
+    .map(e => ({
+      name: e[0].split(' · ')[0],
+      date: e[1]
+    }))
+    .filter(e => new Date(e.date + 'T00:00:00') >= new Date(now.getFullYear(), now.getMonth(), now.getDate()))
+    .sort((a,b) => a.date.localeCompare(b.date))[0];
+
+  const value = document.getElementById('nextLEValue');
+  const sub = document.getElementById('nextLESub');
+  if(!value || !sub) return;
+
+  if(!upcoming){
+    value.textContent = '—';
+    sub.textContent = 'No upcoming LE';
+    return;
+  }
+
+  const target = new Date(upcoming.date + 'T00:00:00');
+  const diffMs = target - now;
+
+  if(diffMs <= 0){
+    value.textContent = 'TODAY';
+    sub.textContent = `${upcoming.name} · ${target.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
+    return;
+  }
+
+  const totalSeconds = Math.floor(diffMs / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  value.textContent = `${days}D ${hours}H ${minutes}M ${seconds}S`;
+  sub.textContent = `${upcoming.name} · ${target.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
+}
+
+function render(){
+ const viewport=document.getElementById('scroller')?.clientWidth||window.innerWidth||800;
+ DAY=level===0?Math.max(32,Math.floor(viewport/30)):level===1?Math.max(72,Math.floor(viewport/7)):150;
+ document.getElementById('uermExamCalendar').style.setProperty('--day',DAY+'px');
+ document.getElementById('uermExamCalendar').dataset.viewLevel=String(level);
+ const total=diff('2026-07-01','2027-06-05')+1;
+ document.getElementById('timeline').style.width=(total*DAY)+'px';
+
+ const months=document.getElementById('months'),days=document.getElementById('days'),school=document.getElementById('school'),holidayRow=document.getElementById('holidayRow'),grid=document.getElementById('grid');
+ months.innerHTML='';days.innerHTML='';school.innerHTML='';holidayRow.innerHTML='';grid.innerHTML='';
+
+ let cur=new Date('2026-07-01T00:00:00');
+ while(cur<=END){
+   const y=cur.getFullYear(),m=cur.getMonth(),next=new Date(y,m+1,1);
+   const first=cur<START?START:cur,last=new Date(Math.min(END.getTime(),next.getTime()-86400000));
+   const w=(Math.round((last-first)/86400000)+1)*DAY;
+   const el=document.createElement('div');el.className='month';el.style.width=w+'px';el.style.minWidth=w+'px';
+   el.textContent=cur.toLocaleDateString('en-US',{month:'long',year:'numeric'});months.appendChild(el);cur=next;
+ }
+ for(let i=0;i<total;i++){
+   const d=new Date(START.getFullYear(),START.getMonth(),START.getDate()+i),ds=dateKey(d),el=document.createElement('div');
+   el.className='day';if([0,6].includes(d.getDay()))el.classList.add('weekend');if(ds===localToday())el.classList.add('today');
+   el.innerHTML=`<div class="num">${d.getDate()}</div><div class="dow">${d.toLocaleDateString('en-US',{weekday:'short'})}</div>`;days.appendChild(el);
+ }
+ const sl=document.createElement('div');sl.className='school-label';sl.textContent='School-wide exam periods';school.appendChild(sl);
+ SCHOOL.forEach(e=>{
+   const el=document.createElement('div');el.className='school-event';el.style.left=(index(e[1])*DAY+2)+'px';el.style.width=(diff(e[1],e[2])+1)*DAY-4+'px';el.textContent=e[0];school.appendChild(el);
+ });
+ if(localStorage.getItem('uermHolidayLayer')!=='off'){
+   const holidayLabel=document.createElement('div');
+   holidayLabel.className='holiday-label';
+   holidayLabel.textContent='Philippine holidays';
+   holidayRow.appendChild(holidayLabel);
+   HOLIDAYS.forEach(h=>{
+     const x=index(h[0]);
+     if(x<0||x>=total)return;
+     const mark=document.createElement('div');
+     mark.className='holiday-mark';
+     mark.style.left=(x*DAY+2)+'px';
+     mark.style.width=DAY+'px';
+     mark.title=`${h[1]} · ${h[2]}`;
+     mark.innerHTML=`<span class="holiday-dot"></span><span class="holiday-name">${h[1]}</span>`;
+     mark.addEventListener('click',()=>openHoliday(h));
+     holidayRow.appendChild(mark);
+   });
+ }
+ for(let i=0;i<total;i++){
+   const d=new Date(START.getFullYear(),START.getMonth(),START.getDate()+i),ds=dateKey(d),el=document.createElement('div');
+   el.className='column';if([0,6].includes(d.getDay()))el.classList.add('weekend');if(ds===localToday())el.classList.add('today');el.dataset.date=ds;grid.appendChild(el);
+ }
+ const by={};
+  const manual=added();
+  SAMPLE.forEach(e=>(by[e.date]??=[]).push(e));
+  manual.forEach((e,i)=>(by[e.date]??=[]).push({...e,_addedIndex:i}));
+ Object.entries(by).forEach(([date,items])=>{
+   const col=grid.querySelector(`[data-date="${date}"]`);if(!col)return;
+   items.sort((a,b)=>a.start.localeCompare(b.start));
+   items.forEach(e=>{
+     const s=SUBJECTS[e.subject],card=document.createElement('div');card.className='exam';card.style.setProperty('--subject',s?.color||'#64748b');
+     if(level<2)card.style.padding='4px 5px';
+     if(level===0){
+       card.innerHTML=`<div class="name">${s?.name||e.subject}</div>`;
+       card.title=`${s?.name||e.subject} · ${e.exam}`;
+       card.style.minHeight='12px';
+       card.style.marginBottom='2px';
+     }
+     else {
+       card.innerHTML=`<div class="time">${fmtTime(e.start)} – ${fmtTime(e.end)}</div><div class="name">${s?.name||e.subject}</div><div class="code">${e.subject}</div><span class="type">${e.exam}</span>`;
+       card.title=`${s?.name||e.subject} · ${e.exam} · ${fmtTime(e.start)} – ${fmtTime(e.end)}`;
+     }
+     card.addEventListener('click',()=>openInfo(e));col.appendChild(card);
+   });
+ });
+ const today=localToday();
+ if(today>='2026-07-01' && today<='2027-06-05'){
+   const x=index(today)*DAY + localTimeFraction()*DAY,line=document.createElement('div'),tag=document.createElement('div');line.className='today-line';line.style.left=x+'px';tag.className='today-tag';tag.style.left=x+'px';tag.textContent='TODAY';grid.append(line,tag);
+ }
+ document.getElementById('count').textContent=exams().length+' subject exams';
+}
+
+function jump(date,behavior){if(date==='TODAY')date=localToday();document.getElementById('scroller').scrollTo({left:Math.max(0,index(date)*DAY-100),behavior:behavior||'smooth'})}
+function openHoliday(h){
+ document.getElementById('modalTitle').textContent=h[1];
+ document.getElementById('modalSub').textContent=label(h[0])+' · '+h[2];
+ document.getElementById('modal').classList.add('show');
+}
+function openInfo(e){
+  const deleteBtn=document.getElementById('deleteBtn');
+  const saveBtn=document.getElementById('saveBtn');
+  const canDelete=e._addedIndex!==undefined;
+  document.getElementById('modalTitle').textContent=(SUBJECTS[e.subject]?.name||e.subject)+' · '+e.exam;
+  document.getElementById('modalSub').textContent=label(e.date)+' · '+fmtTime(e.start)+' – '+fmtTime(e.end);
+  deleteBtn.style.display=canDelete?'block':'none';
+  saveBtn.style.display='none';
+  deleteBtn.dataset.index=canDelete?String(e._addedIndex):'';
+  document.getElementById('modal').classList.add('show');
+}
+function close(){
+  document.getElementById('modal').classList.remove('show');
+  document.getElementById('deleteBtn').style.display='none';
+  document.getElementById('saveBtn').style.display='block';
+}
+
+const subjectSelect=document.getElementById('subject');
+Object.entries(SUBJECTS).forEach(([code,s])=>{const o=document.createElement('option');o.value=code;o.textContent=`${s.name} (${code})`;subjectSelect.appendChild(o)});
+function openAdd(){
+  document.getElementById('modalTitle').textContent='Add Subject Exam';
+  document.getElementById('modalSub').textContent='Enter an exact date and time.';
+  document.getElementById('date').value='';
+  document.getElementById('start').value='';
+  document.getElementById('end').value='';
+  document.getElementById('notes').value='';
+  document.getElementById('deleteBtn').style.display='none';
+  document.getElementById('saveBtn').style.display='block';
+  document.getElementById('modal').classList.add('show');
+}
+function saveExam(){
+ const date=document.getElementById('date').value,start=document.getElementById('start').value,end=document.getElementById('end').value;
+ if(!date||!start||!end){alert('Enter date, start time and end time.');return}
+ if(end<=start){alert('End time must be later than start time.');return}
+ const a=added();a.push({subject:subjectSelect.value,exam:document.getElementById('exam').value,date,start,end,notes:document.getElementById('notes').value});saveAdded(a);close();render()
+}
+function clearAdded(){if(confirm('Remove all manually added/imported exams?')){localStorage.removeItem('uermExams');render()}}
+
+function deleteExam(){
+  const i=Number(document.getElementById('deleteBtn').dataset.index);
+  if(!Number.isInteger(i))return;
+  const a=added();
+  if(!a[i])return;
+  const e=a[i];
+  const name=(SUBJECTS[e.subject]?.name||e.subject)+' · '+e.exam;
+  if(confirm(`Delete "${name}" on ${label(e.date)}?`)){
+    a.splice(i,1);
+    saveAdded(a);
+    close();
+    render();
+  }
+}
+
+function parseICS(text){
+ const blocks=text.replace(/\r?\n[ \t]/g,'').split('BEGIN:VEVENT').slice(1),out=[];
+ function dt(raw){const v=(raw||'').trim(),m=v.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);return m?{date:`${m[1]}-${m[2]}-${m[3]}`,time:`${m[4]}:${m[5]}`} : null}
+ function subject(text){const u=text.toUpperCase();for(const [c,s] of Object.entries(SUBJECTS))if(u.includes(c)||u.includes(s.name.toUpperCase()))return c;return null}
+ blocks.forEach(b=>{
+   const summary=(b.match(/(?:^|\n)SUMMARY[^:]*:(.*)/)||[])[1]||'',desc=(b.match(/(?:^|\n)DESCRIPTION[^:]*:(.*)/)||[])[1]||'';
+   const a=dt((b.match(/(?:^|\n)DTSTART[^:]*:(.*)/)||[])[1]),z=dt((b.match(/(?:^|\n)DTEND[^:]*:(.*)/)||[])[1]),s=subject(summary+' '+desc);
+   if(s&&a)out.push({subject:s,exam:summary||'Exam',date:a.date,start:a.time,end:z?.time||a.time,notes:desc})
+ });return out
+}
+
+document.getElementById('addBtn').addEventListener('click',openAdd);
+document.getElementById('saveBtn').addEventListener('click',saveExam);
+document.getElementById('deleteBtn').addEventListener('click',deleteExam);
+document.getElementById('clearBtn').addEventListener('click',clearAdded);
+document.getElementById('closeBtn').addEventListener('click',close);
+document.getElementById('cancelBtn').addEventListener('click',close);
+document.getElementById('modal').addEventListener('click',e=>{if(e.target.id==='modal')close()});
+document.querySelectorAll('[data-jump]').forEach(b=>b.addEventListener('click',()=>jump(b.dataset.jump)));
+document.querySelectorAll('.zoom').forEach(b=>b.addEventListener('click',()=>{level=Number(b.dataset.level);document.querySelectorAll('.zoom').forEach(x=>x.classList.remove('active'));b.classList.add('active');render()}));
+document.getElementById('ics').addEventListener('change',async e=>{
+ const f=e.target.files[0];if(!f)return;const got=parseICS(await f.text());
+ if(!got.length){alert('No subject exams found. Put a subject name/code such as MED2 or Medicine II in the event title or description.');return}
+ const a=added();saveAdded(a.concat(got));render();alert(got.length+' exam(s) imported.');e.target.value=''
+});
+
+Object.entries(SUBJECTS).forEach(([code,s])=>{const el=document.createElement('div');el.className='subject';el.innerHTML=`<span class="swatch" style="background:${s.color}"></span><div><div class="sname">${s.name}</div><div class="scode">${code}</div></div>`;document.getElementById('subjects').appendChild(el)});
+
+const holidayToggle=document.getElementById('holidayToggle');
+function syncHolidayToggle(){
+ const on=localStorage.getItem('uermHolidayLayer')!=='off';
+ holidayToggle.textContent=on?'HOLIDAYS ON':'HOLIDAYS OFF';
+ holidayToggle.classList.toggle('active',on);
+}
+holidayToggle.addEventListener('click',()=>{
+ const on=localStorage.getItem('uermHolidayLayer')!=='off';
+ localStorage.setItem('uermHolidayLayer',on?'off':'on');
+ syncHolidayToggle();render();
+});
+syncHolidayToggle();
+
+let resizeTimer;
+window.addEventListener('resize',()=>{
+  clearTimeout(resizeTimer);
+  resizeTimer=setTimeout(()=>{ if(level!==2) render(); },120);
+});
+
+render();
+updateNextLECountdown();
+setInterval(()=>{
+  updateNextLECountdown();
+  const old=window.__timelineToday;
+  const now=localToday();
+  if(old!==now) render();
+  else {
+    // Re-render only the current-time marker so it moves smoothly through the day.
+    const line=document.querySelector('.today-line');
+    const tag=document.querySelector('.today-tag');
+    const today=localToday();
+    if(line && tag && today>='2026-07-01' && today<='2027-06-05'){
+      const x=index(today)*DAY + localTimeFraction()*DAY;
+      line.style.left=x+'px';tag.style.left=x+'px';
+    }
+  }
+  window.__timelineToday=localToday();
+},1000);
+window.__timelineToday=localToday();
+window.uermCalendarRefresh=render;
+window.uermCalendarJumpToday=()=>jump('TODAY','auto');
+// Land on today by default as soon as the calendar first renders.
+jump('TODAY','auto');
 })();
 
 </script>
