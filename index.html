@@ -8576,6 +8576,27 @@ $('imgSettingsSave').onclick = () => {
   note._hideTimer = setTimeout(() => note.classList.add('hidden'), 2000);
 };
 
+// The empty "pill" above the calendar's Back button is the .card box
+// itself — #calendarView actually lives as a SIBLING of .card (both
+// inside .frame.wide), not nested inside .card-inner as the markup
+// indentation suggests. So when the calendar opens and every view inside
+// .card-inner gets hidden, .card still renders as an empty white rounded
+// box (background/border/shadow intact) sitting right above the calendar.
+// Hiding vine-frame alone (the original, wrong theory) does nothing for
+// this. Watch #calendarView's class directly and hide/show the whole
+// .card element to match, independent of any nav code path.
+(function syncCardWithCalendar(){
+  const calendarViewEl = document.getElementById('calendarView');
+  const cardEl = document.querySelector('.card');
+  if(!calendarViewEl || !cardEl) return;
+  function sync(){
+    const calendarOpen = !calendarViewEl.classList.contains('hidden');
+    cardEl.style.display = calendarOpen ? 'none' : '';
+  }
+  new MutationObserver(sync).observe(calendarViewEl, { attributes: true, attributeFilter: ['class'] });
+  sync();
+})();
+
 /* ---- Vine border growth ---- */
 const vineClusterEls = Array.from(document.querySelectorAll('.vine-cluster'));
 const vineGrand = $('vineGrand');
