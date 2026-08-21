@@ -4269,6 +4269,10 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
 
 </style>
 
+<!-- Supabase client: used only for the optional account/cloud-sync feature.
+     The app works fully offline/local without ever loading this. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 </head>
 <!-- ===== HTML-01 APP SHELL ===== -->
 <body>
@@ -5094,6 +5098,14 @@ OUTCOME: NEG
             </span>
             <span class="settings-nav-chev">›</span>
           </button>
+          <button type="button" class="settings-nav-row" data-page="account">
+            <span class="settings-nav-icon">☁️</span>
+            <span class="settings-nav-text">
+              <span class="settings-nav-title">Account &amp; Sync</span>
+              <span class="settings-nav-sub" id="accountNavSub">Sign in to sync across devices</span>
+            </span>
+            <span class="settings-nav-chev">›</span>
+          </button>
         </div>
 
         <div id="settingsPage-appearance" class="settings-page hidden">
@@ -5375,6 +5387,44 @@ OUTCOME: NEG
             </span>
             <span class="switch-label">Developer mode</span>
           </label>
+        </div>
+        </div>
+
+        <div id="settingsPage-account" class="settings-page hidden">
+        <button type="button" class="back-link settings-page-back">← Settings</button>
+
+        <div class="backup-block" id="accountSignedOutBlock">
+          <label class="field-label">Sign in</label>
+          <div class="hint" style="margin-top:0;">Optional. Your sets, stats, and progress already save locally and work fully offline without an account. Signing in adds cloud backup and lets your data sync across devices.</div>
+          <div style="display:flex; flex-direction:column; gap:8px; margin-top:10px; max-width:320px;">
+            <input type="email" id="acctEmailInput" class="modal-input" placeholder="Email" autocomplete="email">
+            <input type="password" id="acctPasswordInput" class="modal-input" placeholder="Password" autocomplete="current-password">
+          </div>
+          <div class="row" style="margin-top:10px;">
+            <button class="btn-ghost" id="acctSignInBtn">Sign in</button>
+            <button class="btn-ghost" id="acctSignUpBtn">Create account</button>
+          </div>
+          <div class="row" style="margin-top:6px;">
+            <button class="btn-ghost" id="acctForgotBtn" style="font-size:12px;">Forgot password?</button>
+          </div>
+          <div id="acctAuthStatus" class="hint" style="margin-top:8px; min-height:16px;"></div>
+        </div>
+
+        <div class="backup-block hidden" id="accountSignedInBlock">
+          <label class="field-label">Account</label>
+          <div class="hint" style="margin-top:0;">Signed in as <strong id="acctEmailLabel"></strong></div>
+          <div class="row" style="margin-top:10px;">
+            <button class="btn-ghost" id="acctSignOutBtn">Sign out</button>
+          </div>
+        </div>
+
+        <div class="backup-block hidden" id="accountSyncBlock">
+          <label class="field-label">Sync status</label>
+          <div class="hint" style="margin-top:0;" id="syncStatusLine">—</div>
+          <div class="row" style="margin-top:10px;">
+            <button class="btn-ghost" id="syncNowBtn">🔄 Sync now</button>
+          </div>
+          <div class="hint" style="margin-top:8px; font-size:12px;">Right now, only your sets/decks sync to the cloud. Stats, sessions, and everything else stay local for this first version of sync.</div>
         </div>
         </div>
 
@@ -5686,6 +5736,9 @@ const ATTEMPTS_KEY = 'topicReview_attempts_v1';
 const LEARNING_KEY = 'topicReview_learning_v1';
 const INTERVENTIONS_KEY = 'topicReview_interventions_v1'; // pre/post/delayed targeted-practice tracking
 const APP_DATA_KEYS = [SETS_KEY, STATS_KEY, SESSIONS_KEY, CASE_PROGRESS_KEY, POMODORO_KEY, ATTEMPTS_KEY, LEARNING_KEY, INTERVENTIONS_KEY];
+// Cloud sync Milestone 1 scope: only sets/decks sync to Supabase for now.
+// Everything else in APP_DATA_KEYS stays purely local until Milestone 2.
+const SYNC_KEYS = [SETS_KEY];
 // GLOBAL_KEY (daily streak / study-day history) deliberately stays out of
 // this list. loadGlobalStats/saveGlobalStats read and write it with plain
 // lsGet/lsSet, and nothing anywhere reads it back out of the IndexedDB
@@ -5700,17 +5753,27 @@ const APP_DATA_KEYS = [SETS_KEY, STATS_KEY, SESSIONS_KEY, CASE_PROGRESS_KEY, POM
    localStorage data is migrated automatically on first load. */
 const APP_DATA_DB = 'TopicReviewDB';
 const APP_DATA_STORE = 'appStore';
+// Cloud-sync bookkeeping: one row per pending data_key waiting to be pushed
+// to Supabase (offline queue), keyed by the data_key itself so re-queuing
+// the same key while offline just overwrites the pending entry instead of
+// piling up duplicates.
+const SYNC_QUEUE_STORE = 'syncQueue';
 const appDataCache = {};
+// Mirrors appDataCache but holds each synced key's last-local-write time
+// (ISO string), used for "latest update wins" conflict resolution against
+// the cloud copy. Populated from IndexedDB in initAppDataStorage().
+const appDataUpdatedAt = {};
 let appDataReady = false;
 APP_DATA_KEYS.forEach(k => { const v = lsGet(k); if(v !== null) appDataCache[k] = v; });
 
 function openAppDataDB(){
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(APP_DATA_DB, 2);
+    const req = indexedDB.open(APP_DATA_DB, 3);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if(!db.objectStoreNames.contains('bgStore')) db.createObjectStore('bgStore');
       if(!db.objectStoreNames.contains(APP_DATA_STORE)) db.createObjectStore(APP_DATA_STORE);
+      if(!db.objectStoreNames.contains(SYNC_QUEUE_STORE)) db.createObjectStore(SYNC_QUEUE_STORE);
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -5730,9 +5793,20 @@ async function appDataGet(key){
 }
 function appDataSet(key, value){
   appDataCache[key] = value;
+  // Cloud sync (see CLOUD SYNC block) only cares about a handful of keys
+  // for now (SYNC_KEYS). Stamping every save with when it happened, and
+  // queuing it for upload, is what lets sync later decide "mine or theirs
+  // is newer" without slowing down or blocking the local save itself.
+  if(typeof SYNC_KEYS !== 'undefined' && SYNC_KEYS.includes(key)){
+    appDataUpdatedAt[key] = new Date().toISOString();
+    queueSyncOp(key).catch(() => {});
+  }
   return openAppDataDB().then(db => new Promise(resolve => {
     const tx = db.transaction(APP_DATA_STORE,'readwrite');
     tx.objectStore(APP_DATA_STORE).put(value,key);
+    if(typeof SYNC_KEYS !== 'undefined' && SYNC_KEYS.includes(key)){
+      tx.objectStore(APP_DATA_STORE).put(appDataUpdatedAt[key], key + '__updatedAt');
+    }
     tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
   })).catch(() => false);
 }
@@ -5788,6 +5862,20 @@ async function initAppDataStorage(){
     APP_DATA_KEYS.forEach(key => lsRemove(key));
     appDataReady = true;
 
+    // Load each synced key's last-local-write time, saved alongside it under
+    // "<key>__updatedAt". Used by cloud sync to decide whose copy is newer.
+    await new Promise(resolve => {
+      const tx = db.transaction(APP_DATA_STORE,'readonly');
+      const store = tx.objectStore(APP_DATA_STORE);
+      let remaining = SYNC_KEYS.length;
+      if(!remaining){ resolve(); return; }
+      SYNC_KEYS.forEach(key => {
+        const req = store.get(key + '__updatedAt');
+        req.onsuccess = () => { if(req.result) appDataUpdatedAt[key] = req.result; if(--remaining === 0) resolve(); };
+        req.onerror = () => { if(--remaining === 0) resolve(); };
+      });
+    });
+
     try{ migrateSetTypes(); }catch(e){}
     try{ renderLanding(); renderRecentActivity(); }catch(e){}
   }catch(e){
@@ -5798,6 +5886,215 @@ async function initAppDataStorage(){
     try{ renderLanding(); renderRecentActivity(); }catch(err){}
   }
 }
+/* ===== CLOUD SYNC (Milestone 1: auth + sets/decks only) =====
+   Optional account system layered on top of the existing local-first
+   storage above. Nothing in this block is ever required for the app to
+   work — if it's never signed in, or the network is down, or Supabase is
+   unreachable, every read/write above still behaves exactly as before. */
+const SUPABASE_URL = 'https://dnlpjfcuxrnbwqbckkk.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_8N72Fw5ttmZdRep-Y5Ik5Q_aEI0Hwyb';
+let _supabase = null;
+function getSupabase(){
+  if(_supabase) return _supabase;
+  if(typeof window.supabase === 'undefined') return null; // CDN blocked/offline on first load
+  _supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return _supabase;
+}
+let currentUser = null; // the Supabase auth user, or null when signed out
+
+// ---- Offline sync queue (IndexedDB) ----
+// One pending entry per data_key, so re-saving the same key while offline
+// just overwrites the pending entry rather than piling up duplicate work.
+function queueSyncOp(key){
+  return openAppDataDB().then(db => new Promise(resolve => {
+    const tx = db.transaction(SYNC_QUEUE_STORE,'readwrite');
+    tx.objectStore(SYNC_QUEUE_STORE).put({queuedAt:new Date().toISOString()}, key);
+    tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
+  })).catch(() => {});
+}
+function dequeueSyncOp(key){
+  return openAppDataDB().then(db => new Promise(resolve => {
+    const tx = db.transaction(SYNC_QUEUE_STORE,'readwrite');
+    tx.objectStore(SYNC_QUEUE_STORE).delete(key);
+    tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
+  })).catch(() => {});
+}
+function getQueuedSyncKeys(){
+  return openAppDataDB().then(db => new Promise(resolve => {
+    const tx = db.transaction(SYNC_QUEUE_STORE,'readonly');
+    const req = tx.objectStore(SYNC_QUEUE_STORE).getAllKeys();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => resolve([]);
+  })).catch(() => []);
+}
+
+// ---- Upload / download / merge for one data_key ----
+async function uploadKey(key){
+  const sb = getSupabase();
+  if(!sb || !currentUser) return false;
+  const raw = appDataCache[key];
+  if(raw === undefined || raw === null) { await dequeueSyncOp(key); return true; }
+  let parsed;
+  try{ parsed = JSON.parse(raw); }catch(e){ await dequeueSyncOp(key); return true; } // corrupt local value, don't retry forever
+  const { error } = await sb.from('user_app_data').upsert({
+    user_id: currentUser.id,
+    data_key: key,
+    data: parsed,
+    updated_at: appDataUpdatedAt[key] || new Date().toISOString()
+  }, { onConflict: 'user_id,data_key' });
+  if(error){ console.error('Cloud upload failed for', key, error); return false; }
+  await dequeueSyncOp(key);
+  return true;
+}
+// Pulls the cloud copy and keeps whichever side (local vs cloud) has the
+// newer updated_at — the "latest update wins" strategy from the checklist.
+async function downloadAndMergeKey(key){
+  const sb = getSupabase();
+  if(!sb || !currentUser) return;
+  const { data, error } = await sb.from('user_app_data')
+    .select('data, updated_at')
+    .eq('user_id', currentUser.id)
+    .eq('data_key', key)
+    .maybeSingle();
+  if(error){ console.error('Cloud download failed for', key, error); return; }
+  if(!data){
+    // Nothing in the cloud yet for this key (e.g. first sign-in on this
+    // account) — push whatever's local up instead of overwriting it.
+    if(appDataCache[key] !== undefined) await uploadKey(key);
+    return;
+  }
+  const localTime = appDataUpdatedAt[key] ? new Date(appDataUpdatedAt[key]).getTime() : 0;
+  const cloudTime = new Date(data.updated_at).getTime();
+  if(cloudTime > localTime){
+    appDataUpdatedAt[key] = data.updated_at;
+    await appDataSetLocalOnly(key, JSON.stringify(data.data));
+  } else if(localTime > cloudTime){
+    await uploadKey(key);
+  }
+}
+// Writes a downloaded cloud value into local storage without re-queuing it
+// for upload (that would be pointless — it just came from the cloud).
+async function appDataSetLocalOnly(key, value){
+  appDataCache[key] = value;
+  const db = await openAppDataDB();
+  return new Promise(resolve => {
+    const tx = db.transaction(APP_DATA_STORE,'readwrite');
+    tx.objectStore(APP_DATA_STORE).put(value, key);
+    tx.objectStore(APP_DATA_STORE).put(appDataUpdatedAt[key], key + '__updatedAt');
+    tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
+  });
+}
+async function processSyncQueue(){
+  const keys = await getQueuedSyncKeys();
+  for(const key of keys) await uploadKey(key);
+}
+async function fullSync(){
+  if(!currentUser) return;
+  setSyncStatus('syncing');
+  try{
+    for(const key of SYNC_KEYS) await downloadAndMergeKey(key);
+    await processSyncQueue();
+    setSyncStatus('synced');
+    try{ renderLanding(); renderRecentActivity(); }catch(e){}
+  }catch(e){
+    console.error('Sync failed', e);
+    setSyncStatus('error');
+  }
+}
+
+// ---- UI: sync status indicator ----
+function setSyncStatus(status){
+  const line = $('syncStatusLine');
+  if(!line) return;
+  const map = {
+    synced: '✅ Synced',
+    syncing: '🔄 Syncing…',
+    offline: '📴 Offline — changes will sync when you\'re back online',
+    error: '⚠️ Sync error — will retry automatically'
+  };
+  line.textContent = map[status] || '—';
+}
+
+// ---- UI: signed-in / signed-out rendering ----
+function renderAccountUI(){
+  const signedIn = !!currentUser;
+  $('accountSignedOutBlock').classList.toggle('hidden', signedIn);
+  $('accountSignedInBlock').classList.toggle('hidden', !signedIn);
+  $('accountSyncBlock').classList.toggle('hidden', !signedIn);
+  if(signedIn){
+    $('acctEmailLabel').textContent = currentUser.email || '';
+    $('accountNavSub').textContent = navigator.onLine ? 'Synced' : 'Signed in · offline';
+    setSyncStatus(navigator.onLine ? 'synced' : 'offline');
+  }else{
+    $('accountNavSub').textContent = 'Sign in to sync across devices';
+  }
+}
+
+// ---- Auth actions ----
+async function acctSignUp(){
+  const sb = getSupabase();
+  const email = $('acctEmailInput').value.trim();
+  const password = $('acctPasswordInput').value;
+  if(!sb){ $('acctAuthStatus').textContent = 'Could not reach the sign-in service. Check your connection.'; return; }
+  if(!email || !password){ $('acctAuthStatus').textContent = 'Enter an email and password.'; return; }
+  $('acctAuthStatus').textContent = 'Creating account…';
+  const { data, error } = await sb.auth.signUp({ email, password });
+  if(error){ $('acctAuthStatus').textContent = error.message; return; }
+  if(data.session){ $('acctAuthStatus').textContent = ''; } // auto-confirmed
+  else { $('acctAuthStatus').textContent = 'Check your email to confirm your account, then sign in.'; }
+}
+async function acctSignIn(){
+  const sb = getSupabase();
+  const email = $('acctEmailInput').value.trim();
+  const password = $('acctPasswordInput').value;
+  if(!sb){ $('acctAuthStatus').textContent = 'Could not reach the sign-in service. Check your connection.'; return; }
+  if(!email || !password){ $('acctAuthStatus').textContent = 'Enter an email and password.'; return; }
+  $('acctAuthStatus').textContent = 'Signing in…';
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if(error){ $('acctAuthStatus').textContent = error.message; return; }
+  $('acctAuthStatus').textContent = '';
+  $('acctEmailInput').value = ''; $('acctPasswordInput').value = '';
+}
+async function acctSignOut(){
+  const sb = getSupabase();
+  if(sb) await sb.auth.signOut();
+  currentUser = null;
+  renderAccountUI();
+}
+async function acctForgotPassword(){
+  const sb = getSupabase();
+  const email = $('acctEmailInput').value.trim();
+  if(!sb){ $('acctAuthStatus').textContent = 'Could not reach the sign-in service. Check your connection.'; return; }
+  if(!email){ $('acctAuthStatus').textContent = 'Enter your email above first, then tap this again.'; return; }
+  const { error } = await sb.auth.resetPasswordForEmail(email);
+  $('acctAuthStatus').textContent = error ? error.message : 'Password reset email sent.';
+}
+
+// ---- Boot / lifecycle ----
+async function initCloudSync(){
+  const sb = getSupabase();
+  if(!sb) return; // offline on first load or CDN blocked; app keeps working locally
+  sb.auth.onAuthStateChange((event, session) => {
+    currentUser = session ? session.user : null;
+    renderAccountUI();
+    if(currentUser && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) fullSync();
+  });
+  const { data: { session } } = await sb.auth.getSession();
+  currentUser = session ? session.user : null;
+  renderAccountUI();
+  if(currentUser) fullSync();
+}
+window.addEventListener('online', () => { if(currentUser){ $('accountNavSub') && ($('accountNavSub').textContent = 'Syncing…'); fullSync(); } });
+window.addEventListener('offline', () => { if(currentUser) setSyncStatus('offline'); });
+
+function initAccountSettingsUI(){
+  $('acctSignInBtn').onclick = acctSignIn;
+  $('acctSignUpBtn').onclick = acctSignUp;
+  $('acctSignOutBtn').onclick = acctSignOut;
+  $('acctForgotBtn').onclick = acctForgotPassword;
+  $('syncNowBtn').onclick = fullSync;
+}
+
 // bucket for an in-progress quiz that was never saved as a named set
 const PRACTICE_ID = '__practice__'; // bucket for an ad-hoc "weak cards" practice session
 const SCRATCH_ID = '__scratch__'; // bucket for an in-progress quiz that isn't tied to a saved set
@@ -8178,11 +8475,12 @@ function renderLearningDashboardSections(allTrackedCards, dash){
 const DB_NAME = 'TopicReviewDB';
 function getDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 2);
+    const req = indexedDB.open(DB_NAME, 3);
     req.onupgradeneeded = e => {
       const db = e.target.result;
       if(!db.objectStoreNames.contains('bgStore')) db.createObjectStore('bgStore');
       if(!db.objectStoreNames.contains(APP_DATA_STORE)) db.createObjectStore(APP_DATA_STORE);
+      if(!db.objectStoreNames.contains(SYNC_QUEUE_STORE)) db.createObjectStore(SYNC_QUEUE_STORE);
     };
     req.onsuccess = e => resolve(e.target.result);
     req.onerror = e => reject(e.target.error);
@@ -8543,7 +8841,7 @@ function populateSettingsFields(){
 // showSettingsPage(page) opens one category. The in-page "← Settings" link
 // on every sub-page always returns to the menu, not out of Settings
 // entirely — that's still what the outer "← Back" (backFromSettingsBtn) does.
-const SETTINGS_PAGE_IDS = ['appearance','display','images','controller','keyboard','study','backup','about'];
+const SETTINGS_PAGE_IDS = ['appearance','display','images','controller','keyboard','study','backup','about','account'];
 function showSettingsMenu(){
   $('settingsMenu').classList.remove('hidden');
   $('settingsExitRow').classList.remove('hidden');
@@ -9913,6 +10211,8 @@ initAppDataStorage().then(() => {
   migrateSetTypes();
   showLanding();
 });
+initAccountSettingsUI();
+initCloudSync();
 
 $('homeBtn').onclick = () => {
   // Home pauses the quiz; never discard its in-progress session.
