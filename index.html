@@ -1711,6 +1711,7 @@ body.mode-dark .zoom-controls button:hover{
   font-weight:700;
   letter-spacing:.01em;
 }
+#communityToggleBtn{position:relative;}
 @media (min-width:520px){
   .header-actions{ justify-content:flex-end; }
 }
@@ -4268,6 +4269,54 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
 .card:has(#calendarView:not(.hidden)) > .card-inner > .vine-frame{display:none}
 .card:has(#communityView:not(.hidden)) > .card-inner > .vine-frame{display:none}
 
+/* ===== Community panel ===== */
+.community-panel{
+  background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow);
+  padding:24px; max-width:720px; margin:0 auto;
+}
+.community-section{margin-top:24px; padding-top:20px; border-top:1px solid var(--border);}
+.community-section:first-child{margin-top:0; padding-top:0; border-top:none;}
+.community-section-head{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
+.community-section-title{font-family:var(--font-display); font-weight:800; font-size:15px; color:var(--text);}
+.community-section-sub{font-size:12px; color:var(--text-muted); margin-top:2px;}
+.community-filters{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px;}
+.community-chip{
+  border:1.5px solid var(--border); background:var(--bg); color:var(--text-muted);
+  border-radius:999px; padding:5px 13px; font-size:12px; font-weight:700; cursor:pointer;
+  transition:background .15s, color .15s, border-color .15s;
+}
+.community-chip:hover{border-color:var(--tile-blue-mid);}
+.community-chip.active{background:var(--tile-blue-mid); border-color:var(--tile-blue-mid); color:#fff;}
+.community-set-card{
+  background:var(--bg); border:1.5px solid var(--border); border-radius:16px;
+  padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px;
+  transition:transform .15s, box-shadow .15s;
+}
+.community-set-card:hover{transform:translateY(-1px); box-shadow:var(--shadow-sm);}
+.community-set-title{font-weight:700; font-size:14px; color:var(--text);}
+.community-set-meta{font-size:11.5px; color:var(--text-muted); margin-top:3px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+.community-set-tag{
+  background:var(--tile-blue-pale); color:var(--tile-blue-deep); border-radius:999px;
+  padding:2px 9px; font-size:10.5px; font-weight:700;
+}
+.community-empty{
+  text-align:center; padding:32px 16px; color:var(--text-muted); font-size:13px;
+  border:1.5px dashed var(--border); border-radius:14px; background:var(--bg);
+}
+.community-empty-icon{font-size:26px; margin-bottom:6px;}
+/* Small pulsing dot on the Community nav tab, shown when sets have been
+   published since this device last opened the tab. */
+.nav-new-dot{
+  position:absolute; top:2px; right:2px; width:9px; height:9px; border-radius:50%;
+  background:#ff5a6e; box-shadow:0 0 0 2px var(--surface); display:none;
+  animation:navNewPulse 1.6s ease-in-out infinite;
+}
+.nav-new-dot.show{display:block;}
+@keyframes navNewPulse{
+  0%,100%{transform:scale(1); opacity:1;}
+  50%{transform:scale(1.35); opacity:.6;}
+}
+
 </style>
 
 <!-- Supabase client: used only for the optional account/cloud-sync feature.
@@ -4303,7 +4352,7 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
       <button class="btn-ghost stats-toggle" id="settingsToggleBtn" title="Settings" aria-label="Settings">⚙️ <span>Settings</span></button>
       <button class="btn-ghost stats-toggle" id="petToggleBtn" title="Pet" aria-label="Pet">🐶 <span>Pet</span></button>
       <button class="btn-ghost stats-toggle" id="calendarToggleBtn" title="Calendar" aria-label="Calendar">🗓️ <span>Calendar</span></button>
-      <button class="btn-ghost stats-toggle" id="communityToggleBtn" title="Community" aria-label="Community">🌐 <span>Community</span></button>
+      <button class="btn-ghost stats-toggle" id="communityToggleBtn" title="Community" aria-label="Community">🌐 <span>Community</span><span class="nav-new-dot" id="communityNewDot"></span></button>
     </nav>
   </div>
 
@@ -5532,33 +5581,41 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
           <button class="btn-ghost" id="backFromCommunityBtn">← Back</button>
         </div>
 
-        <div class="backup-block hidden" id="communitySignedOutBlock">
-          <label class="field-label">Community sets</label>
-          <div class="hint" style="margin-top:0;">Sign in to browse and share sets with other users. Head to Settings → Account &amp; Sync to sign in.</div>
-        </div>
+        <div class="community-panel">
+          <div class="community-empty hidden" id="communitySignedOutBlock">
+            <div class="community-empty-icon">🔒</div>
+            <div style="font-weight:700; color:var(--text); margin-bottom:4px;">Sign in to see Community</div>
+            <div>Head to Settings → Account &amp; Sync to sign in, then browse and share sets with other users.</div>
+          </div>
 
-        <div id="communitySignedInBlock" class="hidden">
-          <div class="backup-block hidden" id="communityUsernameBlock">
-            <label class="field-label">Pick a username</label>
-            <div class="hint" style="margin-top:0;">This is what other people will see on sets you publish (and later, on the leaderboard).</div>
-            <div style="display:flex; gap:8px; margin-top:10px; max-width:320px;">
-              <input type="text" id="communityUsernameInput" class="modal-input" placeholder="Username" maxlength="24">
-              <button class="btn-ghost" id="communityUsernameSaveBtn">Save</button>
+          <div id="communitySignedInBlock" class="hidden">
+            <div class="community-section hidden" id="communityUsernameBlock">
+              <div class="community-section-title">Pick a username</div>
+              <div class="community-section-sub">This is what other people will see on sets you publish (and later, on the leaderboard).</div>
+              <div style="display:flex; gap:8px; margin-top:12px; max-width:320px;">
+                <input type="text" id="communityUsernameInput" class="modal-input" placeholder="Username" maxlength="24">
+                <button class="btn-primary sm" id="communityUsernameSaveBtn">Save</button>
+              </div>
+              <div id="communityUsernameStatus" class="hint" style="margin-top:8px; min-height:16px;"></div>
             </div>
-            <div id="communityUsernameStatus" class="hint" style="margin-top:8px; min-height:16px;"></div>
-          </div>
 
-          <div class="backup-block">
-            <label class="field-label">Browse community sets</label>
-            <input type="text" id="communitySearchInput" class="modal-input" placeholder="Search by title or subject…" style="margin-top:10px; max-width:320px;">
-            <div id="communityBrowseList" style="margin-top:12px; display:flex; flex-direction:column; gap:8px;"></div>
-            <div class="hint" id="communityBrowseStatus" style="margin-top:8px;">Loading…</div>
-          </div>
+            <div class="community-section" style="margin-top:0; padding-top:0; border-top:none;">
+              <div class="community-section-head">
+                <div>
+                  <div class="community-section-title">🌐 Browse community sets</div>
+                  <div class="community-section-sub" id="communityBrowseStatus">Loading…</div>
+                </div>
+              </div>
+              <input type="text" id="communitySearchInput" class="modal-input" placeholder="Search by title, subject, or username…" style="margin-top:14px; width:100%; max-width:100%;">
+              <div class="community-filters" id="communitySubjectFilters"></div>
+              <div id="communityBrowseList" style="margin-top:14px; display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
 
-          <div class="backup-block">
-            <label class="field-label">Your published sets</label>
-            <div id="communityMineList" style="margin-top:10px; display:flex; flex-direction:column; gap:8px;"></div>
-            <div class="hint" id="communityMineStatus" style="margin-top:8px;"></div>
+            <div class="community-section">
+              <div class="community-section-title">📤 Your published sets</div>
+              <div id="communityMineList" style="margin-top:12px; display:flex; flex-direction:column; gap:10px;"></div>
+              <div class="community-section-sub" id="communityMineStatus" style="margin-top:2px;"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -6116,13 +6173,20 @@ async function initCloudSync(){
   sb.auth.onAuthStateChange((event, session) => {
     currentUser = session ? session.user : null;
     renderAccountUI();
-    if(currentUser && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')){ fullSync(); loadCommunityProfile(); }
-    if(!currentUser) communityUsername = null;
+    if(currentUser && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')){
+      fullSync(); loadCommunityProfile().then(() => { startCommunityRealtime(); checkForNewCommunitySets(); });
+    }
+    if(!currentUser){ communityUsername = null; stopCommunityRealtime(); showCommunityNewDot(false); }
   });
   const { data: { session } } = await sb.auth.getSession();
   currentUser = session ? session.user : null;
   renderAccountUI();
-  if(currentUser){ fullSync(); await loadCommunityProfile(); }
+  if(currentUser){
+    fullSync();
+    await loadCommunityProfile();
+    startCommunityRealtime();
+    checkForNewCommunitySets();
+  }
 }
 window.addEventListener('online', () => { if(currentUser){ $('accountNavSub') && ($('accountNavSub').textContent = 'Syncing…'); fullSync(); } });
 window.addEventListener('offline', () => { if(currentUser) setSyncStatus('offline'); });
@@ -6220,21 +6284,41 @@ function renderCommunityMine(){
   const sets = loadSets();
   const mine = Object.entries(sets).filter(([,s]) => s.communityId);
   listEl.innerHTML = '';
-  if(!mine.length){ statusEl.textContent = "You haven't published any sets yet. Use a set's ⋯ menu → Publish to Community."; return; }
-  statusEl.textContent = '';
+  if(!mine.length){
+    listEl.innerHTML = `<div class="community-empty"><div class="community-empty-icon">📭</div>Nothing published yet. Use a set's ⋯ menu → Publish to Community.</div>`;
+    statusEl.textContent = '';
+    return;
+  }
+  statusEl.textContent = `${mine.length} set${mine.length===1?'':'s'} live`;
   mine.forEach(([sid, s]) => {
     const div = document.createElement('div');
-    div.className = 'set-item';
+    div.className = 'community-set-card';
     div.innerHTML = `
-      <div class="set-item-main">
-        <div class="set-item-name">${escapeHtml(s.name || 'Untitled set')}</div>
-        <div class="set-item-meta">${(s.cards||[]).length} cards${s.subject ? ' · ' + escapeHtml(s.subject) : ''}</div>
+      <div>
+        <div class="community-set-title">${escapeHtml(s.name || 'Untitled set')}</div>
+        <div class="community-set-meta">${(s.cards||[]).length} cards${s.subject ? `<span class="community-set-tag">${escapeHtml(s.subject)}</span>` : ''}</div>
       </div>
-      <div class="set-item-actions">
-        <button class="btn-ghost sm" data-act="unpub" data-id="${sid}">Unpublish</button>
-      </div>`;
+      <button class="btn-ghost sm" data-act="unpub" data-id="${sid}">Unpublish</button>`;
     div.querySelector('[data-act="unpub"]').addEventListener('click', () => unpublishSetFromCommunity(sid));
     listEl.appendChild(div);
+  });
+}
+
+let communityActiveSubject = null; // null = "All"
+
+function renderCommunitySubjectFilters(){
+  const wrap = $('communitySubjectFilters');
+  if(!wrap) return;
+  const subjects = [...new Set(communityBrowseCache.map(r => r.subject).filter(Boolean))].sort();
+  if(!subjects.length){ wrap.innerHTML = ''; return; }
+  const chip = (label, value) => `<button type="button" class="community-chip${communityActiveSubject === value ? ' active' : ''}" data-subject="${value === null ? '' : escapeHtml(value)}">${escapeHtml(label)}</button>`;
+  wrap.innerHTML = chip('All', null) + subjects.map(s => chip(s, s)).join('');
+  wrap.querySelectorAll('.community-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      communityActiveSubject = btn.dataset.subject || null;
+      renderCommunitySubjectFilters();
+      applyCommunitySearchFilter();
+    });
   });
 }
 
@@ -6244,11 +6328,12 @@ async function renderCommunityBrowse(){
   if(!sb || !currentUser || !statusEl) return;
   statusEl.textContent = 'Loading…';
   const { data, error } = await sb.from('community_sets')
-    .select('id, username, title, subject, card_type, card_count, created_at')
+    .select('id, username, title, subject, card_type, topic, card_count, created_at')
     .order('created_at', { ascending: false })
-    .limit(100);
+    .limit(150);
   if(error){ statusEl.textContent = 'Could not load community sets: ' + error.message; return; }
   communityBrowseCache = data || [];
+  renderCommunitySubjectFilters();
   applyCommunitySearchFilter();
 }
 
@@ -6256,22 +6341,26 @@ function applyCommunitySearchFilter(){
   const listEl = $('communityBrowseList'), statusEl = $('communityBrowseStatus');
   if(!listEl || !statusEl) return;
   const q = ($('communitySearchInput').value || '').trim().toLowerCase();
-  const rows = !q ? communityBrowseCache : communityBrowseCache.filter(r =>
-    (r.title||'').toLowerCase().includes(q) || (r.subject||'').toLowerCase().includes(q) || (r.username||'').toLowerCase().includes(q));
+  let rows = communityBrowseCache;
+  if(communityActiveSubject) rows = rows.filter(r => r.subject === communityActiveSubject);
+  if(q) rows = rows.filter(r => (r.title||'').toLowerCase().includes(q) || (r.subject||'').toLowerCase().includes(q) || (r.username||'').toLowerCase().includes(q));
   listEl.innerHTML = '';
-  if(!rows.length){ statusEl.textContent = communityBrowseCache.length ? 'No matches.' : 'No community sets yet — be the first to publish one!'; return; }
+  if(!rows.length){
+    listEl.innerHTML = `<div class="community-empty"><div class="community-empty-icon">🌱</div>${communityBrowseCache.length ? 'No matches — try a different search or filter.' : 'No community sets yet — be the first to publish one!'}</div>`;
+    statusEl.textContent = communityBrowseCache.length ? `${rows.length} of ${communityBrowseCache.length}` : '';
+    return;
+  }
   statusEl.textContent = `${rows.length} set${rows.length===1?'':'s'}`;
   rows.forEach(r => {
     const div = document.createElement('div');
-    div.className = 'set-item';
+    div.className = 'community-set-card';
+    const tags = [r.subject, r.card_type, r.topic].filter(Boolean).map(t => `<span class="community-set-tag">${escapeHtml(t)}</span>`).join('');
     div.innerHTML = `
-      <div class="set-item-main">
-        <div class="set-item-name">${escapeHtml(r.title)}</div>
-        <div class="set-item-meta">${r.card_count} cards${r.subject ? ' · ' + escapeHtml(r.subject) : ''} · by ${escapeHtml(r.username)}</div>
+      <div>
+        <div class="community-set-title">${escapeHtml(r.title)}</div>
+        <div class="community-set-meta">${r.card_count} cards · by ${escapeHtml(r.username)} ${tags}</div>
       </div>
-      <div class="set-item-actions">
-        <button class="btn-primary sm" data-act="import" data-id="${r.id}">⬇ Import</button>
-      </div>`;
+      <button class="btn-primary sm" data-act="import" data-id="${r.id}">⬇ Import</button>`;
     div.querySelector('[data-act="import"]').addEventListener('click', () => importCommunitySet(r.id));
     listEl.appendChild(div);
   });
@@ -6294,6 +6383,58 @@ async function importCommunitySet(communitySetId){
   alert(`Added "${data.title}" to your library.`);
 }
 
+// ---- Live "someone just published a set" indicator ----
+const COMMUNITY_LAST_SEEN_KEY = 'topicReview_communityLastSeen';
+let communityRealtimeChannel = null;
+
+function showCommunityNewDot(show){
+  const dot = $('communityNewDot');
+  if(dot) dot.classList.toggle('show', !!show);
+}
+function markCommunitySeenNow(){
+  lsSet(COMMUNITY_LAST_SEEN_KEY, new Date().toISOString());
+  showCommunityNewDot(false);
+}
+async function checkForNewCommunitySets(){
+  const sb = getSupabase();
+  if(!sb || !currentUser) return;
+  const { data, error } = await sb.from('community_sets')
+    .select('created_at, owner_id')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if(error || !data) return;
+  const lastSeen = lsGet(COMMUNITY_LAST_SEEN_KEY);
+  const isNew = (!lastSeen || new Date(data.created_at) > new Date(lastSeen));
+  const isMine = data.owner_id === currentUser.id;
+  const communityOpen = !$('communityView').classList.contains('hidden');
+  if(isNew && !isMine && !communityOpen) showCommunityNewDot(true);
+}
+function startCommunityRealtime(){
+  const sb = getSupabase();
+  if(!sb || !currentUser || communityRealtimeChannel) return;
+  communityRealtimeChannel = sb.channel('community_sets_watch')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'community_sets' }, payload => {
+      const row = payload.new;
+      if(!row || row.owner_id === currentUser.id) return; // don't badge your own publishes
+      const communityOpen = !$('communityView').classList.contains('hidden');
+      if(communityOpen){
+        // Live-append without a full refetch, so a friend's upload just appears.
+        communityBrowseCache.unshift(row);
+        renderCommunitySubjectFilters();
+        applyCommunitySearchFilter();
+        markCommunitySeenNow();
+      } else {
+        showCommunityNewDot(true);
+      }
+    })
+    .subscribe();
+}
+function stopCommunityRealtime(){
+  const sb = getSupabase();
+  if(sb && communityRealtimeChannel){ sb.removeChannel(communityRealtimeChannel); communityRealtimeChannel = null; }
+}
+
 function renderCommunityView(){
   const signedIn = !!currentUser;
   $('communitySignedOutBlock').classList.toggle('hidden', signedIn);
@@ -6303,6 +6444,7 @@ function renderCommunityView(){
   if(communityUsername) $('communityUsernameInput').value = communityUsername;
   renderCommunityMine();
   renderCommunityBrowse();
+  markCommunitySeenNow();
 }
 
 function initCommunityUI(){
