@@ -103,8 +103,8 @@ JAVASCRIPT
   JS-14 Controller — realized as a self-contained pomodoro/focus-timer
          IIFE nested inside JS-11's section, not a standalone block
   JS-15 Calendar - RESERVED STUB ONLY, no real code yet (see the stub
-         comment block at the very end of the script, just above
-         </script>)
+         comment block at the very end of the script, just above the
+         Phase 2 init call)
   JS-16 Developer / Debug Tools — tiny, embedded inside JS-11
   JS-17 Initialization - NOT a single function. The app bootstraps via
          several independent DOMContentLoaded listeners scattered
@@ -3523,6 +3523,31 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
     #petView .pet-actions{grid-template-columns:1fr 1fr}
   }
 
+
+/* ===== COMMUNITY PHASE 2 ===== */
+.community-p2-profile{display:flex;align-items:center;gap:12px;padding:14px;border:1.5px solid var(--border);background:var(--surface);border-radius:16px;margin-bottom:14px}
+.community-p2-avatar{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--primary-soft);border:1px solid var(--border);font-size:22px;flex:none}
+.community-p2-name{font-weight:900;color:var(--text);font-size:15px}
+.community-p2-handle,.community-p2-meta{font-size:11.5px;color:var(--text-muted);margin-top:3px}
+.community-p2-bio{font-size:12px;color:var(--text-muted);margin-top:5px}
+.community-p2-stats{display:flex;gap:14px;flex-wrap:wrap;margin-top:7px;font-size:11px;color:var(--text-muted)}
+.community-p2-actions{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+.community-p2-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}
+.community-p2-tab{border:1.5px solid var(--border);background:var(--surface);color:var(--text-muted);border-radius:999px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer}
+.community-p2-tab.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.community-p2-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-top:12px}
+.community-p2-card{border:1.5px solid var(--border);background:var(--surface);border-radius:14px;padding:13px;cursor:pointer}
+.community-p2-card:hover{border-color:var(--accent);box-shadow:var(--shadow-sm)}
+.community-p2-title{font-weight:900;font-size:13px;color:var(--text)}
+.community-p2-empty{padding:18px;border:1.5px dashed var(--border);border-radius:14px;color:var(--text-muted);text-align:center;font-size:12px;margin-top:10px}
+.community-p2-modal{position:fixed;inset:0;z-index:10050;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;padding:18px}
+.community-p2-modal.hidden{display:none}
+.community-p2-dialog{width:min(650px,100%);max-height:85vh;overflow:auto;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:20px;padding:20px;box-shadow:var(--shadow-lg)}
+.community-p2-dialog-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}
+.community-p2-row{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid var(--border);border-radius:12px;padding:10px;margin-top:8px;background:var(--surface)}
+.community-p2-version-note{font-size:11px;color:var(--text-muted);margin-top:3px}
+@media(max-width:600px){.community-p2-actions{margin-left:0}.community-p2-profile{align-items:flex-start;flex-wrap:wrap}}
+
 </style>
 
 <style id="pet-final-fix">
@@ -5629,6 +5654,25 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
           </div>
 
           <div id="communitySignedInBlock" class="hidden">
+
+<div id="communityPhase2Profile" class="community-p2-profile" style="display:none"></div>
+<div class="community-p2-tabs" id="communityPhase2Tabs">
+  <button class="community-p2-tab active" data-p2feed="discover">🌐 Discover</button>
+  <button class="community-p2-tab" data-p2feed="following">👥 Following</button>
+  <button class="community-p2-tab" data-p2feed="collections">📚 Collections</button>
+</div>
+<div id="communityPhase2Area"></div>
+
+<div id="communityP2Modal" class="community-p2-modal hidden">
+  <div class="community-p2-dialog">
+    <div class="community-p2-dialog-head">
+      <div><div id="communityP2ModalTitle" style="font-size:18px;font-weight:900"></div><div id="communityP2ModalMeta" class="community-p2-meta"></div></div>
+      <button class="btn-ghost" id="communityP2ModalClose">✕</button>
+    </div>
+    <div id="communityP2ModalBody" style="margin-top:14px"></div>
+  </div>
+</div>
+
             <div class="community-section hidden" id="communityUsernameBlock">
               <div class="community-section-title">Pick a username</div>
               <div class="community-section-sub">This is what other people will see on sets you publish.</div>
@@ -6499,6 +6543,175 @@ async function renderCommunityBrowse(){
   renderCommunitySubjectFilters();
   applyCommunitySearchFilter();
 }
+
+
+/* ===== COMMUNITY PHASE 2 JS ===== */
+let communityP2Feed='discover';
+let communityP2Following=new Set();
+let communityP2ProfileCache=new Map();
+
+function p2Esc(v){return escapeHtml(v==null?'':String(v));}
+async function p2GetProfile(uid){
+  if(communityP2ProfileCache.has(uid)) return communityP2ProfileCache.get(uid);
+  const sb=getSupabase(); if(!sb||!uid)return null;
+  const {data}=await sb.from('community_profiles').select('user_id,username,display_name,bio,avatar_emoji').eq('user_id',uid).maybeSingle();
+  if(data)communityP2ProfileCache.set(uid,data);
+  return data;
+}
+async function p2LoadFollowing(){
+  communityP2Following=new Set();
+  const sb=getSupabase(); if(!sb||!currentUser)return;
+  const {data}=await sb.from('community_follows').select('following_id').eq('follower_id',currentUser.id);
+  (data||[]).forEach(x=>communityP2Following.add(x.following_id));
+}
+async function p2RenderProfile(){
+  const el=$('communityPhase2Profile'); if(!el||!currentUser)return;
+  const p=await p2GetProfile(currentUser.id);
+  if(!p){el.style.display='none';return;}
+  el.style.display='flex';
+  const sb=getSupabase();
+  const [{count:followers},{count:following},{count:decks}]=await Promise.all([
+    sb.from('community_follows').select('*',{count:'exact',head:true}).eq('following_id',currentUser.id),
+    sb.from('community_follows').select('*',{count:'exact',head:true}).eq('follower_id',currentUser.id),
+    sb.from('community_sets').select('*',{count:'exact',head:true}).eq('owner_id',currentUser.id)
+  ]);
+  el.innerHTML=`<div class="community-p2-avatar">${p2Esc(p.avatar_emoji||'🩺')}</div>
+    <div style="min-width:0;flex:1"><div class="community-p2-name">${p2Esc(p.display_name||p.username)}</div>
+    <div class="community-p2-handle">@${p2Esc(p.username)}</div><div class="community-p2-bio">${p2Esc(p.bio||'')}</div>
+    <div class="community-p2-stats"><span><b>${followers||0}</b> followers</span><span><b>${following||0}</b> following</span><span><b>${decks||0}</b> decks</span></div></div>
+    <div class="community-p2-actions"><button class="btn-ghost sm" id="p2MyProfile">View profile</button></div>`;
+  $('p2MyProfile').onclick=()=>p2OpenProfile(currentUser.id);
+}
+async function p2ToggleFollow(uid,btn){
+  const sb=getSupabase(); if(!sb||!currentUser||uid===currentUser.id)return;
+  const following=communityP2Following.has(uid);
+  const q=following?sb.from('community_follows').delete().eq('follower_id',currentUser.id).eq('following_id',uid)
+                   :sb.from('community_follows').insert({follower_id:currentUser.id,following_id:uid});
+  const {error}=await q;if(error){alert(error.message);return;}
+  following?communityP2Following.delete(uid):communityP2Following.add(uid);
+  if(btn){btn.textContent=following?'Follow':'Following';btn.classList.toggle('active',!following);}
+  p2RenderProfile();
+}
+async function p2OpenProfile(uid){
+  const p=await p2GetProfile(uid);if(!p)return;
+  const sb=getSupabase();
+  const {data:decks}=await sb.from('community_sets').select('id,title,subject,card_count,owner_id,username,created_at').eq('owner_id',uid).order('created_at',{ascending:false}).limit(50);
+  const [{count:followers},{count:following}]=await Promise.all([
+    sb.from('community_follows').select('*',{count:'exact',head:true}).eq('following_id',uid),
+    sb.from('community_follows').select('*',{count:'exact',head:true}).eq('follower_id',uid)
+  ]);
+  p2Modal(p.display_name||('@'+p.username), '@'+p.username, `<div class="community-p2-profile">
+    <div class="community-p2-avatar">${p2Esc(p.avatar_emoji||'🩺')}</div><div style="flex:1">
+    <div class="community-p2-name">${p2Esc(p.display_name||p.username)}</div><div class="community-p2-handle">@${p2Esc(p.username)}</div>
+    <div class="community-p2-bio">${p2Esc(p.bio||'No bio yet.')}</div>
+    <div class="community-p2-stats"><span><b>${followers||0}</b> followers</span><span><b>${following||0}</b> following</span></div></div>
+    ${uid!==currentUser.id?`<button class="btn-ghost sm ${communityP2Following.has(uid)?'active':''}" id="p2FollowBtn">${communityP2Following.has(uid)?'Following':'Follow'}</button>`:''}
+    </div>
+    <h3 style="margin:18px 0 6px">Public decks</h3>
+    ${(decks||[]).map(d=>`<div class="community-p2-row"><div><b>${p2Esc(d.title)}</b><div class="community-p2-meta">${d.card_count||0} cards · ${p2Esc(d.subject||'')}</div></div><button class="btn-ghost sm" data-p2preview="${d.id}">Preview</button></div>`).join('')||'<div class="community-p2-empty">No public decks yet.</div>'}`);
+  $('p2FollowBtn')?.addEventListener('click',e=>p2ToggleFollow(uid,e.currentTarget));
+  document.querySelectorAll('[data-p2preview]').forEach(b=>b.onclick=()=>openCommunityPreview(b.dataset.p2preview));
+}
+function p2Modal(title,meta,body){
+  $('communityP2ModalTitle').textContent=title;$('communityP2ModalMeta').textContent=meta||'';
+  $('communityP2ModalBody').innerHTML=body;$('communityP2Modal').classList.remove('hidden');
+}
+function p2CloseModal(){$('communityP2Modal').classList.add('hidden');}
+async function p2FollowingFeed(){
+  const sb=getSupabase();if(!sb||!currentUser)return;
+  const ids=[...communityP2Following];
+  if(!ids.length){$('communityPhase2Area').innerHTML='<div class="community-p2-empty"><b>Your Following feed is empty.</b><br>Open a creator profile and follow them to see their decks here.</div>';return;}
+  const {data,error}=await sb.from('community_sets').select('id,title,subject,card_type,topic,card_count,owner_id,username,created_at,updated_at,import_count,like_count,save_count,cards').in('owner_id',ids).order('created_at',{ascending:false}).limit(100);
+  if(error){$('communityPhase2Area').textContent=error.message;return;}
+  communityBrowseCache=data||[];await loadCommunityInteractions(communityBrowseCache.map(x=>x.id));
+  renderCommunitySubjectFilters();applyCommunitySearchFilter();
+}
+async function p2Collections(){
+  const sb=getSupabase();if(!sb||!currentUser)return;
+  const {data}=await sb.from('community_collections').select('id,name,description').eq('owner_id',currentUser.id).order('updated_at',{ascending:false});
+  $('communityPhase2Area').innerHTML=`<div style="display:flex;justify-content:space-between;align-items:center"><div><b>My Collections</b><div class="community-p2-meta">Organize community decks into groups.</div></div><button class="btn-primary sm" id="p2NewCollection">＋ New</button></div>
+  <div class="community-p2-grid">${(data||[]).map(c=>`<div class="community-p2-card" data-p2collection="${c.id}"><div class="community-p2-title">📚 ${p2Esc(c.name)}</div><div class="community-p2-meta">${p2Esc(c.description||'')}</div></div>`).join('')||''}</div>
+  ${(data||[]).length?'':'<div class="community-p2-empty">No collections yet.</div>'}`;
+  $('p2NewCollection').onclick=async()=>{const n=prompt('Collection name:');if(!n)return;const d=prompt('Description (optional):')||'';const {error}=await sb.from('community_collections').insert({owner_id:currentUser.id,name:n.trim(),description:d,is_public:true});if(error)alert(error.message);else p2Collections();};
+  document.querySelectorAll('[data-p2collection]').forEach(b=>b.onclick=()=>p2OpenCollection(b.dataset.p2collection));
+}
+async function p2OpenCollection(id){
+  const sb=getSupabase();const {data:c}=await sb.from('community_collections').select('id,name,description').eq('id',id).maybeSingle();
+  const {data:items}=await sb.from('community_collection_items').select('community_set_id,position').eq('collection_id',id).order('position');
+  const ids=(items||[]).map(x=>x.community_set_id);let decks=[];
+  if(ids.length){const {data}=await sb.from('community_sets').select('id,title,subject,card_count,owner_id,username').in('id',ids);const order=new Map(ids.map((x,i)=>[x,i]));decks=(data||[]).sort((a,b)=>order.get(a.id)-order.get(b.id));}
+  p2Modal(c?.name||'Collection','',`<div class="community-p2-meta">${p2Esc(c?.description||'')}</div>${decks.map(d=>`<div class="community-p2-row"><div><b>${p2Esc(d.title)}</b><div class="community-p2-meta">@${p2Esc(d.username||'')} · ${d.card_count||0} cards</div></div><button class="btn-ghost sm" data-p2preview="${d.id}">Preview</button></div>`).join('')||'<div class="community-p2-empty">Empty collection.</div>'}`);
+  document.querySelectorAll('[data-p2preview]').forEach(b=>b.onclick=()=>openCommunityPreview(b.dataset.p2preview));
+}
+async function p2AddCollection(setId){
+  const sb=getSupabase();if(!sb||!currentUser)return;
+  const {data:cols}=await sb.from('community_collections').select('id,name').eq('owner_id',currentUser.id).order('name');
+  if(!cols?.length){if(confirm('Create a collection first?'))p2Collections();return;}
+  const pick=prompt(cols.map((c,i)=>`${i+1}. ${c.name}`).join('\n')+'\n\nEnter number:');const c=cols[Number(pick)-1];if(!c)return;
+  const {data:last}=await sb.from('community_collection_items').select('position').eq('collection_id',c.id).order('position',{ascending:false}).limit(1).maybeSingle();
+  const {error}=await sb.from('community_collection_items').insert({collection_id:c.id,community_set_id:setId,position:(last?.position||0)+1});
+  if(error)alert(error.message);else alert(`Added to "${c.name}".`);
+}
+async function p2Versions(setId){
+  const sb=getSupabase();const {data:versions,error}=await sb.from('community_set_versions').select('version_number,title,card_count,change_note,created_at').eq('community_set_id',setId).order('version_number',{ascending:false});
+  if(error){alert(error.message);return;}
+  p2Modal('Deck version history','',versions?.map(v=>`<div class="community-p2-row"><div><b>Version ${v.version_number} · ${v.card_count||0} cards</b><div class="community-p2-meta">${new Date(v.created_at).toLocaleString()}</div><div class="community-p2-version-note">${p2Esc(v.change_note||'')}</div></div></div>`).join('')||'<div class="community-p2-empty">No versions recorded yet.</div>');
+}
+async function p2Remix(setId){
+  const sb=getSupabase();if(!sb||!currentUser)return;
+  const {data,error}=await sb.from('community_sets').select('*').eq('id',setId).maybeSingle();if(error||!data){alert('Could not load deck.');return;}
+  const sets=loadSets(),id=genSetId(),now=Date.now();
+  sets[id]={name:`${data.title} (remix)`,subject:data.subject,cardType:data.card_type,topic:data.topic,cards:JSON.parse(JSON.stringify(data.cards||[])),completed:false,createdAt:now,updatedAt:now,remixOfCommunityId:data.id,remixOfUsername:data.username};
+  saveSetsData(sets);await sb.from('community_set_forks').insert({community_set_id:data.id,forked_by:currentUser.id,fork_type:'remix'});
+  p2CloseModal();closeCommunityPreview();alert(`"${data.title}" was remixed into your sets.`);showLanding();
+}
+function p2EnhanceCard(r){
+  const div=renderCommunityCardOriginal(r);const actions=div.querySelector('.community-set-actions');
+  if(actions){
+    const b=(label,fn)=>{const x=document.createElement('button');x.className='community-icon-btn';x.textContent=label;x.onclick=fn;return x;};
+    actions.prepend(b('History',()=>p2Versions(r.id)),b('＋ Collection',()=>p2AddCollection(r.id)),b('♻ Remix',()=>p2Remix(r.id)));
+  }
+  const author=div.querySelector('.community-set-author');if(author){author.style.cursor='pointer';author.onclick=()=>p2OpenProfile(r.owner_id);}
+  return div;
+}
+const renderCommunityCardOriginal=renderCommunityCard;
+renderCommunityCard=function(r){return p2EnhanceCard(r);};
+
+const publishSetToCommunityOriginal=publishSetToCommunity;
+publishSetToCommunity=async function(sid){
+  await publishSetToCommunityOriginal(sid);
+  // Existing Phase 1 publishing remains intact; version creation is handled
+  // explicitly below when this deck already has a Community id.
+  const sets=loadSets(),s=sets[sid];const sb=getSupabase();
+  if(!sb||!currentUser||!s?.communityId)return;
+  const note=prompt('Version note (optional):','Updated deck');
+  const {data:live}=await sb.from('community_sets').select('*').eq('id',s.communityId).maybeSingle();
+  if(!live)return;
+  const {error}=await sb.rpc('create_community_set_version',{p_set_id:s.communityId,p_title:live.title,p_subject:live.subject,p_card_type:live.card_type,p_topic:live.topic,p_cards:live.cards||s.cards||[],p_change_note:note||null});
+  if(error)console.warn('Phase 2 version history:',error.message);
+};
+
+const renderCommunityViewOriginal=renderCommunityView;
+renderCommunityView=async function(){
+  renderCommunityViewOriginal();
+  if(!currentUser)return;
+  await p2LoadFollowing();await p2RenderProfile();
+  if(communityP2Feed==='following')await p2FollowingFeed();
+  else if(communityP2Feed==='collections')await p2Collections();
+};
+
+function initCommunityPhase2(){
+  $('communityP2ModalClose')?.addEventListener('click',p2CloseModal);
+  $('communityP2Modal')?.addEventListener('click',e=>{if(e.target.id==='communityP2Modal')p2CloseModal();});
+  document.querySelectorAll('#communityPhase2Tabs .community-p2-tab').forEach(b=>b.addEventListener('click',async()=>{
+    communityP2Feed=b.dataset.p2feed;
+    document.querySelectorAll('#communityPhase2Tabs .community-p2-tab').forEach(x=>x.classList.toggle('active',x===b));
+    if(communityP2Feed==='following')await p2FollowingFeed();
+    else if(communityP2Feed==='collections')await p2Collections();
+    else{ $('communityPhase2Area').innerHTML=''; await renderCommunityBrowse(); }
+  }));
+}
+try{ if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',initCommunityPhase2); else initCommunityPhase2(); }catch(e){console.warn('Community Phase 2 init:',e);}
 
 function renderCommunityCard(r){
   const liked = communityInteractionCache.liked.has(r.id);
