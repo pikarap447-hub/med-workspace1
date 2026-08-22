@@ -6191,6 +6191,23 @@ async function setLocalSyncValueFromCloud(key, value){
     await appDataSetLocalOnly(key, value);
   }
 }
+// Writes the server-confirmed sync timestamp for `key` into whichever local
+// store actually holds it (IndexedDB for APP_DATA_KEYS, localStorage for
+// LOCAL_SYNC_KEYS), mirroring the two stores' own '<key>__updatedAt' bookkeeping.
+async function persistSyncedAt(key, stamp){
+  if(LOCAL_SYNC_KEYS.includes(key)){
+    try{ _rawLS.setItem(key + '__updatedAt', stamp); }catch(e){}
+  } else {
+    try{
+      const db = await openAppDataDB();
+      await new Promise(resolve => {
+        const tx = db.transaction(APP_DATA_STORE,'readwrite');
+        tx.objectStore(APP_DATA_STORE).put(stamp, key + '__updatedAt');
+        tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
+      });
+    }catch(e){}
+  }
+}
 async function uploadKey(key){
   const sb = getSupabase();
   if(!sb || !currentUser) return false;
@@ -6198,21 +6215,43 @@ async function uploadKey(key){
   if(raw === undefined || raw === null) { await dequeueSyncOp(key); return true; }
   let parsed;
   try{ parsed = JSON.parse(raw); }catch(e){ await dequeueSyncOp(key); return true; } // corrupt local value, don't retry forever
-  const { error } = await sb.from('user_app_data').upsert({
+  // updated_at is intentionally NOT sent from here — a DB trigger
+  // (see sync_updated_at_trigger.sql) stamps it with the server's own
+  // clock on every insert/update. That way conflict resolution never
+  // depends on this device's clock being correct.
+  const { data, error } = await sb.from('user_app_data').upsert({
     user_id: currentUser.id,
     data_key: key,
-    data: parsed,
-    updated_at: appDataUpdatedAt[key] || new Date().toISOString()
-  }, { onConflict: 'user_id,data_key' });
+    data: parsed
+  }, { onConflict: 'user_id,data_key' }).select('updated_at').single();
   if(error){ console.error('Cloud upload failed for', key, error); return false; }
+  if(data && data.updated_at){
+    appDataUpdatedAt[key] = data.updated_at;
+    await persistSyncedAt(key, data.updated_at);
+  }
   await dequeueSyncOp(key);
   return true;
 }
-// Pulls the cloud copy and keeps whichever side (local vs cloud) has the
-// newer updated_at — the "latest update wins" strategy from the checklist.
-async function downloadAndMergeKey(key){
+// Decides, for one data_key, whether to push local up or pull cloud down.
+// Priority is no longer a raw timestamp race between two devices' clocks:
+// - If this device has unsynced local edits for `key` (it's sitting in the
+//   offline sync queue), local wins and gets uploaded — the queue itself is
+//   the source of truth for "this changed here since we last synced",
+//   which a clock can't get wrong.
+// - Otherwise, both appDataUpdatedAt[key] (our last known synced state) and
+//   the cloud's updated_at are server-issued timestamps, so comparing them
+//   is safe: newer cloud data gets pulled down, otherwise there's nothing
+//   to do.
+// `queuedKeys` is an optional Set from a single getQueuedSyncKeys() call so
+// fullSync() doesn't re-query IndexedDB once per key.
+async function downloadAndMergeKey(key, queuedKeys){
   const sb = getSupabase();
   if(!sb || !currentUser) return;
+  const isQueued = queuedKeys ? queuedKeys.has(key) : (await getQueuedSyncKeys()).includes(key);
+  if(isQueued){
+    await uploadKey(key);
+    return;
+  }
   const { data, error } = await sb.from('user_app_data')
     .select('data, updated_at')
     .eq('user_id', currentUser.id)
@@ -6225,9 +6264,9 @@ async function downloadAndMergeKey(key){
     if(getLocalSyncValue(key) !== undefined && getLocalSyncValue(key) !== null) await uploadKey(key);
     return;
   }
-  const localTime = appDataUpdatedAt[key] ? new Date(appDataUpdatedAt[key]).getTime() : 0;
+  const knownTime = appDataUpdatedAt[key] ? new Date(appDataUpdatedAt[key]).getTime() : 0;
   const cloudTime = new Date(data.updated_at).getTime();
-  if(cloudTime > localTime){
+  if(cloudTime > knownTime){
     appDataUpdatedAt[key] = data.updated_at;
     await setLocalSyncValueFromCloud(key, JSON.stringify(data.data));
     // Calendar re-reads 'uermExams' fresh from localStorage every time it
@@ -6236,8 +6275,6 @@ async function downloadAndMergeKey(key){
     // read once at page load, so a merge that lands *while already on
     // that screen* won't visibly update it until you navigate away and
     // back (or reload) — the data itself is correctly saved either way.
-  } else if(localTime > cloudTime){
-    await uploadKey(key);
   }
 }
 // Writes a downloaded cloud value into local storage without re-queuing it
@@ -6256,19 +6293,35 @@ async function processSyncQueue(){
   const keys = await getQueuedSyncKeys();
   for(const key of keys) await uploadKey(key);
 }
+// Guards every fullSync() entry point (sign-in, reconnect, the manual
+// "Sync Now" button, and the periodic background tick below) so two of
+// them can never run concurrently and race each other.
+let _syncInFlight = false;
 async function fullSync(){
-  if(!currentUser) return;
+  if(!currentUser || _syncInFlight) return;
+  _syncInFlight = true;
   setSyncStatus('syncing');
   try{
-    for(const key of SYNC_KEYS) await downloadAndMergeKey(key);
-    await processSyncQueue();
+    const queued = new Set(await getQueuedSyncKeys());
+    for(const key of SYNC_KEYS) await downloadAndMergeKey(key, queued);
+    await processSyncQueue(); // retries anything that failed to upload above
     setSyncStatus('synced');
     try{ renderLanding(); renderRecentActivity(); }catch(e){}
   }catch(e){
     console.error('Sync failed', e);
     setSyncStatus('error');
+  } finally {
+    _syncInFlight = false;
   }
 }
+// ---- Periodic background sync ----
+// Sign-in, reconnecting, and "Sync Now" all trigger a fullSync(), but
+// nothing used to while the app just sat open and signed in — so an edit
+// could sit queued locally for a long time before actually reaching the
+// cloud, and the device that happened to sync last "won" rather than the
+// device with the actually-newest edit. This keeps it moving in the
+// background too.
+setInterval(() => { if(currentUser && navigator.onLine) fullSync(); }, 90000);
 
 // ---- UI: sync status indicator ----
 function setSyncStatus(status){
