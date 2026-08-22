@@ -6002,7 +6002,7 @@ async function initAppDataStorage(){
       if(stamp) appDataUpdatedAt[key] = stamp;
     });
 
-    try{ migrateSetTypes(); }catch(e){}
+    try{ migrateSetTypes(); migrateCardIds(); }catch(e){}
     try{ renderLanding(); renderRecentActivity(); }catch(e){}
   }catch(e){
     console.error('App data storage initialization failed:', e);
@@ -6816,7 +6816,15 @@ function updateDailyStreakUI(){
 }
 
 function genSetId(){ return 'set_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
-function cardKey(card){ return card.front.trim().toLowerCase(); }
+function genCardId(){ return 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2,9); }
+// IMPORTANT: cards have no other stable identity in this app (no field is
+// guaranteed present/unique except front text). Before migrateCardIds()
+// (below) back-filled every card with a real .id, this fell back to the
+// card's own front text — which meant "average" and "mastery" could
+// silently blend the stats of two DIFFERENT cards that merely had the same
+// question text, including across totally unrelated sets/subjects for
+// mastery specifically (see migrateCardIds' comment for the full story).
+function cardKey(card){ return (card && card.id) ? card.id : (card.front||'').trim().toLowerCase(); }
 // Cards can be edited, replaced, or removed after being studied, but the old
 // cardStats entries for their old fronts are never deleted from that set's
 // bucket. Left unfiltered, a set's shown "average" mixes in stats from cards
@@ -6829,7 +6837,10 @@ function liveCardStats(s, st){
   // to filter against, so just return everything as before.
   if(!s || !Array.isArray(s.cards)) return Object.values(st.cardStats);
   const liveKeys = new Set(s.cards.map(c => cardKey(c)));
-  return Object.values(st.cardStats).filter(cs => liveKeys.has(cardKey({front: cs.front})));
+  // cs.id covers post-migration records (see migrateCardIds); the
+  // cardKey({front:...}) fallback still matches pre-migration records that
+  // were never re-keyed (e.g. a set imported/restored from an old backup).
+  return Object.values(st.cardStats).filter(cs => liveKeys.has(cs.id || cardKey({front: cs.front})));
 }
 function fmtDate(ts){
   return new Date(ts).toLocaleDateString(undefined, {month:'short', day:'numeric'});
@@ -6882,6 +6893,76 @@ function migrateSetTypes(){
     }
   });
   if(changed) saveSetsData(sets);
+}
+
+/* Fixes a real accuracy bug in "average" and "mastery": cards had no stable
+   identity of their own — cardKey() used to derive one purely from the
+   card's front text. Two consequences, one narrow and one severe:
+     - "Average" (per-set): if the SAME set happened to have two cards with
+       identical front text, their seen/correct counts got added to one
+       shared bucket, skewing that set's % avg.
+     - "Mastery": far worse, because the learning-record store isn't even
+       scoped per set — it's one flat object for the WHOLE app. Any two
+       cards ANYWHERE in the library with matching front text (plausible
+       with generic stems like "Which of the following is correct?" reused
+       across different subjects) silently shared one mastery record,
+       blending unrelated study history across sets.
+   The fix: give every card a real, permanent, unique .id and use that
+   instead of its text wherever one exists. This runs once per card (skips
+   anything that already has an .id) and is safe to leave running on every
+   boot — it's a no-op once everything's migrated.
+   Existing data gets carried forward, but only where it's actually safe:
+   a card's own stats/mastery are copied to its new id ONLY if its old text
+   key was unique (within the set, for "average"; across the whole library,
+   for "mastery") at migration time. Where a text key WAS shared by more
+   than one card, that history is genuinely un-attributable after the fact
+   — there's no way to know which card the recorded attempts really
+   belonged to — so those specific cards start clean rather than keep
+   carrying a mix of some other card's history forward. */
+function migrateCardIds(){
+  const sets = loadSets();
+  const statsAll = loadStatsData();
+  const learning = loadLearningData();
+  let setsChanged = false, statsChanged = false, learningChanged = false;
+
+  const textKey = c => (c.front || '').trim().toLowerCase();
+
+  // How many not-yet-migrated cards, anywhere in the whole library, share
+  // this exact front text — this is the "mastery" collision check.
+  const globalTextCounts = {};
+  Object.values(sets).forEach(s => {
+    if(!Array.isArray(s.cards)) return;
+    s.cards.forEach(c => { if(!c.id) globalTextCounts[textKey(c)] = (globalTextCounts[textKey(c)] || 0) + 1; });
+  });
+
+  Object.entries(sets).forEach(([sid, s]) => {
+    if(!Array.isArray(s.cards)) return;
+    // How many not-yet-migrated cards within THIS set share this front
+    // text — this is the "average" collision check.
+    const setTextCounts = {};
+    s.cards.forEach(c => { if(!c.id) setTextCounts[textKey(c)] = (setTextCounts[textKey(c)] || 0) + 1; });
+
+    s.cards.forEach(c => {
+      if(c.id) return; // already migrated in an earlier run
+      const oldKey = textKey(c);
+      const newId = genCardId();
+
+      if(setTextCounts[oldKey] === 1){
+        const cs = statsAll[sid] && statsAll[sid].cardStats;
+        if(cs && cs[oldKey] && !cs[newId]){ cs[newId] = {...cs[oldKey], id: newId, front: c.front}; statsChanged = true; }
+      }
+      if(globalTextCounts[oldKey] === 1 && learning[oldKey] && !learning[newId]){
+        learning[newId] = learning[oldKey];
+        learningChanged = true;
+      }
+      c.id = newId;
+      setsChanged = true;
+    });
+  });
+
+  if(setsChanged) saveSetsData(sets);
+  if(statsChanged) saveStatsData(statsAll);
+  if(learningChanged) saveLearningData(learning);
 }
 
 // Assigns each Subject (or LE) a consistent muted tint from the vineyard
@@ -7807,7 +7888,7 @@ function recordAnswer(card, isCorrect){
   if(!statsAll[bucketId]) statsAll[bucketId] = {cardStats:{}, sessions:[]};
   const cs = statsAll[bucketId].cardStats;
   const key = cardKey(card);
-  if(!cs[key]) cs[key] = {front: card.front, seen:0, correct:0, lastSeen:0};
+  if(!cs[key]) cs[key] = {front: card.front, id: key, seen:0, correct:0, lastSeen:0};
   cs[key].seen++;
   if(isCorrect) cs[key].correct++;
   cs[key].lastSeen = Date.now();
@@ -8738,7 +8819,7 @@ function renderStatsScreen(){
     const setName = sets[id] ? sets[id].name : 'Unsaved session';
     liveCardStats(sets[id], st).forEach(c => {
       if(c.seen >= 2){
-        const rec = learning[cardKey({front: c.front})];
+        const rec = learning[c.id || cardKey({front: c.front})];
         const priority = rec ? calculateStudyPriority(rec, {front: c.front}) : null;
         allCards.push({...c, setName, acc: c.correct / c.seen, priority});
       }
@@ -10641,6 +10722,7 @@ $('setupBackBtn').onclick = () => {
 };
 
 migrateSetTypes();
+migrateCardIds();
 // Wait for the IndexedDB-backed cache to finish loading before the app
 // becomes interactive. Rendering (and letting the user create/save sets)
 // before this resolved used to run against a cache that could still be
@@ -10649,6 +10731,7 @@ migrateSetTypes();
 // cache with the (older, pre-new-set) IndexedDB snapshot underneath it.
 initAppDataStorage().then(() => {
   migrateSetTypes();
+  migrateCardIds();
   showLanding();
 });
 initAccountSettingsUI();
@@ -11192,7 +11275,7 @@ function startWeakPractice(){
     if(!setCards) return;
     Object.values(st.cardStats || {}).forEach(cs => {
       if(!cs.seen || cs.correct >= cs.seen) return;
-      const full = setCards.find(c => cardKey(c) === cardKey({front: cs.front}));
+      const full = setCards.find(c => cardKey(c) === (cs.id || cardKey({front: cs.front})));
       if(!full) return;
       const acc = cs.correct / cs.seen;
       const key = cardKey(full);
@@ -11327,7 +11410,7 @@ function startWeakPracticeForSet(sid){
   const scored = [];
   Object.values(cardStats).forEach(cs => {
     if(!cs.seen || cs.correct >= cs.seen) return;
-    const full = s.cards.find(c => cardKey(c) === cardKey({front: cs.front}));
+    const full = s.cards.find(c => cardKey(c) === (cs.id || cardKey({front: cs.front})));
     if(!full) return;
     scored.push({card: full, acc: cs.correct / cs.seen});
   });
