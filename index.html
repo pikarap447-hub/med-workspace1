@@ -6487,6 +6487,8 @@ async function publishSetToCommunity(sid){
     subject: s.subject || null,
     card_type: s.cardType || null,
     topic: s.topic || null,
+    le: s.le || null,
+    kind: s.kind || null,
     cards: s.cards || [],
     card_count: (s.cards || []).length
   };
@@ -6602,7 +6604,7 @@ async function renderCommunityBrowse(){
   if(!sb || !currentUser || !statusEl) return;
   statusEl.textContent = 'Loading…';
   const { data, error } = await sb.from('community_sets')
-    .select('id, owner_id, username, title, subject, card_type, topic, card_count, cards, created_at, updated_at, import_count, like_count, save_count')
+    .select('id, owner_id, username, title, subject, card_type, topic, le, kind, card_count, cards, created_at, updated_at, import_count, like_count, save_count')
     .order('created_at', { ascending: false })
     .limit(150);
   if(error){ statusEl.textContent = 'Could not load community sets: ' + error.message; return; }
@@ -6727,7 +6729,7 @@ async function p2FollowingFeed(){
   const sb=getSupabase();if(!sb||!currentUser)return;
   const ids=[...communityP2Following];
   if(!ids.length){$('communityPhase2Area').innerHTML='<div class="community-p2-empty"><b>Your Following feed is empty.</b><br>Open a creator profile and follow them to see their decks here.</div>';return;}
-  const {data,error}=await sb.from('community_sets').select('id,title,subject,card_type,topic,card_count,owner_id,username,created_at,updated_at,import_count,like_count,save_count,cards').in('owner_id',ids).order('created_at',{ascending:false}).limit(100);
+  const {data,error}=await sb.from('community_sets').select('id,title,subject,card_type,topic,le,kind,card_count,owner_id,username,created_at,updated_at,import_count,like_count,save_count,cards').in('owner_id',ids).order('created_at',{ascending:false}).limit(100);
   if(error){$('communityPhase2Area').textContent=error.message;return;}
   communityBrowseCache=data||[];await loadCommunityInteractions(communityBrowseCache.map(x=>x.id));
   renderCommunitySubjectFilters();applyCommunitySearchFilter();
@@ -6890,7 +6892,8 @@ try{ if(document.readyState==='loading') document.addEventListener('DOMContentLo
 function renderCommunityCard(r){
   const liked = communityInteractionCache.liked.has(r.id);
   const saved = communityInteractionCache.saved.has(r.id);
-  const tags = [r.subject, r.card_type, r.topic].filter(Boolean).slice(0,3).map(t => `<span class="community-set-tag">${escapeHtml(t)}</span>`).join('');
+  const cardTypeLabel = r.card_type === 'samplex' ? 'Samplex' : (r.card_type === 'topic' ? 'Topic Cards' : r.card_type);
+  const tags = [r.le ? `LE ${r.le}` : null, cardTypeLabel, r.subject, r.topic, r.kind === 'algorithm' ? 'Algorithm' : null].filter(Boolean).slice(0,4).map(t => `<span class="community-set-tag">${escapeHtml(t)}</span>`).join('');
   const div = document.createElement('div');
   div.className = 'community-set-card';
   div.innerHTML = `
@@ -7002,7 +7005,8 @@ async function importCommunitySet(communitySetId){
   const now = Date.now();
   sets[genSetId()] = {
     name: data.title, subject: data.subject || undefined, cardType: data.card_type || undefined,
-    topic: data.topic || undefined, cards: data.cards || [], completed: false, completedAt: undefined,
+    topic: data.topic || undefined, le: data.le || undefined, kind: data.kind || undefined,
+    cards: data.cards || [], completed: false, completedAt: undefined,
     createdAt: now, updatedAt: now
   };
   saveSetsData(sets);
