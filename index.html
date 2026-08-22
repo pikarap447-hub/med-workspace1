@@ -4266,6 +4266,7 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
    decorative, so simplest correct fix is to not render it while the
    calendar view is open. */
 .card:has(#calendarView:not(.hidden)) > .card-inner > .vine-frame{display:none}
+.card:has(#communityView:not(.hidden)) > .card-inner > .vine-frame{display:none}
 
 </style>
 
@@ -4302,6 +4303,7 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
       <button class="btn-ghost stats-toggle" id="settingsToggleBtn" title="Settings" aria-label="Settings">⚙️ <span>Settings</span></button>
       <button class="btn-ghost stats-toggle" id="petToggleBtn" title="Pet" aria-label="Pet">🐶 <span>Pet</span></button>
       <button class="btn-ghost stats-toggle" id="calendarToggleBtn" title="Calendar" aria-label="Calendar">🗓️ <span>Calendar</span></button>
+      <button class="btn-ghost stats-toggle" id="communityToggleBtn" title="Community" aria-label="Community">🌐 <span>Community</span></button>
     </nav>
   </div>
 
@@ -5524,6 +5526,43 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
 
       </div>
 
+      <!-- ===== HTML-08 COMMUNITY ===== -->
+      <div id="communityView" class="hidden">
+        <div class="row" style="margin-bottom:14px;">
+          <button class="btn-ghost" id="backFromCommunityBtn">← Back</button>
+        </div>
+
+        <div class="backup-block hidden" id="communitySignedOutBlock">
+          <label class="field-label">Community sets</label>
+          <div class="hint" style="margin-top:0;">Sign in to browse and share sets with other users. Head to Settings → Account &amp; Sync to sign in.</div>
+        </div>
+
+        <div id="communitySignedInBlock" class="hidden">
+          <div class="backup-block hidden" id="communityUsernameBlock">
+            <label class="field-label">Pick a username</label>
+            <div class="hint" style="margin-top:0;">This is what other people will see on sets you publish (and later, on the leaderboard).</div>
+            <div style="display:flex; gap:8px; margin-top:10px; max-width:320px;">
+              <input type="text" id="communityUsernameInput" class="modal-input" placeholder="Username" maxlength="24">
+              <button class="btn-ghost" id="communityUsernameSaveBtn">Save</button>
+            </div>
+            <div id="communityUsernameStatus" class="hint" style="margin-top:8px; min-height:16px;"></div>
+          </div>
+
+          <div class="backup-block">
+            <label class="field-label">Browse community sets</label>
+            <input type="text" id="communitySearchInput" class="modal-input" placeholder="Search by title or subject…" style="margin-top:10px; max-width:320px;">
+            <div id="communityBrowseList" style="margin-top:12px; display:flex; flex-direction:column; gap:8px;"></div>
+            <div class="hint" id="communityBrowseStatus" style="margin-top:8px;">Loading…</div>
+          </div>
+
+          <div class="backup-block">
+            <label class="field-label">Your published sets</label>
+            <div id="communityMineList" style="margin-top:10px; display:flex; flex-direction:column; gap:8px;"></div>
+            <div class="hint" id="communityMineStatus" style="margin-top:8px;"></div>
+          </div>
+        </div>
+      </div>
+
   <div class="tile-border bottom"></div>
   </div>
 </div>
@@ -6077,12 +6116,13 @@ async function initCloudSync(){
   sb.auth.onAuthStateChange((event, session) => {
     currentUser = session ? session.user : null;
     renderAccountUI();
-    if(currentUser && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) fullSync();
+    if(currentUser && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')){ fullSync(); loadCommunityProfile(); }
+    if(!currentUser) communityUsername = null;
   });
   const { data: { session } } = await sb.auth.getSession();
   currentUser = session ? session.user : null;
   renderAccountUI();
-  if(currentUser) fullSync();
+  if(currentUser){ fullSync(); await loadCommunityProfile(); }
 }
 window.addEventListener('online', () => { if(currentUser){ $('accountNavSub') && ($('accountNavSub').textContent = 'Syncing…'); fullSync(); } });
 window.addEventListener('offline', () => { if(currentUser) setSyncStatus('offline'); });
@@ -6093,6 +6133,194 @@ function initAccountSettingsUI(){
   $('acctSignOutBtn').onclick = acctSignOut;
   $('acctForgotBtn').onclick = acctForgotPassword;
   $('syncNowBtn').onclick = fullSync;
+}
+
+/* ===== COMMUNITY SETS (Phase A: public upload/browse) =====
+   Layered on the same auth/client as cloud sync above. Publishing sends
+   cards only (name/subject/cardType/topic/cards) — the same sanitized
+   shape the existing "Send" export already uses; stats and progress never
+   leave the device. */
+let communityUsername = null;
+let communityBrowseCache = [];
+
+async function loadCommunityProfile(){
+  const sb = getSupabase();
+  if(!sb || !currentUser){ communityUsername = null; return; }
+  const { data, error } = await sb.from('community_profiles').select('username').eq('user_id', currentUser.id).maybeSingle();
+  communityUsername = (!error && data) ? data.username : null;
+}
+
+async function saveCommunityUsername(name){
+  const sb = getSupabase();
+  if(!sb || !currentUser) return { error: 'Sign in first.' };
+  const clean = name.trim();
+  if(clean.length < 3) return { error: 'Username needs to be at least 3 characters.' };
+  const { error } = await sb.from('community_profiles').upsert({ user_id: currentUser.id, username: clean }, { onConflict: 'user_id' });
+  if(error){
+    return { error: String(error.message||'').toLowerCase().includes('duplicate') ? 'That username is taken — try another.' : error.message };
+  }
+  communityUsername = clean;
+  return { ok: true };
+}
+
+async function publishSetToCommunity(sid){
+  const sb = getSupabase();
+  if(!sb || !currentUser){ alert('Sign in first — Settings → Account & Sync.'); return; }
+  if(!communityUsername) await loadCommunityProfile();
+  if(!communityUsername){
+    const chosen = prompt('Pick a username to publish under (this is what other users will see):');
+    if(!chosen) return;
+    const res = await saveCommunityUsername(chosen);
+    if(res.error){ alert(res.error); return; }
+  }
+  const sets = loadSets();
+  const s = sets[sid];
+  if(!s) return;
+  const row = {
+    owner_id: currentUser.id,
+    username: communityUsername,
+    title: s.name || 'Untitled set',
+    subject: s.subject || null,
+    card_type: s.cardType || null,
+    topic: s.topic || null,
+    cards: s.cards || [],
+    card_count: (s.cards || []).length
+  };
+  const wasAlreadyPublished = !!s.communityId;
+  const result = wasAlreadyPublished
+    ? await sb.from('community_sets').update(row).eq('id', s.communityId).eq('owner_id', currentUser.id).select('id').maybeSingle()
+    : await sb.from('community_sets').insert(row).select('id').maybeSingle();
+  if(result.error){ alert('Publish failed: ' + result.error.message); return; }
+  if(!wasAlreadyPublished && result.data && result.data.id){
+    s.communityId = result.data.id;
+    saveSetsData(sets); // also queues this set for cloud sync, so communityId follows to other devices
+  }
+  if(!$('folderView').classList.contains('hidden')) renderFolderView();
+  else if(!$('landing').classList.contains('hidden')){ renderLanding(); renderRecentActivity(); }
+  alert(wasAlreadyPublished ? 'Updated on Community.' : 'Published to Community!');
+  renderCommunityMine();
+}
+
+async function unpublishSetFromCommunity(sid){
+  const sb = getSupabase();
+  const sets = loadSets();
+  const s = sets[sid];
+  if(!sb || !currentUser || !s || !s.communityId) return;
+  if(!confirm(`Remove "${s.name}" from Community? It will no longer be visible to other users.`)) return;
+  const { error } = await sb.from('community_sets').delete().eq('id', s.communityId).eq('owner_id', currentUser.id);
+  if(error){ alert('Could not unpublish: ' + error.message); return; }
+  delete s.communityId;
+  saveSetsData(sets);
+  renderCommunityMine();
+}
+
+function renderCommunityMine(){
+  const listEl = $('communityMineList'), statusEl = $('communityMineStatus');
+  if(!listEl || !statusEl) return;
+  const sets = loadSets();
+  const mine = Object.entries(sets).filter(([,s]) => s.communityId);
+  listEl.innerHTML = '';
+  if(!mine.length){ statusEl.textContent = "You haven't published any sets yet. Use a set's ⋯ menu → Publish to Community."; return; }
+  statusEl.textContent = '';
+  mine.forEach(([sid, s]) => {
+    const div = document.createElement('div');
+    div.className = 'set-item';
+    div.innerHTML = `
+      <div class="set-item-main">
+        <div class="set-item-name">${escapeHtml(s.name || 'Untitled set')}</div>
+        <div class="set-item-meta">${(s.cards||[]).length} cards${s.subject ? ' · ' + escapeHtml(s.subject) : ''}</div>
+      </div>
+      <div class="set-item-actions">
+        <button class="btn-ghost sm" data-act="unpub" data-id="${sid}">Unpublish</button>
+      </div>`;
+    div.querySelector('[data-act="unpub"]').addEventListener('click', () => unpublishSetFromCommunity(sid));
+    listEl.appendChild(div);
+  });
+}
+
+async function renderCommunityBrowse(){
+  const sb = getSupabase();
+  const statusEl = $('communityBrowseStatus');
+  if(!sb || !currentUser || !statusEl) return;
+  statusEl.textContent = 'Loading…';
+  const { data, error } = await sb.from('community_sets')
+    .select('id, username, title, subject, card_type, card_count, created_at')
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if(error){ statusEl.textContent = 'Could not load community sets: ' + error.message; return; }
+  communityBrowseCache = data || [];
+  applyCommunitySearchFilter();
+}
+
+function applyCommunitySearchFilter(){
+  const listEl = $('communityBrowseList'), statusEl = $('communityBrowseStatus');
+  if(!listEl || !statusEl) return;
+  const q = ($('communitySearchInput').value || '').trim().toLowerCase();
+  const rows = !q ? communityBrowseCache : communityBrowseCache.filter(r =>
+    (r.title||'').toLowerCase().includes(q) || (r.subject||'').toLowerCase().includes(q) || (r.username||'').toLowerCase().includes(q));
+  listEl.innerHTML = '';
+  if(!rows.length){ statusEl.textContent = communityBrowseCache.length ? 'No matches.' : 'No community sets yet — be the first to publish one!'; return; }
+  statusEl.textContent = `${rows.length} set${rows.length===1?'':'s'}`;
+  rows.forEach(r => {
+    const div = document.createElement('div');
+    div.className = 'set-item';
+    div.innerHTML = `
+      <div class="set-item-main">
+        <div class="set-item-name">${escapeHtml(r.title)}</div>
+        <div class="set-item-meta">${r.card_count} cards${r.subject ? ' · ' + escapeHtml(r.subject) : ''} · by ${escapeHtml(r.username)}</div>
+      </div>
+      <div class="set-item-actions">
+        <button class="btn-primary sm" data-act="import" data-id="${r.id}">⬇ Import</button>
+      </div>`;
+    div.querySelector('[data-act="import"]').addEventListener('click', () => importCommunitySet(r.id));
+    listEl.appendChild(div);
+  });
+}
+
+async function importCommunitySet(communitySetId){
+  const sb = getSupabase();
+  if(!sb || !currentUser) return;
+  const { data, error } = await sb.from('community_sets').select('*').eq('id', communitySetId).maybeSingle();
+  if(error || !data){ alert('Could not load that set: ' + (error ? error.message : 'not found')); return; }
+  if(!confirm(`Add "${data.title}" (${data.card_count} cards) to your library?`)) return;
+  const sets = loadSets();
+  const now = Date.now();
+  sets[genSetId()] = {
+    name: data.title, subject: data.subject || undefined, cardType: data.card_type || undefined,
+    topic: data.topic || undefined, cards: data.cards || [], completed: false, completedAt: undefined,
+    createdAt: now, updatedAt: now
+  };
+  saveSetsData(sets);
+  alert(`Added "${data.title}" to your library.`);
+}
+
+function renderCommunityView(){
+  const signedIn = !!currentUser;
+  $('communitySignedOutBlock').classList.toggle('hidden', signedIn);
+  $('communitySignedInBlock').classList.toggle('hidden', !signedIn);
+  if(!signedIn) return;
+  $('communityUsernameBlock').classList.toggle('hidden', !!communityUsername);
+  if(communityUsername) $('communityUsernameInput').value = communityUsername;
+  renderCommunityMine();
+  renderCommunityBrowse();
+}
+
+function initCommunityUI(){
+  $('communityToggleBtn').onclick = () => {
+    saveBeforeNavigation(); hideAllScreens(); $('communityView').classList.remove('hidden');
+    renderCommunityView();
+  };
+  $('backFromCommunityBtn').onclick = () => { $('communityView').classList.add('hidden'); showLanding(); };
+  $('communityUsernameSaveBtn').onclick = async () => {
+    const res = await saveCommunityUsername($('communityUsernameInput').value);
+    $('communityUsernameStatus').textContent = res.error || '';
+    if(res.ok) $('communityUsernameBlock').classList.add('hidden');
+  };
+  let searchDebounce;
+  $('communitySearchInput').addEventListener('input', () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(applyCommunitySearchFilter, 150);
+  });
 }
 
 // bucket for an in-progress quiz that was never saved as a named set
@@ -6164,7 +6392,7 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pagehide', saveBeforeNavigation);
 
 function hideAllScreens(){
-  ['landing','folderView','setup','quiz','caseGame','brainBreak','results','statsView','settingsView','petView','calendarView'].forEach(id => {
+  ['landing','folderView','setup','quiz','caseGame','brainBreak','results','statsView','settingsView','petView','calendarView','communityView'].forEach(id => {
     const el = $(id);
     if(el) el.classList.add('hidden');
   });
@@ -6662,6 +6890,7 @@ function buildSetRow(sid, s, opts){
           <button type="button" class="set-item-menu-item" data-act="rename" data-id="${sid}">✎ Rename</button>
           <button type="button" class="set-item-menu-item" data-act="dup" data-id="${sid}">⧉ Copy</button>
           <button type="button" class="set-item-menu-item" data-act="share" data-id="${sid}" title="Share this set (cards only — no stats or progress)">📤 Send</button>
+          <button type="button" class="set-item-menu-item" data-act="publish" data-id="${sid}" title="Publish this set to the community (cards only — no stats or progress)">🌐 ${s.communityId ? 'Update on Community' : 'Publish to Community'}</button>
         </div>
       </div>
       <button class="btn-ghost sm" data-act="del" data-id="${sid}">Delete</button>
@@ -6689,6 +6918,7 @@ function buildSetRow(sid, s, opts){
   row.querySelector('[data-act="rename"]').addEventListener('click', () => { closeAllSetItemMenus(); renameSetById(sid); });
   row.querySelector('[data-act="dup"]').addEventListener('click', () => { closeAllSetItemMenus(); duplicateSetById(sid); });
   row.querySelector('[data-act="share"]').addEventListener('click', () => { closeAllSetItemMenus(); shareSetById(sid); });
+  row.querySelector('[data-act="publish"]')?.addEventListener('click', () => { closeAllSetItemMenus(); publishSetToCommunity(sid); });
   row.querySelector('[data-act="del"]').addEventListener('click', () => deleteSetById(sid));
   const menuBtn = row.querySelector('[data-act="menu"]');
   const menuWrap = menuBtn?.closest('.set-item-menu-wrap');
@@ -6900,6 +7130,7 @@ function duplicateSetById(id){
   const s = sets[id];
   if(!s) return;
   const copy = JSON.parse(JSON.stringify(s));
+  delete copy.communityId;
   copy.name = s.name + ' (copy)';
   copy.updatedAt = Date.now();
   const newId = 'set_' + Date.now() + '_' + Math.random().toString(36).slice(2,8);
@@ -8895,6 +9126,20 @@ $('imgSettingsSave').onclick = () => {
   sync();
 })();
 
+// Same empty-pill issue as the calendar above, for #communityView.
+(function syncCardWithCommunity(){
+  const communityViewEl = document.getElementById('communityView');
+  const cardEl = document.querySelector('.card');
+  if(!communityViewEl || !cardEl) return;
+  function sync(){
+    const communityOpen = !communityViewEl.classList.contains('hidden');
+    if(communityOpen) cardEl.style.display = 'none';
+    else if(document.getElementById('calendarView')?.classList.contains('hidden')) cardEl.style.display = '';
+  }
+  new MutationObserver(sync).observe(communityViewEl, { attributes: true, attributeFilter: ['class'] });
+  sync();
+})();
+
 /* ---- Vine border growth ---- */
 const vineClusterEls = Array.from(document.querySelectorAll('.vine-cluster'));
 const vineGrand = $('vineGrand');
@@ -10212,6 +10457,7 @@ initAppDataStorage().then(() => {
   showLanding();
 });
 initAccountSettingsUI();
+initCommunityUI();
 initCloudSync();
 
 $('homeBtn').onclick = () => {
@@ -11014,7 +11260,7 @@ function collectSetShareData(ids){
   ids.forEach(id => {
     const s = sets[id];
     if(!s) return;
-    const {completed, completedAt, ...rest} = s;
+    const {completed, completedAt, communityId, ...rest} = s;
     shared[id] = rest;
   });
   return {app: 'topicReview', version: 1, type: 'set-share', exportedAt: new Date().toISOString(), data: {sets: shared}};
@@ -11090,7 +11336,8 @@ $('importDataFile').onchange = e => {
       const sets = loadSets();
       const now = Date.now();
       Object.values(incoming).forEach(s => {
-        sets[genSetId()] = {...s, completed: false, completedAt: undefined, createdAt: now, updatedAt: now};
+        const {communityId, ...clean} = s;
+        sets[genSetId()] = {...clean, completed: false, completedAt: undefined, createdAt: now, updatedAt: now};
       });
       saveSetsData(sets);
       e.target.value = '';
