@@ -5659,6 +5659,7 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
 <div class="community-p2-tabs" id="communityPhase2Tabs">
   <button class="community-p2-tab active" data-p2feed="discover">🌐 Discover</button>
   <button class="community-p2-tab" data-p2feed="following">👥 Following</button>
+  <button class="community-p2-tab" data-p2feed="people">🔎 People</button>
   <button class="community-p2-tab" data-p2feed="collections">📚 Collections</button>
 </div>
 <div id="communityPhase2Area"></div>
@@ -6380,6 +6381,15 @@ async function acctSignOut(){
   const sb = getSupabase();
   if(sb) await sb.auth.signOut();
   currentUser = null;
+  // Prevent the next account signed in on this tab from briefly inheriting
+  // this account's following list / in-flight follow state.
+  communityP2Following = new Set();
+  communityP2FollowPending = new Set();
+  communityP2Feed = 'discover';
+  communityP2OpenProfileUid = null;
+  communityP2PeopleQuery = '';
+  communityP2PeopleReqId++;
+  clearTimeout(communityP2PeopleDebounce);
   renderAccountUI();
 }
 async function acctForgotPassword(){
@@ -6401,7 +6411,12 @@ async function initCloudSync(){
     if(currentUser && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')){
       fullSync(); loadCommunityProfile().then(() => { startCommunityRealtime(); checkForNewCommunitySets(); });
     }
-    if(!currentUser){ communityUsername = null; stopCommunityRealtime(); showCommunityNewDot(false); }
+    if(!currentUser){
+      communityUsername = null; stopCommunityRealtime(); showCommunityNewDot(false);
+      communityP2Following = new Set(); communityP2FollowPending = new Set();
+      communityP2Feed = 'discover'; communityP2OpenProfileUid = null;
+      communityP2PeopleQuery = ''; communityP2PeopleReqId++; clearTimeout(communityP2PeopleDebounce);
+    }
   });
   const { data: { session } } = await sb.auth.getSession();
   currentUser = session ? session.user : null;
@@ -6602,6 +6617,11 @@ async function renderCommunityBrowse(){
 let communityP2Feed='discover';
 let communityP2Following=new Set();
 let communityP2ProfileCache=new Map();
+let communityP2FollowPending=new Set(); // uids with an in-flight follow/unfollow request
+let communityP2OpenProfileUid=null;      // uid whose profile modal is currently open, if any
+let communityP2PeopleQuery='';           // last-typed text in the People search box (kept when switching tabs)
+let communityP2PeopleReqId=0;            // guards against a slow, stale search response overwriting a newer one
+let communityP2PeopleDebounce=null;
 
 function p2Esc(v){return escapeHtml(v==null?'':String(v));}
 async function p2GetProfile(uid){
@@ -6612,10 +6632,17 @@ async function p2GetProfile(uid){
   return data;
 }
 async function p2LoadFollowing(){
-  communityP2Following=new Set();
-  const sb=getSupabase(); if(!sb||!currentUser)return;
-  const {data}=await sb.from('community_follows').select('following_id').eq('follower_id',currentUser.id);
-  (data||[]).forEach(x=>communityP2Following.add(x.following_id));
+  const sb=getSupabase(); if(!sb||!currentUser){communityP2Following=new Set();return;}
+  const {data,error}=await sb.from('community_follows').select('following_id').eq('follower_id',currentUser.id);
+  if(error){
+    // Transient network/API failure: keep whatever we already had rather than
+    // wiping the following list to empty and making every button lie.
+    console.warn('p2LoadFollowing:',error.message);
+    return;
+  }
+  const next=new Set();
+  (data||[]).forEach(x=>next.add(x.following_id));
+  communityP2Following=next;
 }
 async function p2RenderProfile(){
   const el=$('communityPhase2Profile'); if(!el||!currentUser)return;
@@ -6637,16 +6664,42 @@ async function p2RenderProfile(){
 }
 async function p2ToggleFollow(uid,btn){
   const sb=getSupabase(); if(!sb||!currentUser||uid===currentUser.id)return;
+  if(communityP2FollowPending.has(uid))return; // ignore rapid double-clicks while a request is in flight
+  communityP2FollowPending.add(uid);
+  if(btn){btn.disabled=true;btn.style.opacity='0.6';btn.style.pointerEvents='none';}
+
   const following=communityP2Following.has(uid);
   const q=following?sb.from('community_follows').delete().eq('follower_id',currentUser.id).eq('following_id',uid)
                    :sb.from('community_follows').insert({follower_id:currentUser.id,following_id:uid});
-  const {error}=await q;if(error){alert(error.message);return;}
-  following?communityP2Following.delete(uid):communityP2Following.add(uid);
-  if(btn){btn.textContent=following?'Follow':'Following';btn.classList.toggle('active',!following);}
+  const {error}=await q;
+
+  if(error){
+    // Local cache can disagree with the server — e.g. this uid was already
+    // followed/unfollowed from another tab or device. Reconcile instead of
+    // just surfacing a raw DB error and leaving the button in a wrong state.
+    if(/duplicate|already exists|unique/i.test(error.message)) communityP2Following.add(uid);
+    else if(/no rows|not found/i.test(error.message)) communityP2Following.delete(uid);
+    else alert(error.message);
+    await p2LoadFollowing();
+  } else {
+    following?communityP2Following.delete(uid):communityP2Following.add(uid);
+  }
+
+  const nowFollowing=communityP2Following.has(uid);
+  if(btn){
+    btn.disabled=false;btn.style.opacity='';btn.style.pointerEvents='';
+    btn.textContent=nowFollowing?'Following':'Follow';
+    btn.classList.toggle('active',nowFollowing);
+  }
+  communityP2FollowPending.delete(uid);
   p2RenderProfile();
+  // If this uid's profile modal is currently open, refresh its follower/
+  // following counts too — they'd otherwise go stale until the modal is reopened.
+  if(communityP2OpenProfileUid===uid) p2OpenProfile(uid);
 }
 async function p2OpenProfile(uid){
   const p=await p2GetProfile(uid);if(!p)return;
+  communityP2OpenProfileUid=uid;
   const sb=getSupabase();
   const {data:decks}=await sb.from('community_sets').select('id,title,subject,card_count,owner_id,username,created_at').eq('owner_id',uid).order('created_at',{ascending:false}).limit(50);
   const [{count:followers},{count:following}]=await Promise.all([
@@ -6669,7 +6722,7 @@ function p2Modal(title,meta,body){
   $('communityP2ModalTitle').textContent=title;$('communityP2ModalMeta').textContent=meta||'';
   $('communityP2ModalBody').innerHTML=body;$('communityP2Modal').classList.remove('hidden');
 }
-function p2CloseModal(){$('communityP2Modal').classList.add('hidden');}
+function p2CloseModal(){$('communityP2Modal').classList.add('hidden');communityP2OpenProfileUid=null;}
 async function p2FollowingFeed(){
   const sb=getSupabase();if(!sb||!currentUser)return;
   const ids=[...communityP2Following];
@@ -6679,6 +6732,69 @@ async function p2FollowingFeed(){
   communityBrowseCache=data||[];await loadCommunityInteractions(communityBrowseCache.map(x=>x.id));
   renderCommunitySubjectFilters();applyCommunitySearchFilter();
 }
+
+/* ---- People search: find users by username/display name to follow ----
+   Two separate ilike() queries (username, display_name) run in parallel and
+   are merged client-side, rather than one .or('username.ilike....,...')
+   string — that avoids ever concatenating raw user input into a PostgREST
+   filter expression, where a stray comma or parenthesis the user typed
+   could otherwise break the query syntax. ---- */
+function p2PeopleSearch(){
+  const el=$('communityPhase2Area'); if(!el)return;
+  el.innerHTML=`<div class="community-search-wrap" style="margin-bottom:12px">
+    <span class="community-search-icon">🔎</span>
+    <input type="text" id="p2PeopleInput" class="modal-input" placeholder="Search by username or name…" style="width:100%;max-width:100%">
+  </div>
+  <div id="p2PeopleResults"></div>`;
+  const input=$('p2PeopleInput');
+  input.value=communityP2PeopleQuery;
+  input.addEventListener('input',()=>{
+    communityP2PeopleQuery=input.value;
+    clearTimeout(communityP2PeopleDebounce);
+    communityP2PeopleDebounce=setTimeout(()=>p2RunPeopleSearch(input.value),250);
+  });
+  input.focus();
+  p2RunPeopleSearch(communityP2PeopleQuery);
+}
+async function p2RunPeopleSearch(qRaw){
+  const results=$('p2PeopleResults'); if(!results)return;
+  const sb=getSupabase(); if(!sb||!currentUser)return;
+  const q=(qRaw||'').trim();
+  const reqId=++communityP2PeopleReqId;
+  if(!q){ results.innerHTML='<div class="community-p2-empty">Type a username or name to find people to follow.</div>'; return; }
+  results.innerHTML='<div class="community-p2-empty">Searching…</div>';
+  const like=`%${q.replace(/[%_\\]/g,c=>'\\'+c)}%`; // escape literal LIKE wildcards the user typed
+  const [byUsername,byName]=await Promise.all([
+    sb.from('community_profiles').select('user_id,username,display_name,bio,avatar_emoji').ilike('username',like).neq('user_id',currentUser.id).limit(20),
+    sb.from('community_profiles').select('user_id,username,display_name,bio,avatar_emoji').ilike('display_name',like).neq('user_id',currentUser.id).limit(20)
+  ]);
+  if(reqId!==communityP2PeopleReqId)return; // a newer keystroke already superseded this response
+  const error=byUsername.error||byName.error;
+  if(error){ results.innerHTML=`<div class="community-p2-empty">${p2Esc(error.message)}</div>`; return; }
+  const merged=new Map();
+  [...(byUsername.data||[]),...(byName.data||[])].forEach(p=>merged.set(p.user_id,p));
+  const people=[...merged.values()].slice(0,30);
+  if(!people.length){ results.innerHTML=`<div class="community-p2-empty">No one found for "${p2Esc(q)}".</div>`; return; }
+  results.innerHTML=people.map(p=>{
+    const isFollowing=communityP2Following.has(p.user_id);
+    return `<div class="community-p2-row" data-p2person="${p2Esc(p.user_id)}" style="cursor:pointer">
+      <div style="display:flex;align-items:center;gap:10px;min-width:0">
+        <div class="community-p2-avatar" style="width:34px;height:34px;font-size:16px;flex:none">${p2Esc(p.avatar_emoji||'🩺')}</div>
+        <div style="min-width:0">
+          <div style="font-weight:800;font-size:13px;color:var(--text)">${p2Esc(p.display_name||p.username)}</div>
+          <div class="community-p2-meta">@${p2Esc(p.username)}${p.bio?' · '+p2Esc(p.bio):''}</div>
+        </div>
+      </div>
+      <button class="btn-ghost sm ${isFollowing?'active':''}" data-p2followbtn="${p2Esc(p.user_id)}">${isFollowing?'Following':'Follow'}</button>
+    </div>`;
+  }).join('');
+  document.querySelectorAll('#p2PeopleResults [data-p2followbtn]').forEach(b=>b.addEventListener('click',e=>{
+    e.stopPropagation();
+    p2ToggleFollow(b.dataset.p2followbtn,b);
+  }));
+  document.querySelectorAll('#p2PeopleResults [data-p2person]').forEach(row=>row.addEventListener('click',()=>p2OpenProfile(row.dataset.p2person)));
+}
+
 async function p2Collections(){
   const sb=getSupabase();if(!sb||!currentUser)return;
   const {data}=await sb.from('community_collections').select('id,name,description').eq('owner_id',currentUser.id).order('updated_at',{ascending:false});
@@ -6751,6 +6867,7 @@ renderCommunityView=async function(){
   await p2LoadFollowing();await p2RenderProfile();
   if(communityP2Feed==='following')await p2FollowingFeed();
   else if(communityP2Feed==='collections')await p2Collections();
+  else if(communityP2Feed==='people')p2PeopleSearch();
 };
 
 function initCommunityPhase2(){
@@ -6759,8 +6876,12 @@ function initCommunityPhase2(){
   document.querySelectorAll('#communityPhase2Tabs .community-p2-tab').forEach(b=>b.addEventListener('click',async()=>{
     communityP2Feed=b.dataset.p2feed;
     document.querySelectorAll('#communityPhase2Tabs .community-p2-tab').forEach(x=>x.classList.toggle('active',x===b));
+    // Leaving the People tab: cancel any pending debounce/in-flight search so a
+    // slow response can't land after the area has been replaced with something else.
+    if(communityP2Feed!=='people'){ clearTimeout(communityP2PeopleDebounce); communityP2PeopleReqId++; }
     if(communityP2Feed==='following')await p2FollowingFeed();
     else if(communityP2Feed==='collections')await p2Collections();
+    else if(communityP2Feed==='people')p2PeopleSearch();
     else{ $('communityPhase2Area').innerHTML=''; await renderCommunityBrowse(); }
   }));
 }
