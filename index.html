@@ -4272,14 +4272,27 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
 /* ===== Community panel ===== */
 .community-panel{
   background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow);
-  padding:24px; max-width:720px; margin:0 auto;
+  padding:24px; max-width:820px; margin:0 auto;
 }
+.community-hero{margin-bottom:18px;}
+.community-hero-title{font-family:var(--font-display); font-weight:900; font-size:24px; color:var(--text); letter-spacing:-.02em;}
+.community-hero-sub{font-size:12.5px; color:var(--text-muted); margin-top:4px;}
 .community-section{margin-top:24px; padding-top:20px; border-top:1px solid var(--border);}
 .community-section:first-child{margin-top:0; padding-top:0; border-top:none;}
 .community-section-head{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
 .community-section-title{font-family:var(--font-display); font-weight:800; font-size:15px; color:var(--text);}
 .community-section-sub{font-size:12px; color:var(--text-muted); margin-top:2px;}
-.community-filters{display:flex; flex-wrap:wrap; gap:8px; margin-top:14px;}
+.community-search-wrap{position:relative;}
+.community-search-wrap .community-search-icon{position:absolute; left:13px; top:50%; transform:translateY(-50%); opacity:.62; pointer-events:none;}
+.community-search-wrap input{padding-left:36px !important;}
+.community-tabs{display:flex; gap:6px; flex-wrap:wrap; margin-top:14px;}
+.community-tab{
+  border:1.5px solid var(--border); background:var(--bg); color:var(--text-muted);
+  border-radius:999px; padding:7px 13px; font-size:12px; font-weight:800; cursor:pointer;
+}
+.community-tab:hover{border-color:var(--tile-blue-mid);}
+.community-tab.active{background:var(--tile-blue-deep); border-color:var(--tile-blue-deep); color:#fff;}
+.community-filters{display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;}
 .community-chip{
   border:1.5px solid var(--border); background:var(--bg); color:var(--text-muted);
   border-radius:999px; padding:5px 13px; font-size:12px; font-weight:700; cursor:pointer;
@@ -4287,23 +4300,50 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
 }
 .community-chip:hover{border-color:var(--tile-blue-mid);}
 .community-chip.active{background:var(--tile-blue-mid); border-color:var(--tile-blue-mid); color:#fff;}
+.community-list{display:flex; flex-direction:column; gap:10px; margin-top:14px;}
 .community-set-card{
   background:var(--bg); border:1.5px solid var(--border); border-radius:16px;
-  padding:14px 16px; display:flex; align-items:center; justify-content:space-between; gap:12px;
-  transition:transform .15s, box-shadow .15s;
+  padding:16px; display:flex; align-items:flex-start; justify-content:space-between; gap:16px;
+  transition:transform .15s, box-shadow .15s, border-color .15s;
 }
-.community-set-card:hover{transform:translateY(-1px); box-shadow:var(--shadow-sm);}
-.community-set-title{font-weight:700; font-size:14px; color:var(--text);}
-.community-set-meta{font-size:11.5px; color:var(--text-muted); margin-top:3px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+.community-set-card:hover{transform:translateY(-1px); box-shadow:var(--shadow-sm); border-color:var(--tile-blue-pale);}
+.community-set-main{min-width:0; flex:1;}
+.community-set-title{font-weight:800; font-size:15px; color:var(--text); line-height:1.25;}
+.community-set-author{font-size:11.5px; color:var(--text-muted); margin-top:4px;}
+.community-set-meta{font-size:11.5px; color:var(--text-muted); margin-top:8px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
 .community-set-tag{
   background:var(--tile-blue-pale); color:var(--tile-blue-deep); border-radius:999px;
   padding:2px 9px; font-size:10.5px; font-weight:700;
 }
+.community-set-stats{display:flex; flex-wrap:wrap; gap:10px; margin-top:10px; font-size:11.5px; color:var(--text-muted);}
+.community-set-stat{display:inline-flex; align-items:center; gap:3px;}
+.community-set-actions{display:flex; align-items:center; gap:7px; flex:0 0 auto; flex-wrap:wrap; justify-content:flex-end;}
+.community-icon-btn{
+  background:var(--surface); color:var(--text-muted); border:1.5px solid var(--border);
+  padding:8px 10px; border-radius:10px; font-size:12px; font-weight:800;
+}
+.community-icon-btn:hover{border-color:var(--tile-blue-mid); color:var(--tile-blue-deep);}
+.community-icon-btn.active{color:var(--tile-blue-deep); border-color:var(--tile-blue-mid); background:var(--primary-soft);}
 .community-empty{
   text-align:center; padding:32px 16px; color:var(--text-muted); font-size:13px;
   border:1.5px dashed var(--border); border-radius:14px; background:var(--bg);
 }
 .community-empty-icon{font-size:26px; margin-bottom:6px;}
+.community-preview-backdrop{position:fixed; inset:0; z-index:100000; background:rgba(15,20,20,.46); display:flex; align-items:center; justify-content:center; padding:20px;}
+.community-preview-backdrop.hidden{display:none;}
+.community-preview-modal{width:min(680px,100%); max-height:min(82vh,760px); overflow:auto; background:var(--surface); border-radius:20px; box-shadow:0 18px 60px rgba(0,0,0,.28); padding:22px;}
+.community-preview-head{display:flex; align-items:flex-start; justify-content:space-between; gap:14px;}
+.community-preview-title{font-family:var(--font-display); font-size:21px; font-weight:900; color:var(--text);}
+.community-preview-sub{font-size:12px; color:var(--text-muted); margin-top:4px;}
+.community-preview-sample{margin-top:14px; padding:13px 14px; border:1px solid var(--border); background:var(--bg); border-radius:13px;}
+.community-preview-front{font-size:12px; color:var(--text-muted); font-weight:800; text-transform:uppercase; letter-spacing:.05em;}
+.community-preview-text{margin-top:5px; font-size:14px; line-height:1.5; color:var(--text); white-space:pre-wrap; word-break:break-word;}
+.community-preview-footer{display:flex; justify-content:flex-end; gap:8px; margin-top:16px;}
+@media(max-width:640px){
+  .community-panel{padding:16px;}
+  .community-set-card{flex-direction:column;}
+  .community-set-actions{width:100%; justify-content:flex-start;}
+}
 /* Small pulsing dot on the Community nav tab, shown when sets have been
    published since this device last opened the tab. */
 .nav-new-dot{
@@ -5591,7 +5631,7 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
           <div id="communitySignedInBlock" class="hidden">
             <div class="community-section hidden" id="communityUsernameBlock">
               <div class="community-section-title">Pick a username</div>
-              <div class="community-section-sub">This is what other people will see on sets you publish (and later, on the leaderboard).</div>
+              <div class="community-section-sub">This is what other people will see on sets you publish.</div>
               <div style="display:flex; gap:8px; margin-top:12px; max-width:320px;">
                 <input type="text" id="communityUsernameInput" class="modal-input" placeholder="Username" maxlength="24">
                 <button class="btn-primary sm" id="communityUsernameSaveBtn">Save</button>
@@ -5599,22 +5639,57 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
               <div id="communityUsernameStatus" class="hint" style="margin-top:8px; min-height:16px;"></div>
             </div>
 
-            <div class="community-section" style="margin-top:0; padding-top:0; border-top:none;">
+            <div class="community-hero">
+              <div class="community-hero-title">🌐 Community</div>
+              <div class="community-hero-sub">Discover useful decks from other students — and share yours.</div>
+            </div>
+
+            <div class="community-search-wrap">
+              <span class="community-search-icon">🔎</span>
+              <input type="text" id="communitySearchInput" class="modal-input" placeholder="Search decks, topics, creators…" style="width:100%; max-width:100%;">
+            </div>
+
+            <div class="community-tabs" id="communityBrowseTabs">
+              <button type="button" class="community-tab active" data-sort="trending">🔥 Trending</button>
+              <button type="button" class="community-tab" data-sort="new">✨ New</button>
+              <button type="button" class="community-tab" data-sort="top">⭐ Top Rated</button>
+            </div>
+
+            <div class="community-filters" id="communitySubjectFilters"></div>
+
+            <div class="community-section" style="margin-top:18px; padding-top:18px;">
               <div class="community-section-head">
                 <div>
-                  <div class="community-section-title">🌐 Browse community sets</div>
+                  <div class="community-section-title" id="communityBrowseHeading">🔥 Trending this week</div>
                   <div class="community-section-sub" id="communityBrowseStatus">Loading…</div>
                 </div>
               </div>
-              <input type="text" id="communitySearchInput" class="modal-input" placeholder="Search by title, subject, or username…" style="margin-top:14px; width:100%; max-width:100%;">
-              <div class="community-filters" id="communitySubjectFilters"></div>
-              <div id="communityBrowseList" style="margin-top:14px; display:flex; flex-direction:column; gap:10px;"></div>
+              <div id="communityBrowseList" class="community-list"></div>
             </div>
 
             <div class="community-section">
-              <div class="community-section-title">📤 Your published sets</div>
-              <div id="communityMineList" style="margin-top:12px; display:flex; flex-direction:column; gap:10px;"></div>
-              <div class="community-section-sub" id="communityMineStatus" style="margin-top:2px;"></div>
+              <div class="community-section-title">📚 Your Community</div>
+              <div class="community-section-sub" style="margin-top:4px;">Manage what you've published.</div>
+              <div id="communityMineList" class="community-list"></div>
+              <div class="community-section-sub" id="communityMineStatus" style="margin-top:6px;"></div>
+            </div>
+
+            <div id="communityPreviewBackdrop" class="community-preview-backdrop hidden" aria-hidden="true">
+              <div class="community-preview-modal" role="dialog" aria-modal="true" aria-labelledby="communityPreviewTitle">
+                <div class="community-preview-head">
+                  <div>
+                    <div class="community-preview-title" id="communityPreviewTitle">Deck preview</div>
+                    <div class="community-preview-sub" id="communityPreviewMeta"></div>
+                  </div>
+                  <button type="button" class="community-icon-btn" id="communityPreviewCloseBtn" aria-label="Close preview">✕</button>
+                </div>
+                <div id="communityPreviewStats" class="community-set-stats"></div>
+                <div id="communityPreviewSamples"></div>
+                <div class="community-preview-footer">
+                  <button type="button" class="btn-ghost" id="communityPreviewCloseBtn2">Close</button>
+                  <button type="button" class="btn-primary" id="communityPreviewImportBtn">＋ Add to My Sets</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -5630,7 +5705,7 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
    baked into the page, so if Settings shows an OLD value, that's proof the
    browser is serving a stale cached copy rather than the real thing — use
    the "Force refresh" button in Settings to break out of it. */
-const APP_VERSION = '2026-08-17 debug-fixes v1';
+const APP_VERSION = '2026-08-22 community-phase1 v1';
 
 /* ===== JS-02 STORAGE / PERSISTENCE ===== */
 /* Safe localStorage wrapper — some iOS contexts (e.g. Quick Look previews
@@ -6358,6 +6433,25 @@ function renderCommunityMine(){
 }
 
 let communityActiveSubject = null; // null = "All"
+let communitySortMode = 'trending';
+let communityPreviewId = null;
+let communityInteractionCache = {liked:new Set(), saved:new Set()};
+
+function communitySortLabel(){
+  return communitySortMode === 'new' ? '✨ Recently published' : communitySortMode === 'top' ? '⭐ Top rated' : '🔥 Trending this week';
+}
+
+async function loadCommunityInteractions(ids){
+  communityInteractionCache = {liked:new Set(), saved:new Set()};
+  const sb = getSupabase();
+  if(!sb || !currentUser || !ids.length) return;
+  const [likesRes, savesRes] = await Promise.all([
+    sb.from('community_set_likes').select('set_id').eq('user_id', currentUser.id).in('set_id', ids),
+    sb.from('community_set_saves').select('set_id').eq('user_id', currentUser.id).in('set_id', ids)
+  ]);
+  if(!likesRes.error) (likesRes.data||[]).forEach(x => communityInteractionCache.liked.add(x.set_id));
+  if(!savesRes.error) (savesRes.data||[]).forEach(x => communityInteractionCache.saved.add(x.set_id));
+}
 
 function renderCommunitySubjectFilters(){
   const wrap = $('communitySubjectFilters');
@@ -6365,7 +6459,7 @@ function renderCommunitySubjectFilters(){
   const subjects = [...new Set(communityBrowseCache.map(r => r.subject).filter(Boolean))].sort();
   if(!subjects.length){ wrap.innerHTML = ''; return; }
   const chip = (label, value) => `<button type="button" class="community-chip${communityActiveSubject === value ? ' active' : ''}" data-subject="${value === null ? '' : escapeHtml(value)}">${escapeHtml(label)}</button>`;
-  wrap.innerHTML = chip('All', null) + subjects.map(s => chip(s, s)).join('');
+  wrap.innerHTML = chip('All subjects', null) + subjects.map(s => chip(s, s)).join('');
   wrap.querySelectorAll('.community-chip').forEach(btn => {
     btn.addEventListener('click', () => {
       communityActiveSubject = btn.dataset.subject || null;
@@ -6375,48 +6469,140 @@ function renderCommunitySubjectFilters(){
   });
 }
 
+function communityTrendingScore(r){
+  const imports = Number(r.import_count || 0);
+  const likes = Number(r.like_count || 0);
+  const saves = Number(r.save_count || 0);
+  const ageHours = Math.max(1, (Date.now() - new Date(r.created_at || Date.now()).getTime()) / 36e5);
+  return ((imports * 3) + (likes * 5) + (saves * 4)) / Math.pow(ageHours + 4, .55);
+}
+
+function communityTopScore(r){
+  const likes = Number(r.like_count || 0);
+  const saves = Number(r.save_count || 0);
+  const imports = Number(r.import_count || 0);
+  return likes * 5 + saves * 4 + imports;
+}
+
 async function renderCommunityBrowse(){
   const sb = getSupabase();
   const statusEl = $('communityBrowseStatus');
   if(!sb || !currentUser || !statusEl) return;
   statusEl.textContent = 'Loading…';
   const { data, error } = await sb.from('community_sets')
-    .select('id, username, title, subject, card_type, topic, card_count, created_at')
+    .select('id, owner_id, username, title, subject, card_type, topic, card_count, cards, created_at, updated_at, import_count, like_count, save_count')
     .order('created_at', { ascending: false })
     .limit(150);
   if(error){ statusEl.textContent = 'Could not load community sets: ' + error.message; return; }
   communityBrowseCache = data || [];
+  await loadCommunityInteractions(communityBrowseCache.map(r => r.id));
   renderCommunitySubjectFilters();
   applyCommunitySearchFilter();
+}
+
+function renderCommunityCard(r){
+  const liked = communityInteractionCache.liked.has(r.id);
+  const saved = communityInteractionCache.saved.has(r.id);
+  const tags = [r.subject, r.card_type, r.topic].filter(Boolean).slice(0,3).map(t => `<span class="community-set-tag">${escapeHtml(t)}</span>`).join('');
+  const div = document.createElement('div');
+  div.className = 'community-set-card';
+  div.innerHTML = `
+    <div class="community-set-main">
+      <div class="community-set-title">${escapeHtml(r.title || 'Untitled set')}</div>
+      <div class="community-set-author">👤 @${escapeHtml(r.username || 'unknown')}</div>
+      <div class="community-set-meta"><span>${Number(r.card_count||0)} cards</span>${tags}</div>
+      <div class="community-set-stats">
+        <span class="community-set-stat">↓ ${Number(r.import_count||0)} imports</span>
+        <span class="community-set-stat">❤️ ${Number(r.like_count||0)}</span>
+        <span class="community-set-stat">🔖 ${Number(r.save_count||0)}</span>
+      </div>
+    </div>
+    <div class="community-set-actions">
+      <button class="community-icon-btn" data-act="preview">Preview</button>
+      <button class="community-icon-btn${liked?' active':''}" data-act="like" title="Like this set">${liked?'♥':'♡'} ${Number(r.like_count||0)}</button>
+      <button class="community-icon-btn${saved?' active':''}" data-act="save" title="Save for later">${saved?'🔖':'🏷️'} ${Number(r.save_count||0)}</button>
+      <button class="btn-primary sm" data-act="import">＋ Add</button>
+    </div>`;
+  div.querySelector('[data-act="preview"]').addEventListener('click', () => openCommunityPreview(r.id));
+  div.querySelector('[data-act="import"]').addEventListener('click', () => importCommunitySet(r.id));
+  div.querySelector('[data-act="like"]').addEventListener('click', () => toggleCommunityLike(r.id));
+  div.querySelector('[data-act="save"]').addEventListener('click', () => toggleCommunitySave(r.id));
+  return div;
 }
 
 function applyCommunitySearchFilter(){
   const listEl = $('communityBrowseList'), statusEl = $('communityBrowseStatus');
   if(!listEl || !statusEl) return;
   const q = ($('communitySearchInput').value || '').trim().toLowerCase();
-  let rows = communityBrowseCache;
+  let rows = communityBrowseCache.slice();
   if(communityActiveSubject) rows = rows.filter(r => r.subject === communityActiveSubject);
-  if(q) rows = rows.filter(r => (r.title||'').toLowerCase().includes(q) || (r.subject||'').toLowerCase().includes(q) || (r.username||'').toLowerCase().includes(q));
+  if(q) rows = rows.filter(r => (r.title||'').toLowerCase().includes(q) || (r.subject||'').toLowerCase().includes(q) || (r.topic||'').toLowerCase().includes(q) || (r.username||'').toLowerCase().includes(q));
+  if(communitySortMode === 'new') rows.sort((a,b) => new Date(b.created_at||0)-new Date(a.created_at||0));
+  else if(communitySortMode === 'top') rows.sort((a,b) => communityTopScore(b)-communityTopScore(a));
+  else rows.sort((a,b) => communityTrendingScore(b)-communityTrendingScore(a));
+
+  $('communityBrowseHeading').textContent = communitySortLabel();
   listEl.innerHTML = '';
   if(!rows.length){
     listEl.innerHTML = `<div class="community-empty"><div class="community-empty-icon">🌱</div>${communityBrowseCache.length ? 'No matches — try a different search or filter.' : 'No community sets yet — be the first to publish one!'}</div>`;
-    statusEl.textContent = communityBrowseCache.length ? `${rows.length} of ${communityBrowseCache.length}` : '';
+    statusEl.textContent = communityBrowseCache.length ? '0 matches' : '';
     return;
   }
   statusEl.textContent = `${rows.length} set${rows.length===1?'':'s'}`;
-  rows.forEach(r => {
-    const div = document.createElement('div');
-    div.className = 'community-set-card';
-    const tags = [r.subject, r.card_type, r.topic].filter(Boolean).map(t => `<span class="community-set-tag">${escapeHtml(t)}</span>`).join('');
-    div.innerHTML = `
-      <div>
-        <div class="community-set-title">${escapeHtml(r.title)}</div>
-        <div class="community-set-meta">${r.card_count} cards · by ${escapeHtml(r.username)} ${tags}</div>
-      </div>
-      <button class="btn-primary sm" data-act="import" data-id="${r.id}">⬇ Import</button>`;
-    div.querySelector('[data-act="import"]').addEventListener('click', () => importCommunitySet(r.id));
-    listEl.appendChild(div);
-  });
+  rows.forEach(r => listEl.appendChild(renderCommunityCard(r)));
+}
+
+function updateCommunityCachedRow(id, patch){
+  const row = communityBrowseCache.find(r => r.id === id);
+  if(row) Object.assign(row, patch);
+  applyCommunitySearchFilter();
+}
+
+async function toggleCommunityLike(id){
+  const sb = getSupabase();
+  if(!sb || !currentUser) return;
+  const liked = communityInteractionCache.liked.has(id);
+  const result = liked
+    ? await sb.from('community_set_likes').delete().eq('set_id', id).eq('user_id', currentUser.id)
+    : await sb.from('community_set_likes').insert({set_id:id, user_id:currentUser.id});
+  if(result.error){ alert('Could not update like: ' + result.error.message); return; }
+  if(liked) communityInteractionCache.liked.delete(id); else communityInteractionCache.liked.add(id);
+  const row = communityBrowseCache.find(r => r.id === id);
+  if(row) row.like_count = Math.max(0, Number(row.like_count||0) + (liked ? -1 : 1));
+  applyCommunitySearchFilter();
+}
+
+async function toggleCommunitySave(id){
+  const sb = getSupabase();
+  if(!sb || !currentUser) return;
+  const saved = communityInteractionCache.saved.has(id);
+  const result = saved
+    ? await sb.from('community_set_saves').delete().eq('set_id', id).eq('user_id', currentUser.id)
+    : await sb.from('community_set_saves').insert({set_id:id, user_id:currentUser.id});
+  if(result.error){ alert('Could not update saved set: ' + result.error.message); return; }
+  if(saved) communityInteractionCache.saved.delete(id); else communityInteractionCache.saved.add(id);
+  const row = communityBrowseCache.find(r => r.id === id);
+  if(row) row.save_count = Math.max(0, Number(row.save_count||0) + (saved ? -1 : 1));
+  applyCommunitySearchFilter();
+}
+
+function openCommunityPreview(id){
+  const row = communityBrowseCache.find(r => r.id === id);
+  if(!row) return;
+  communityPreviewId = id;
+  $('communityPreviewTitle').textContent = row.title || 'Untitled set';
+  $('communityPreviewMeta').textContent = `by @${row.username || 'unknown'} · ${Number(row.card_count||0)} cards${row.subject ? ' · '+row.subject : ''}`;
+  $('communityPreviewStats').innerHTML = `<span class="community-set-stat">↓ ${Number(row.import_count||0)} imports</span><span class="community-set-stat">❤️ ${Number(row.like_count||0)} likes</span><span class="community-set-stat">🔖 ${Number(row.save_count||0)} saves</span>`;
+  const samples = (row.cards || []).slice(0,3);
+  $('communityPreviewSamples').innerHTML = samples.length ? samples.map((c,i) => `<div class="community-preview-sample"><div class="community-preview-front">Sample ${i+1} · Front</div><div class="community-preview-text">${escapeHtml(c.front || '')}</div><div class="community-preview-front" style="margin-top:10px;">Back</div><div class="community-preview-text">${escapeHtml(c.back || '')}</div></div>`).join('') : `<div class="community-empty" style="margin-top:14px;">No preview cards available.</div>`;
+  $('communityPreviewBackdrop').classList.remove('hidden');
+  $('communityPreviewBackdrop').setAttribute('aria-hidden','false');
+}
+
+function closeCommunityPreview(){
+  $('communityPreviewBackdrop').classList.add('hidden');
+  $('communityPreviewBackdrop').setAttribute('aria-hidden','true');
+  communityPreviewId = null;
 }
 
 async function importCommunitySet(communitySetId){
@@ -6433,6 +6619,11 @@ async function importCommunitySet(communitySetId){
     createdAt: now, updatedAt: now
   };
   saveSetsData(sets);
+  await sb.rpc('increment_community_import', { p_set_id: communitySetId });
+  const row = communityBrowseCache.find(r => r.id === communitySetId);
+  if(row) row.import_count = Number(row.import_count||0) + 1;
+  closeCommunityPreview();
+  applyCommunitySearchFilter();
   alert(`Added "${data.title}" to your library.`);
 }
 
@@ -6473,7 +6664,7 @@ function startCommunityRealtime(){
       const communityOpen = !$('communityView').classList.contains('hidden');
       if(communityOpen){
         // Live-append without a full refetch, so a friend's upload just appears.
-        communityBrowseCache.unshift(row);
+        communityBrowseCache.unshift({...row, import_count: Number(row.import_count||0), like_count: Number(row.like_count||0), save_count: Number(row.save_count||0)});
         renderCommunitySubjectFilters();
         applyCommunitySearchFilter();
         markCommunitySeenNow();
@@ -6516,6 +6707,18 @@ function initCommunityUI(){
     clearTimeout(searchDebounce);
     searchDebounce = setTimeout(applyCommunitySearchFilter, 150);
   });
+  document.querySelectorAll('#communityBrowseTabs .community-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      communitySortMode = btn.dataset.sort || 'trending';
+      document.querySelectorAll('#communityBrowseTabs .community-tab').forEach(b => b.classList.toggle('active', b === btn));
+      applyCommunitySearchFilter();
+    });
+  });
+  $('communityPreviewCloseBtn').onclick = closeCommunityPreview;
+  $('communityPreviewCloseBtn2').onclick = closeCommunityPreview;
+  $('communityPreviewBackdrop').addEventListener('click', e => { if(e.target === $('communityPreviewBackdrop')) closeCommunityPreview(); });
+  $('communityPreviewImportBtn').onclick = () => { if(communityPreviewId) importCommunitySet(communityPreviewId); };
+  document.addEventListener('keydown', e => { if(e.key === 'Escape' && communityPreviewId) closeCommunityPreview(); });
 }
 
 // bucket for an in-progress quiz that was never saved as a named set
