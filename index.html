@@ -5649,7 +5649,16 @@ function lsGet(key){
 // they need different fixes from the user (free up space vs. leave private
 // browsing / an in-app browser).
 function lsSet(key, val){
-  try{ _rawLS.setItem(key, val); return true; }
+  try{
+    _rawLS.setItem(key, val);
+    if(!suppressLocalSync && typeof LOCAL_SYNC_KEYS !== 'undefined' && LOCAL_SYNC_KEYS.includes(key)){
+      const stamp = new Date().toISOString();
+      appDataUpdatedAt[key] = stamp;
+      try{ _rawLS.setItem(key + '__updatedAt', stamp); }catch(e){}
+      if(typeof queueSyncOp === 'function') queueSyncOp(key).catch(() => {});
+    }
+    return true;
+  }
   catch(e){
     _lsBlocked = true;
     const isQuota = e && (e.name === 'QuotaExceededError' || e.code === 22 || e.code === 1014);
@@ -5810,6 +5819,14 @@ const SET_SORT_LE_KEY = 'topicReview_setSortLE_v1'; // sort mode used inside an 
 const TOPIC_CARD_SORT_DIR_KEY = 'topicReview_topicCardSortDir_v1'; // 'asc' | 'desc' — Topic # direction inside a Topic Cards sub-folder
 const STATS_KEY = 'topicReview_stats_v1';
 const GLOBAL_KEY = 'topicReview_global_v1';
+// Milestone 2: keys that live directly in localStorage (not the IndexedDB
+// appDataCache system) but still get synced. Literal strings here on
+// purpose — PET_KEY/'uermExams' are declared deep inside other functions,
+// so this avoids any risk of referencing them before that line runs.
+const LOCAL_SYNC_KEYS = [GLOBAL_KEY, 'topicReviewVirtualPet_v2', 'uermExams'];
+// Set true only while writing a value that just came FROM the cloud, so
+// that write doesn't turn around and re-queue itself for upload.
+let suppressLocalSync = false;
 let activeSetId = null;
 let pendingAlgorithm = false; // true when the table's current cards were generated from the "Paste an algorithm" tab
 const BG_KEY = 'topicReview_bg_v1';
@@ -5832,16 +5849,21 @@ const ATTEMPTS_KEY = 'topicReview_attempts_v1';
 const LEARNING_KEY = 'topicReview_learning_v1';
 const INTERVENTIONS_KEY = 'topicReview_interventions_v1'; // pre/post/delayed targeted-practice tracking
 const APP_DATA_KEYS = [SETS_KEY, STATS_KEY, SESSIONS_KEY, CASE_PROGRESS_KEY, POMODORO_KEY, ATTEMPTS_KEY, LEARNING_KEY, INTERVENTIONS_KEY];
-// Cloud sync Milestone 1 scope: only sets/decks sync to Supabase for now.
-// Everything else in APP_DATA_KEYS stays purely local until Milestone 2.
-const SYNC_KEYS = [SETS_KEY];
-// GLOBAL_KEY (daily streak / study-day history) deliberately stays out of
-// this list. loadGlobalStats/saveGlobalStats read and write it with plain
-// lsGet/lsSet, and nothing anywhere reads it back out of the IndexedDB
-// layer — so if it were migrated like the others, the cleanup step below
-// would delete its real localStorage copy on every app load (since nothing
-// restores it from IndexedDB afterward), silently erasing the streak's
-// day-by-day history each time the app reopened.
+// Cloud sync Milestone 2 scope: everything in APP_DATA_KEYS (stats,
+// sessions, case progress, pomodoro, attempts, learning/mastery,
+// interventions) plus LOCAL_SYNC_KEYS (streak, virtual pet, calendar/exams)
+// now syncs. Preferences (theme/accent/palette) deliberately stay local —
+// device-specific display settings aren't obviously something you'd want
+// following you to a different screen/device.
+const SYNC_KEYS = [...APP_DATA_KEYS, ...LOCAL_SYNC_KEYS];
+// GLOBAL_KEY (daily streak / study-day history) is NOT in APP_DATA_KEYS —
+// loadGlobalStats/saveGlobalStats read and write it with plain lsGet/lsSet,
+// and nothing anywhere reads it back out of the IndexedDB layer — so if it
+// were migrated like the others, the cleanup step below would delete its
+// real localStorage copy on every app load (since nothing restores it from
+// IndexedDB afterward), silently erasing the streak's day-by-day history
+// each time the app reopened. It syncs instead via LOCAL_SYNC_KEYS/lsSet,
+// which reads/writes localStorage directly — same mechanism, no migration.
 
 /* Large app data is stored in IndexedDB instead of localStorage.
    A small in-memory cache keeps the rest of the app synchronous, so the
@@ -5960,16 +5982,24 @@ async function initAppDataStorage(){
 
     // Load each synced key's last-local-write time, saved alongside it under
     // "<key>__updatedAt". Used by cloud sync to decide whose copy is newer.
+    // APP_DATA_KEYS members keep theirs in IndexedDB; LOCAL_SYNC_KEYS
+    // members (streak/pet/calendar) keep theirs in plain localStorage,
+    // since that's where the values themselves live too.
+    const idbSyncKeys = SYNC_KEYS.filter(k => APP_DATA_KEYS.includes(k));
     await new Promise(resolve => {
       const tx = db.transaction(APP_DATA_STORE,'readonly');
       const store = tx.objectStore(APP_DATA_STORE);
-      let remaining = SYNC_KEYS.length;
+      let remaining = idbSyncKeys.length;
       if(!remaining){ resolve(); return; }
-      SYNC_KEYS.forEach(key => {
+      idbSyncKeys.forEach(key => {
         const req = store.get(key + '__updatedAt');
         req.onsuccess = () => { if(req.result) appDataUpdatedAt[key] = req.result; if(--remaining === 0) resolve(); };
         req.onerror = () => { if(--remaining === 0) resolve(); };
       });
+    });
+    LOCAL_SYNC_KEYS.forEach(key => {
+      const stamp = lsGet(key + '__updatedAt');
+      if(stamp) appDataUpdatedAt[key] = stamp;
     });
 
     try{ migrateSetTypes(); }catch(e){}
@@ -6025,10 +6055,27 @@ function getQueuedSyncKeys(){
 }
 
 // ---- Upload / download / merge for one data_key ----
+// Milestone 1 keys (sets/decks) live in the IndexedDB appDataCache system;
+// Milestone 2 added LOCAL_SYNC_KEYS (streak/pet/calendar), which live in
+// plain localStorage instead. These two helpers hide that difference so
+// uploadKey/downloadAndMergeKey below don't need to care which one a given
+// key uses.
+function getLocalSyncValue(key){
+  return LOCAL_SYNC_KEYS.includes(key) ? lsGet(key) : appDataCache[key];
+}
+async function setLocalSyncValueFromCloud(key, value){
+  if(LOCAL_SYNC_KEYS.includes(key)){
+    suppressLocalSync = true;
+    try{ lsSet(key, value); lsSet(key + '__updatedAt', appDataUpdatedAt[key]); }
+    finally{ suppressLocalSync = false; }
+  } else {
+    await appDataSetLocalOnly(key, value);
+  }
+}
 async function uploadKey(key){
   const sb = getSupabase();
   if(!sb || !currentUser) return false;
-  const raw = appDataCache[key];
+  const raw = getLocalSyncValue(key);
   if(raw === undefined || raw === null) { await dequeueSyncOp(key); return true; }
   let parsed;
   try{ parsed = JSON.parse(raw); }catch(e){ await dequeueSyncOp(key); return true; } // corrupt local value, don't retry forever
@@ -6056,14 +6103,20 @@ async function downloadAndMergeKey(key){
   if(!data){
     // Nothing in the cloud yet for this key (e.g. first sign-in on this
     // account) — push whatever's local up instead of overwriting it.
-    if(appDataCache[key] !== undefined) await uploadKey(key);
+    if(getLocalSyncValue(key) !== undefined && getLocalSyncValue(key) !== null) await uploadKey(key);
     return;
   }
   const localTime = appDataUpdatedAt[key] ? new Date(appDataUpdatedAt[key]).getTime() : 0;
   const cloudTime = new Date(data.updated_at).getTime();
   if(cloudTime > localTime){
     appDataUpdatedAt[key] = data.updated_at;
-    await appDataSetLocalOnly(key, JSON.stringify(data.data));
+    await setLocalSyncValueFromCloud(key, JSON.stringify(data.data));
+    // Calendar re-reads 'uermExams' fresh from localStorage every time it
+    // renders, so a merged calendar update shows up immediately. The pet
+    // screen and streak/stats views cache their own state in a JS variable
+    // read once at page load, so a merge that lands *while already on
+    // that screen* won't visibly update it until you navigate away and
+    // back (or reload) — the data itself is correctly saved either way.
   } else if(localTime > cloudTime){
     await uploadKey(key);
   }
@@ -13448,7 +13501,7 @@ document.addEventListener('DOMContentLoaded',function(){
   let petX=8,petTargetX=68,petDirection=1,petMoving=false,petActionToken=0,petLastScreen='';
 
   function loadPet(){try{const p={...defaultPet,...JSON.parse(localStorage.getItem(PET_KEY)||'null')};if(!p.breed)p.breed='cavalier';return p}catch(e){return{...defaultPet}}}
-  function savePet(){try{localStorage.setItem(PET_KEY,JSON.stringify(pet))}catch(e){}}
+  function savePet(){ try{ lsSet(PET_KEY, JSON.stringify(pet)); }catch(e){} }
   function clampPet(n){return Math.max(0,Math.min(100,Math.round(n)))}
   function petMood(){const a=(pet.hunger+pet.happy+pet.energy+pet.clean)/4;if(pet.energy<20)return['Sleepy','😴'];if(pet.hunger<20)return['Hungry','🍖'];if(pet.clean<20)return['Messy','🫧'];if(a>=80)return['Thriving','✨'];if(a>=60)return['Happy','😊'];if(a>=40)return['Okay','🙂'];return['Needy','🥺']}
   // Show a short speech line over the pet. There are two possible surfaces:
@@ -15517,7 +15570,7 @@ const SAMPLE=[
 ];
 
 function added(){return JSON.parse(localStorage.getItem('uermExams')||'[]')}
-function saveAdded(a){localStorage.setItem('uermExams',JSON.stringify(a))}
+function saveAdded(a){lsSet('uermExams',JSON.stringify(a))}
 function exams(){return SAMPLE.concat(added())}
 function diff(a,b){return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000)}
 function index(date){return diff('2026-07-01',date)}
