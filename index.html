@@ -4372,6 +4372,15 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
 .community-preview-front{font-size:12px; color:var(--text-muted); font-weight:800; text-transform:uppercase; letter-spacing:.05em;}
 .community-preview-text{margin-top:5px; font-size:14px; line-height:1.5; color:var(--text); white-space:pre-wrap; word-break:break-word;}
 .community-preview-footer{display:flex; justify-content:flex-end; gap:8px; margin-top:16px;}
+.community-comments-list{display:flex; flex-direction:column; gap:10px; max-height:260px; overflow:auto;}
+.community-comment{padding:9px 11px; border:1px solid var(--border); border-radius:11px; background:var(--bg);}
+.community-comment-head{display:flex; align-items:baseline; justify-content:space-between; gap:8px;}
+.community-comment-author{font-weight:800; font-size:12.5px; color:var(--text);}
+.community-comment-time{font-size:11px; color:var(--text-muted); white-space:nowrap;}
+.community-comment-body{font-size:13px; line-height:1.45; color:var(--text); margin-top:3px; white-space:pre-wrap; word-break:break-word;}
+.community-comment-del{background:none; border:none; color:var(--text-muted); font-size:11px; cursor:pointer; padding:0; margin-top:4px;}
+.community-comment-del:hover{color:var(--danger,#c0392b);}
+.community-comments-empty{font-size:12.5px; color:var(--text-muted); padding:4px 0;}
 @media(max-width:640px){
   .community-panel{padding:16px;}
   .community-set-card{flex-direction:column;}
@@ -5738,6 +5747,14 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
                 </div>
                 <div id="communityPreviewStats" class="community-set-stats"></div>
                 <div id="communityPreviewSamples"></div>
+                <div class="community-preview-comments" style="margin-top:18px; border-top:1px solid var(--border); padding-top:14px;">
+                  <div style="font-weight:800; font-size:14px; color:var(--text); margin-bottom:8px;">Comments</div>
+                  <div id="communityPreviewCommentForm" style="display:flex; gap:8px; margin-bottom:12px;">
+                    <input type="text" id="communityCommentInput" maxlength="500" placeholder="Add a comment…" style="flex:1; min-width:0; padding:9px 11px; border:1px solid var(--border); border-radius:10px; font-size:13px; background:var(--bg); color:var(--text);">
+                    <button type="button" class="btn-primary sm" id="communityCommentPostBtn">Post</button>
+                  </div>
+                  <div id="communityPreviewCommentsList" class="community-comments-list"></div>
+                </div>
                 <div class="community-preview-footer">
                   <button type="button" class="btn-ghost" id="communityPreviewCloseBtn2">Close</button>
                   <button type="button" class="btn-primary" id="communityPreviewImportBtn">＋ Add to My Sets</button>
@@ -6815,7 +6832,7 @@ async function renderCommunityMine(){
   let rows = null;
   if(sb && currentUser){
     const { data, error } = await sb.from('community_sets')
-      .select('id,title,subject,card_count,created_at')
+      .select('id,title,subject,card_count,created_at,updated_at')
       .eq('owner_id', currentUser.id)
       .order('created_at', { ascending: false });
     if(!error) rows = data || [];
@@ -6844,13 +6861,17 @@ async function renderCommunityMine(){
     const uploadedLabel = row.created_at
       ? new Date(row.created_at).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'})
       : null;
+    const wasEdited = row.created_at && row.updated_at && (new Date(row.updated_at).getTime() - new Date(row.created_at).getTime() > 60000);
+    const editedLabel = wasEdited
+      ? new Date(row.updated_at).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'})
+      : null;
     const div = document.createElement('div');
     div.className = 'community-set-card';
     const otherSets = Object.entries(sets).filter(([id2]) => id2 !== sid);
     div.innerHTML = `
       <div>
         <div class="community-set-title">${escapeHtml(row.title || 'Untitled set')}</div>
-        <div class="community-set-meta">${Number(row.card_count||0)} cards${row.subject ? `<span class="community-set-tag">${escapeHtml(row.subject)}</span>` : ''}${uploadedLabel ? `<span>Uploaded ${uploadedLabel}</span>` : ''}${!linked ? `<span class="community-set-tag" title="No local set is linked to this upload — link one below, or delete it.">Not linked</span>` : ''}</div>
+        <div class="community-set-meta">${Number(row.card_count||0)} cards${row.subject ? `<span class="community-set-tag">${escapeHtml(row.subject)}</span>` : ''}${uploadedLabel ? `<span>Uploaded ${uploadedLabel}</span>` : ''}${editedLabel ? `<span>Edited ${editedLabel}</span>` : ''}${!linked ? `<span class="community-set-tag" title="No local set is linked to this upload — link one below, or delete it.">Not linked</span>` : ''}</div>
         ${!linked ? `<div style="display:flex; align-items:center; gap:6px; margin-top:8px; flex-wrap:wrap;">
           <select class="sort-select" data-relink-select="${row.id}">
             <option value="">Link to a local set…</option>
@@ -6988,8 +7009,65 @@ async function p2RenderProfile(){
     <div style="min-width:0;flex:1"><div class="community-p2-name">${p2Esc(p.display_name||p.username)}</div>
     <div class="community-p2-handle">@${p2Esc(p.username)}</div><div class="community-p2-bio">${p2Esc(p.bio||'')}</div>
     <div class="community-p2-stats"><span><b>${followers||0}</b> followers</span><span><b>${following||0}</b> following</span><span><b>${decks||0}</b> decks</span></div></div>
-    <div class="community-p2-actions"><button class="btn-ghost sm" id="p2MyProfile">View profile</button></div>`;
+    <div class="community-p2-actions"><button class="btn-ghost sm" id="p2MyProfile">View profile</button><button class="btn-ghost sm" id="p2EditProfileBtn">Edit profile</button></div>`;
   $('p2MyProfile').onclick=()=>p2OpenProfile(currentUser.id);
+  $('p2EditProfileBtn').onclick=()=>p2OpenEditProfile(p);
+}
+
+// A curated, medicine-flavored set of emoji avatars (matches the existing
+// avatar_emoji column/rendering — no image upload or storage bucket
+// involved, just a picker over a fixed list) plus a couple of neutral
+// options for anyone who'd rather not use a medical one.
+const P2_AVATAR_CHOICES = ['🩺','🧑\u200d⚕️','👩\u200d⚕️','👨\u200d⚕️','🔬','🧠','💉','🦴','🫀','🫁','📚','🐣','😊','🐶','🐱','⭐'];
+
+function p2OpenEditProfile(p){
+  p2Modal('Edit profile', '@'+p2Esc(p.username), `
+    <div style="display:flex; flex-direction:column; gap:14px;">
+      <label style="display:flex; flex-direction:column; gap:5px; font-size:13px; font-weight:700; color:var(--text-muted);">Display name
+        <input type="text" id="p2EditDisplayName" maxlength="60" value="${p2Esc(p.display_name||'')}" placeholder="${p2Esc(p.username)}" style="padding:9px 11px; border:1px solid var(--border); border-radius:10px; font-size:14px; background:var(--bg); color:var(--text);">
+      </label>
+      <label style="display:flex; flex-direction:column; gap:5px; font-size:13px; font-weight:700; color:var(--text-muted);">Bio
+        <textarea id="p2EditBio" maxlength="200" rows="3" placeholder="Tell other users a bit about yourself…" style="padding:9px 11px; border:1px solid var(--border); border-radius:10px; font-size:14px; resize:vertical; background:var(--bg); color:var(--text);">${p2Esc(p.bio||'')}</textarea>
+      </label>
+      <div>
+        <div style="font-size:13px; font-weight:700; color:var(--text-muted); margin-bottom:6px;">Avatar</div>
+        <div id="p2AvatarPicker" style="display:flex; flex-wrap:wrap; gap:6px;">
+          ${P2_AVATAR_CHOICES.map(e => `<button type="button" class="community-p2-avatar" data-emoji="${e}" style="width:38px; height:38px; font-size:18px; cursor:pointer; border:2px solid ${e===(p.avatar_emoji||'🩺')?'var(--primary)':'transparent'};">${e}</button>`).join('')}
+        </div>
+      </div>
+      <div id="p2EditProfileError" style="color:var(--danger,#c0392b); font-size:13px;"></div>
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn-ghost sm" id="p2EditProfileCancel">Cancel</button>
+        <button class="btn-primary sm" id="p2EditProfileSave">Save</button>
+      </div>
+    </div>`);
+  let chosenEmoji = p.avatar_emoji || '🩺';
+  document.querySelectorAll('#p2AvatarPicker [data-emoji]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      chosenEmoji = btn.dataset.emoji;
+      document.querySelectorAll('#p2AvatarPicker [data-emoji]').forEach(b => b.style.borderColor = (b.dataset.emoji === chosenEmoji ? 'var(--primary)' : 'transparent'));
+    });
+  });
+  $('p2EditProfileCancel').onclick = p2CloseModal;
+  $('p2EditProfileSave').onclick = async () => {
+    const displayName = $('p2EditDisplayName').value.trim();
+    const bio = $('p2EditBio').value.trim();
+    const errEl = $('p2EditProfileError');
+    errEl.textContent = '';
+    const saveBtn = $('p2EditProfileSave');
+    saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+    const sb = getSupabase();
+    const { error } = await sb.from('community_profiles').update({
+      display_name: displayName || null,
+      bio: bio || null,
+      avatar_emoji: chosenEmoji
+    }).eq('user_id', currentUser.id);
+    saveBtn.disabled = false; saveBtn.textContent = 'Save';
+    if(error){ errEl.textContent = error.message; return; }
+    communityP2ProfileCache.delete(currentUser.id); // force a fresh read next time anything asks for it
+    p2CloseModal();
+    p2RenderProfile();
+  };
 }
 async function p2ToggleFollow(uid,btn){
   const sb=getSupabase(); if(!sb||!currentUser||uid===currentUser.id)return;
@@ -7222,12 +7300,18 @@ function renderCommunityCard(r){
   const cardTypeLabel = r.card_type === 'samplex' ? 'Samplex' : (r.card_type === 'topic' ? 'Topic Cards' : r.card_type);
   const tags = [r.le ? `LE ${r.le}` : null, cardTypeLabel, r.subject, r.topic, r.kind === 'algorithm' ? 'Algorithm' : null].filter(Boolean).slice(0,4).map(t => `<span class="community-set-tag">${escapeHtml(t)}</span>`).join('');
   const uploadedLabel = r.created_at ? new Date(r.created_at).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : null;
+  // "Edited" only shows once the gap between created_at and updated_at is
+  // large enough to be a real, later edit rather than noise from whatever
+  // the insert itself touched (e.g. a default/trigger nudging updated_at
+  // by a few ms) — 60s is a generous margin for that.
+  const wasEdited = r.created_at && r.updated_at && (new Date(r.updated_at).getTime() - new Date(r.created_at).getTime() > 60000);
+  const editedLabel = wasEdited ? new Date(r.updated_at).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : null;
   const div = document.createElement('div');
   div.className = 'community-set-card';
   div.innerHTML = `
     <div class="community-set-main">
       <div class="community-set-title">${escapeHtml(r.title || 'Untitled set')}</div>
-      <div class="community-set-author">👤 @${escapeHtml(r.username || 'unknown')}${uploadedLabel ? ` · Uploaded ${uploadedLabel}` : ''}</div>
+      <div class="community-set-author">👤 @${escapeHtml(r.username || 'unknown')}${uploadedLabel ? ` · Uploaded ${uploadedLabel}` : ''}${editedLabel ? ` · <span title="Last edited ${editedLabel}">Edited ${editedLabel}</span>` : ''}</div>
       <div class="community-set-meta"><span>${Number(r.card_count||0)} cards</span>${tags}</div>
       <div class="community-set-stats">
         <span class="community-set-stat">↓ ${Number(r.import_count||0)} imports</span>
@@ -7309,18 +7393,120 @@ function openCommunityPreview(id){
   if(!row) return;
   communityPreviewId = id;
   $('communityPreviewTitle').textContent = row.title || 'Untitled set';
-  $('communityPreviewMeta').textContent = `by @${row.username || 'unknown'} · ${Number(row.card_count||0)} cards${row.subject ? ' · '+row.subject : ''}`;
+  const uploadedLabel = row.created_at ? new Date(row.created_at).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : null;
+  const wasEdited = row.created_at && row.updated_at && (new Date(row.updated_at).getTime() - new Date(row.created_at).getTime() > 60000);
+  const editedLabel = wasEdited ? new Date(row.updated_at).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : null;
+  $('communityPreviewMeta').textContent = `by @${row.username || 'unknown'} · ${Number(row.card_count||0)} cards${row.subject ? ' · '+row.subject : ''}${uploadedLabel ? ' · Uploaded '+uploadedLabel : ''}${editedLabel ? ' · Edited '+editedLabel : ''}`;
   $('communityPreviewStats').innerHTML = `<span class="community-set-stat">↓ ${Number(row.import_count||0)} imports</span><span class="community-set-stat">❤️ ${Number(row.like_count||0)} likes</span><span class="community-set-stat">🔖 ${Number(row.save_count||0)} saves</span>`;
   const samples = (row.cards || []).slice(0,3);
   $('communityPreviewSamples').innerHTML = samples.length ? samples.map((c,i) => `<div class="community-preview-sample"><div class="community-preview-front">Sample ${i+1} · Front</div><div class="community-preview-text">${escapeHtml(c.front || '')}</div><div class="community-preview-front" style="margin-top:10px;">Back</div><div class="community-preview-text">${escapeHtml(c.back || '')}</div></div>`).join('') : `<div class="community-empty" style="margin-top:14px;">No preview cards available.</div>`;
   $('communityPreviewBackdrop').classList.remove('hidden');
   $('communityPreviewBackdrop').setAttribute('aria-hidden','false');
+  loadAndRenderComments(id);
 }
 
 function closeCommunityPreview(){
   $('communityPreviewBackdrop').classList.add('hidden');
   $('communityPreviewBackdrop').setAttribute('aria-hidden','true');
   communityPreviewId = null;
+}
+
+/* ===== COMMUNITY COMMENTS (per-set, shown in the preview modal) =====
+   Needs the community_comments table from community_comments_setup.sql —
+   viewable by anyone, insertable/deletable only by the comment's own
+   author (same auth-scoped RLS shape as likes/saves above). Username is
+   stored directly on each comment row (rather than joined from
+   community_profiles at read time) so a comment still shows who posted it
+   even if that person later changes their username. */
+let communityCommentsReqId = 0; // guards a slow fetch from overwriting a newer preview's comments
+
+function fmtCommentTime(iso){
+  const d = new Date(iso);
+  const diffMs = Date.now() - d.getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if(mins < 1) return 'just now';
+  if(mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if(hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if(days < 7) return `${days}d ago`;
+  return d.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'});
+}
+
+async function loadAndRenderComments(setId){
+  const listEl = $('communityPreviewCommentsList');
+  const formEl = $('communityPreviewCommentForm');
+  if(!listEl) return;
+  const sb = getSupabase();
+  if(!sb){ listEl.innerHTML = ''; if(formEl) formEl.style.display = 'none'; return; }
+  if(formEl) formEl.style.display = currentUser ? 'flex' : 'none';
+  listEl.innerHTML = `<div class="community-comments-empty">Loading comments…</div>`;
+  const reqId = ++communityCommentsReqId;
+  const { data, error } = await sb.from('community_comments')
+    .select('id,user_id,username,body,created_at')
+    .eq('set_id', setId)
+    .order('created_at', { ascending: true });
+  if(reqId !== communityCommentsReqId || communityPreviewId !== setId) return; // a newer preview opened meanwhile
+  if(error){ listEl.innerHTML = `<div class="community-comments-empty">Could not load comments: ${escapeHtml(error.message)}</div>`; return; }
+  renderCommunityCommentsList(data || []);
+  const postBtn = $('communityCommentPostBtn');
+  const input = $('communityCommentInput');
+  if(postBtn && input){
+    postBtn.onclick = () => postCommunityComment(setId);
+    input.onkeydown = (e) => { if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); postCommunityComment(setId); } };
+  }
+}
+
+function renderCommunityCommentsList(comments){
+  const listEl = $('communityPreviewCommentsList');
+  if(!listEl) return;
+  if(!comments.length){
+    listEl.innerHTML = `<div class="community-comments-empty">No comments yet — be the first to say something.</div>`;
+    return;
+  }
+  listEl.innerHTML = comments.map(c => `
+    <div class="community-comment" data-comment-id="${c.id}">
+      <div class="community-comment-head">
+        <span class="community-comment-author">@${escapeHtml(c.username || 'unknown')}</span>
+        <span class="community-comment-time">${fmtCommentTime(c.created_at)}</span>
+      </div>
+      <div class="community-comment-body">${escapeHtml(c.body)}</div>
+      ${currentUser && c.user_id === currentUser.id ? `<button type="button" class="community-comment-del" data-del-comment="${c.id}">Delete</button>` : ''}
+    </div>`).join('');
+  listEl.querySelectorAll('[data-del-comment]').forEach(btn => {
+    btn.addEventListener('click', () => deleteCommunityComment(btn.dataset.delComment));
+  });
+}
+
+async function postCommunityComment(setId){
+  const sb = getSupabase();
+  if(!sb || !currentUser) return;
+  const input = $('communityCommentInput');
+  const body = (input.value || '').trim();
+  if(!body) return;
+  if(!communityUsername) await loadCommunityProfile();
+  const postBtn = $('communityCommentPostBtn');
+  postBtn.disabled = true;
+  const { error } = await sb.from('community_comments').insert({
+    set_id: setId, user_id: currentUser.id, username: communityUsername || 'unknown', body
+  });
+  postBtn.disabled = false;
+  if(error){ alert('Could not post comment: ' + error.message); return; }
+  input.value = '';
+  loadAndRenderComments(setId);
+}
+
+async function deleteCommunityComment(commentId){
+  const sb = getSupabase();
+  if(!sb || !currentUser) return;
+  if(!confirm('Delete this comment?')) return;
+  const { error } = await sb.from('community_comments').delete().eq('id', commentId).eq('user_id', currentUser.id);
+  if(error){ alert('Could not delete comment: ' + error.message); return; }
+  const row = document.querySelector(`[data-comment-id="${commentId}"]`);
+  if(row) row.remove();
+  if(!$('communityPreviewCommentsList').children.length){
+    $('communityPreviewCommentsList').innerHTML = `<div class="community-comments-empty">No comments yet — be the first to say something.</div>`;
+  }
 }
 
 async function importCommunitySet(communitySetId){
@@ -7643,6 +7829,16 @@ function saveSession(extra){
       missedList: Array.from(missedSet.values()),
       options: currentOptions,
       answered,
+      // Falls back to whatever's currently tracked in memory (currentChosen/
+      // currentIsCorrect) so a passive autosave — e.g. backgrounding the tab
+      // right after a correct answer but before tapping "Next" — still
+      // records what was chosen. Without this, a bare saveSession() call
+      // (see saveBeforeNavigation) would silently drop chosen/isCorrect
+      // even though answered:true was saved, since extra wasn't passed;
+      // resuming would then restore an answered-but-blank card whose
+      // Next button never reflected the real chosen/correct state.
+      chosen: currentChosen,
+      isCorrect: currentIsCorrect,
       activeSetId,
       mode: inputMode,
       cardsSinceBreak,
@@ -8097,6 +8293,7 @@ function buildSetRow(sid, s, opts){
           <button type="button" class="set-item-menu-item" data-act="dup" data-id="${sid}">⧉ Copy</button>
           <button type="button" class="set-item-menu-item" data-act="share" data-id="${sid}" title="Share this set (cards only — no stats or progress)">📤 Send</button>
           <button type="button" class="set-item-menu-item" data-act="publish" data-id="${sid}" title="Publish this set to the community (cards only — no stats or progress)">🌐 ${s.communityId ? 'Update on Community' : 'Publish to Community'}</button>
+          ${(inProgress || caseSaved) ? `<button type="button" class="set-item-menu-item" data-act="restart" data-id="${sid}" title="Clear this set's saved progress and start over from the beginning">↺ Restart set</button>` : ''}
         </div>
       </div>
       <button class="btn-ghost sm" data-act="del" data-id="${sid}">Delete</button>
@@ -8125,6 +8322,7 @@ function buildSetRow(sid, s, opts){
   row.querySelector('[data-act="dup"]').addEventListener('click', () => { closeAllSetItemMenus(); duplicateSetById(sid); });
   row.querySelector('[data-act="share"]').addEventListener('click', () => { closeAllSetItemMenus(); shareSetById(sid); });
   row.querySelector('[data-act="publish"]')?.addEventListener('click', () => { closeAllSetItemMenus(); publishSetToCommunity(sid); });
+  row.querySelector('[data-act="restart"]')?.addEventListener('click', () => { closeAllSetItemMenus(); restartSetById(sid); });
   row.querySelector('[data-act="del"]').addEventListener('click', () => deleteSetById(sid));
   const menuBtn = row.querySelector('[data-act="menu"]');
   const menuWrap = menuBtn?.closest('.set-item-menu-wrap');
@@ -8314,6 +8512,23 @@ function continueRecentItem(item){
     setInputMode(s.mode || 'classic');
     launchQuiz(JSON.parse(JSON.stringify(s.cards)), sid);
   }
+}
+
+// "Restart set" from a set's ⋯ menu: wipes whatever's paused/in-progress
+// for this set (a saved quiz session, or a saved case checkpoint) so the
+// next "Start"/"Play" begins clean from card 1 / the start node — without
+// touching the set's cards, its lifetime stats, or its completed history.
+// Only shown in the menu when there's actually something to restart from
+// (see buildSetRow's inProgress/caseSaved check).
+function restartSetById(id){
+  const sets = loadSets();
+  const s = sets[id];
+  if(!s) return;
+  if(!confirm(`Restart "${s.name}"? This clears your saved progress on this set (which card/node you were on) and starts it over from the beginning. Your stats and mastery history for this set are kept.`)) return;
+  clearSession(id);
+  clearCaseProgress(id);
+  if(!$('folderView').classList.contains('hidden')) renderFolderView();
+  else if(!$('landing').classList.contains('hidden')){ renderLanding(); renderRecentActivity(); }
 }
 
 function renameSetById(id){
@@ -8744,6 +8959,13 @@ function finalizeDelete(entry){
   saveStatsData(statsAll);
   clearSession(entry.id);
   _pendingDelete = null;
+  // The toast's "Undo" button only does anything while _pendingDelete still
+  // matches this entry (see undoDelete) — once the delete is finalized
+  // (5s timer or a second delete flushing this one), the button is dead and
+  // needs to disappear on its own. Previously this was never hidden here,
+  // so it just sat on screen — clickable but inert — until something else
+  // happened to hide it (e.g. a page refresh).
+  hideUndoToast();
 }
 
 function undoDelete(entry){
