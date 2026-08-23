@@ -8754,11 +8754,19 @@ function cardsInCardTypeFolder(folderId, mode, cardType, le){
   const entries = setsInScope(folderId, mode, le).filter(([, s]) => cardTypeOf(s) === cardType);
   const seenKeys = new Set();
   const pool = [];
-  entries.forEach(([, s]) => {
+  entries.forEach(([id, s]) => {
     if(!Array.isArray(s.cards)) return;
     s.cards.forEach(c => {
       const k = cardKey(c);
-      if(!seenKeys.has(k)){ seenKeys.add(k); pool.push(c); }
+      if(!seenKeys.has(k)){
+        seenKeys.add(k);
+        // Tag which real set this came from — folder-wide review rounds
+        // launch under the shared PRACTICE_ID bucket (see PRACTICE_ID),
+        // so the card editor needs this to know where to write an edit
+        // back to. Local in-memory tag only; never persisted on the card.
+        c._srcSetId = id;
+        pool.push(c);
+      }
     });
   });
   return pool;
@@ -10018,7 +10026,7 @@ function renderStatsScreen(){
   const g = loadGlobalStats();
 
   const allTrackedCards = [];
-  Object.values(sets).forEach(s => { if(Array.isArray(s.cards)) allTrackedCards.push(...s.cards); });
+  Object.entries(sets).forEach(([id, s]) => { if(Array.isArray(s.cards)){ s.cards.forEach(c => c._srcSetId = id); allTrackedCards.push(...s.cards); } });
   const dash = getLearningDashboard(allTrackedCards); // computed once, reused below and in renderLearningDashboardSections
 
   const overallAcc = g.totalSeen ? Math.round(g.totalCorrect / g.totalSeen * 100) : 0;
@@ -12529,6 +12537,7 @@ function startWeakPractice(){
       if(!cs.seen || cs.correct >= cs.seen) return;
       const full = setCards.find(c => cardKey(c) === (cs.id || cardKey({front: cs.front})));
       if(!full) return;
+      full._srcSetId = id; // see cardsInCardTypeFolder's _srcSetId comment
       const acc = cs.correct / cs.seen;
       const key = cardKey(full);
       const existing = weakMap.get(key);
@@ -12562,9 +12571,9 @@ function startAdaptivePractice(){
   const sets = loadSets();
   const seenKeys = new Set();
   const allCards = [];
-  Object.values(sets).forEach(s => {
+  Object.entries(sets).forEach(([id, s]) => {
     if(!Array.isArray(s.cards)) return;
-    s.cards.forEach(c => { const k = cardKey(c); if(!seenKeys.has(k)){ seenKeys.add(k); allCards.push(c); } });
+    s.cards.forEach(c => { const k = cardKey(c); if(!seenKeys.has(k)){ seenKeys.add(k); c._srcSetId = id; allCards.push(c); } });
   });
   const adaptiveQueue = generateAdaptiveQueue(allCards, 20);
   if(adaptiveQueue.length < 2){
@@ -12628,9 +12637,9 @@ function startCramSession(){
   const sets = loadSets();
   const seenKeys = new Set();
   const allCards = [];
-  Object.values(sets).forEach(s => {
+  Object.entries(sets).forEach(([id, s]) => {
     if(!Array.isArray(s.cards)) return;
-    s.cards.forEach(c => { const k = cardKey(c); if(!seenKeys.has(k)){ seenKeys.add(k); allCards.push(c); } });
+    s.cards.forEach(c => { const k = cardKey(c); if(!seenKeys.has(k)){ seenKeys.add(k); c._srcSetId = id; allCards.push(c); } });
   });
   const examVal = $('cramExamDateTime') ? $('cramExamDateTime').value : '';
   const examDate = examVal ? new Date(examVal).getTime() : null;
@@ -12664,6 +12673,7 @@ function startWeakPracticeForSet(sid){
     if(!cs.seen || cs.correct >= cs.seen) return;
     const full = s.cards.find(c => cardKey(c) === (cs.id || cardKey({front: cs.front})));
     if(!full) return;
+    full._srcSetId = sid; // see cardsInCardTypeFolder's _srcSetId comment
     scored.push({card: full, acc: cs.correct / cs.seen});
   });
   scored.sort((a,b) => studyPriorityFor(b.card) - studyPriorityFor(a.card));
@@ -13400,11 +13410,26 @@ $('saveCardEditBtn').onclick = () => {
   // the set has since been resized/reordered from under us.
   if(activeSetId){
     const setsData = loadSets();
-    const s = setsData[activeSetId];
+    // Weak/adaptive/cram/confusion/folder-review practice rounds all run
+    // under the shared PRACTICE_ID bucket (see PRACTICE_ID above), not a
+    // real set — so activeSetId itself never resolves to anything in
+    // setsData during one of those sessions, and this block used to
+    // silently no-op there: current.front/back/etc above still updated in
+    // memory (so the edit *looked* saved for the rest of the session), but
+    // it was never written back to the real set and vanished on reload.
+    // Every practice-queue builder now tags each card with the real set it
+    // came from (_srcSetId) — fall back to that when activeSetId is the
+    // PRACTICE_ID placeholder.
+    const targetSetId = (activeSetId === PRACTICE_ID) ? current._srcSetId : activeSetId;
+    const s = targetSetId ? setsData[targetSetId] : null;
     if(s && Array.isArray(s.cards)){
       const posIdx = cards.indexOf(current);
-      let idx = (posIdx !== -1 && s.cards.length === cards.length) ? posIdx : -1;
-      if(idx === -1) idx = s.cards.findIndex(c => c.front === originalFront);
+      let idx = (activeSetId !== PRACTICE_ID && posIdx !== -1 && s.cards.length === cards.length) ? posIdx : -1;
+      // Match by the card's stable id when it has one (see migrateCardIds)
+      // rather than front text — required for practice-round sessions,
+      // where two cards from different sets can legitimately share front
+      // text, and a text match could silently overwrite the wrong card.
+      if(idx === -1) idx = current.id ? s.cards.findIndex(c => c.id === current.id) : s.cards.findIndex(c => c.front === originalFront);
       if(idx !== -1){
         s.cards[idx].front = newFront;
         s.cards[idx].back = newBack;
@@ -13424,7 +13449,11 @@ $('saveCardEditBtn').onclick = () => {
         s.cards[idx].difficulty = newDifficulty || undefined;
         s.cards[idx].highYield = newHighYield || undefined;
         saveSetsData(setsData);
+      } else if(activeSetId === PRACTICE_ID){
+        alert("Couldn't match this card back to its original set, so the edit only applies for the rest of this practice round and won't be saved. This can happen if the card was deleted or heavily changed elsewhere first.");
       }
+    } else if(activeSetId === PRACTICE_ID){
+      alert("Couldn't find this card's original set, so the edit only applies for the rest of this practice round and won't be saved. The set it came from may have been deleted.");
     }
   }
   closeCardEditor();
@@ -13953,9 +13982,9 @@ $('cramContinueBtn') && ($('cramContinueBtn').onclick = () => {
   const sets = loadSets();
   const seenKeys = new Set();
   const allCards = [];
-  Object.values(sets).forEach(s => {
+  Object.entries(sets).forEach(([id, s]) => {
     if(!Array.isArray(s.cards)) return;
-    s.cards.forEach(c => { const k = cardKey(c); if(!seenKeys.has(k)){ seenKeys.add(k); allCards.push(c); } });
+    s.cards.forEach(c => { const k = cardKey(c); if(!seenKeys.has(k)){ seenKeys.add(k); c._srcSetId = id; allCards.push(c); } });
   });
   const {minutes, examDate} = window.__cramSettings;
   const mode = classifyCramWindow(examDate); // re-classify: time may have moved the window (e.g. into morning-of)
