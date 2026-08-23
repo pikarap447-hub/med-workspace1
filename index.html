@@ -5784,6 +5784,7 @@ function lsSet(key, val){
       appDataUpdatedAt[key] = stamp;
       try{ _rawLS.setItem(key + '__updatedAt', stamp); }catch(e){}
       if(typeof queueSyncOp === 'function') queueSyncOp(key).catch(() => {});
+      if(typeof scheduleQuickSync === 'function') scheduleQuickSync();
     }
     return true;
   }
@@ -6009,6 +6010,13 @@ const appDataCache = {};
 // (ISO string), used for "latest update wins" conflict resolution against
 // the cloud copy. Populated from IndexedDB in initAppDataStorage().
 const appDataUpdatedAt = {};
+// Distinct from appDataUpdatedAt, which gets overwritten to THIS device's
+// local-write time on every save. This map instead only moves forward on
+// an actual confirmed contact with the server (a successful upload or a
+// downloaded value), so it survives local edits and can answer "has the
+// cloud changed since I last actually talked to it" — the question that
+// matters for real conflict detection. See mergeSyncConflict() below.
+const appDataLastSyncedAt = {};
 let appDataReady = false;
 APP_DATA_KEYS.forEach(k => { const v = lsGet(k); if(v !== null) appDataCache[k] = v; });
 
@@ -6046,6 +6054,7 @@ function appDataSet(key, value){
   if(typeof SYNC_KEYS !== 'undefined' && SYNC_KEYS.includes(key)){
     appDataUpdatedAt[key] = new Date().toISOString();
     queueSyncOp(key).catch(() => {});
+    scheduleQuickSync();
   }
   return openAppDataDB().then(db => new Promise(resolve => {
     const tx = db.transaction(APP_DATA_STORE,'readwrite');
@@ -6125,9 +6134,21 @@ async function initAppDataStorage(){
         req.onerror = () => { if(--remaining === 0) resolve(); };
       });
     });
+    await new Promise(resolve => {
+      const tx = db.transaction(APP_DATA_STORE,'readonly');
+      const store = tx.objectStore(APP_DATA_STORE);
+      let remaining = idbSyncKeys.length;
+      if(!remaining){ resolve(); return; }
+      idbSyncKeys.forEach(key => {
+        const req = store.get(key + '__syncedAt');
+        req.onsuccess = () => { appDataLastSyncedAt[key] = req.result || appDataUpdatedAt[key] || null; if(--remaining === 0) resolve(); };
+        req.onerror = () => { appDataLastSyncedAt[key] = appDataUpdatedAt[key] || null; if(--remaining === 0) resolve(); };
+      });
+    });
     LOCAL_SYNC_KEYS.forEach(key => {
       const stamp = lsGet(key + '__updatedAt');
       if(stamp) appDataUpdatedAt[key] = stamp;
+      appDataLastSyncedAt[key] = lsGet(key + '__syncedAt') || appDataUpdatedAt[key] || null;
     });
 
     try{ migrateSetTypes(); migrateCardIds(); }catch(e){}
@@ -6155,6 +6176,7 @@ function getSupabase(){
   return _supabase;
 }
 let currentUser = null; // the Supabase auth user, or null when signed out
+let currentAccessToken = null; // kept in sync with currentUser so a keepalive fetch (see flushSyncQueueKeepalive) never has to await an async session lookup while the page is backgrounding
 
 // ---- Offline sync queue (IndexedDB) ----
 // One pending entry per data_key, so re-saving the same key while offline
@@ -6165,6 +6187,70 @@ function queueSyncOp(key){
     tx.objectStore(SYNC_QUEUE_STORE).put({queuedAt:new Date().toISOString()}, key);
     tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
   })).catch(() => {});
+}
+// Previously the ONLY thing that pushed a queued edit to the cloud while the
+// app just sat open was the 90s setInterval in fullSync's background tick
+// (see below), or an explicit sign-in/online/"Sync Now" trigger. That left
+// up to a 90-second window where real progress (a finished quiz card, a
+// case-game choice) sat locally-only — if the user switched to another
+// device inside that window, the new device had nothing to pull, and the
+// progress *looked* lost even though it was safely saved on the original
+// device the whole time. This debounce shrinks that window to a couple of
+// seconds any time something gets queued, without spamming fullSync() on
+// every single keystroke-equivalent write.
+let _quickSyncTimer = null;
+let _quickSyncBurstActive = false;
+function scheduleQuickSync(){
+  if(!currentUser || !navigator.onLine) return;
+  if(typeof setSyncStatus === 'function') setSyncStatus('pending');
+  clearTimeout(_quickSyncTimer);
+  if(!_quickSyncBurstActive){
+    // First write in a burst (e.g. the one card someone answers right
+    // before switching devices) — don't make it wait behind a debounce
+    // window it doesn't need to share with anything yet.
+    _quickSyncBurstActive = true;
+    fullSync().finally(() => { _quickSyncBurstActive = false; });
+  }
+  _quickSyncTimer = setTimeout(() => { fullSync(); }, 2500);
+}
+// Last-resort push attempt for the moment the tab is actually backgrounded
+// or closed (see the visibilitychange/pagehide listeners below) — i.e. the
+// exact moment a user might swap to another device. fetch's `keepalive`
+// flag is designed to let a request survive page teardown, unlike a normal
+// fetch or the Supabase client's own request, which can get aborted mid-
+// flight the instant the tab suspends. This intentionally bypasses the
+// Supabase client and the normal queue/merge bookkeeping — it's a
+// fire-and-forget "at least try" push, not a substitute for the real
+// fullSync() that still runs and reconciles properly next time the app is
+// actually open. Two known limits, both acceptable for this use: (1)
+// browsers cap total in-flight keepalive request bodies around ~64KB, so
+// a very large deck payload may not fit — fine for stats/session/progress
+// writes, which is what's actually time-sensitive here; (2) if the device
+// is fully offline at that instant, this silently fails and the queue in
+// IndexedDB is still the source of truth for catching up later.
+function flushSyncQueueKeepalive(){
+  if(!currentUser || !currentAccessToken || !navigator.onLine) return;
+  getQueuedSyncKeys().then(keys => {
+    keys.forEach(key => {
+      const raw = getLocalSyncValue(key);
+      if(raw === undefined || raw === null) return;
+      let parsed;
+      try{ parsed = JSON.parse(raw); }catch(e){ return; }
+      try{
+        fetch(`${SUPABASE_URL}/rest/v1/user_app_data?on_conflict=user_id,data_key`, {
+          method: 'POST',
+          keepalive: true,
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${currentAccessToken}`,
+            'Prefer': 'resolution=merge-duplicates,return=minimal'
+          },
+          body: JSON.stringify({ user_id: currentUser.id, data_key: key, data: parsed })
+        }).catch(() => {});
+      }catch(e){}
+    });
+  }).catch(() => {});
 }
 function dequeueSyncOp(key){
   return openAppDataDB().then(db => new Promise(resolve => {
@@ -6217,6 +6303,130 @@ async function persistSyncedAt(key, stamp){
     }catch(e){}
   }
 }
+// Persists the conflict-detection baseline (appDataLastSyncedAt) — separate
+// storage slot from persistSyncedAt above, which mirrors the local-write
+// timestamp instead. Call this any time appDataLastSyncedAt[key] moves
+// forward: after a successful upload, or after applying a non-conflicting
+// download.
+async function persistSyncedBaseline(key, stamp){
+  appDataLastSyncedAt[key] = stamp;
+  if(LOCAL_SYNC_KEYS.includes(key)){
+    try{ _rawLS.setItem(key + '__syncedAt', stamp); }catch(e){}
+  } else {
+    try{
+      const db = await openAppDataDB();
+      await new Promise(resolve => {
+        const tx = db.transaction(APP_DATA_STORE,'readwrite');
+        tx.objectStore(APP_DATA_STORE).put(stamp, key + '__syncedAt');
+        tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
+      });
+    }catch(e){}
+  }
+}
+
+/* ---- Conflict-safe merges ----
+   downloadAndMergeKey() used to treat "I have unsynced local edits" as an
+   automatic win over the cloud, full stop — correct for the common case
+   (one device edits, then syncs) but wrong the moment TWO devices both
+   have unsynced edits for the same key: whichever device happened to sync
+   last would silently overwrite the other's real progress. mergeSyncConflict
+   only runs when that specific situation is detected (see downloadAndMergeKey),
+   and combines both sides instead of picking one. Each strategy is scoped to
+   what that key actually stores, so nothing here guesses at meaning:
+   - Keyed-by-id containers (sets, per-deck session state, case-game
+     checkpoints, interventions): keep both sides' entries; on an actual
+     id collision, keep whichever copy is newer by its own updatedAt field.
+   - Append-only event logs (attempts): union by attemptId, so an event
+     recorded on either device is never dropped.
+   - Aggregate counters (global streak/study-day stats): merge per-date
+     study counts by taking the max instead of one full blob replacing
+     the other, so a study day logged on either device still counts.
+   Anything not listed falls back to "keep local" (the previous behavior) —
+   acceptable for low-stakes/single-instance state like Pomodoro timer
+   settings or the virtual pet, where there's nothing meaningful to merge. */
+function mergeKeyedById(localObj, cloudObj, idField){
+  const merged = Object.assign({}, cloudObj || {});
+  Object.keys(localObj || {}).forEach(k => {
+    const l = localObj[k], c = merged[k];
+    if(!c) { merged[k] = l; return; }
+    const lt = l && l.updatedAt || 0, ct = c && c.updatedAt || 0;
+    merged[k] = lt >= ct ? l : c;
+  });
+  return merged;
+}
+function mergeArrayById(localArr, cloudArr, idField){
+  const byId = new Map();
+  (cloudArr || []).forEach(item => { if(item && item[idField] != null) byId.set(item[idField], item); });
+  (localArr || []).forEach(item => {
+    if(item == null || item[idField] == null) return;
+    const existing = byId.get(item[idField]);
+    if(!existing) { byId.set(item[idField], item); return; }
+    // Same id on both sides (rare — ids are random+timestamp). Prefer
+    // whichever copy has more filled-in fields rather than guessing.
+    const fill = o => Object.values(o).filter(v => v !== null && v !== undefined).length;
+    byId.set(item[idField], fill(item) >= fill(existing) ? item : existing);
+  });
+  return Array.from(byId.values());
+}
+const mergeStrategies = {
+  [SETS_KEY]: (local, cloud) => mergeKeyedById(local, cloud, 'id'),
+  [SESSIONS_KEY]: (local, cloud) => mergeKeyedById(local, cloud, 'id'),
+  [CASE_PROGRESS_KEY]: (local, cloud) => mergeKeyedById(local, cloud, 'id'),
+  [ATTEMPTS_KEY]: (local, cloud) => mergeArrayById(local, cloud, 'attemptId').slice(-2000),
+  [INTERVENTIONS_KEY]: (local, cloud) => mergeArrayById(local, cloud, 'id').slice(-40),
+  [STATS_KEY]: (local, cloud) => {
+    const merged = Object.assign({}, cloud || {});
+    Object.keys(local || {}).forEach(bucketId => {
+      const l = local[bucketId], c = merged[bucketId];
+      if(!c) { merged[bucketId] = l; return; }
+      const cardStats = Object.assign({}, c.cardStats || {});
+      Object.keys(l.cardStats || {}).forEach(ck => {
+        const lc = l.cardStats[ck], cc = cardStats[ck];
+        cardStats[ck] = (!cc || (lc.lastSeen || 0) >= (cc.lastSeen || 0)) ? lc : cc;
+      });
+      const sessions = mergeArrayById(l.sessions, c.sessions, 'sessionId')
+        .sort((a, b) => (a.date || 0) - (b.date || 0)).slice(-50);
+      merged[bucketId] = { cardStats, sessions };
+    });
+    return merged;
+  },
+  [GLOBAL_KEY]: (local, cloud) => {
+    const l = local || {}, c = cloud || {};
+    const studyDays = Object.assign({}, c.studyDays || {});
+    Object.keys(l.studyDays || {}).forEach(d => {
+      studyDays[d] = Math.max(studyDays[d] || 0, l.studyDays[d] || 0);
+    });
+    return Object.assign({}, l, c, {
+      studyDays,
+      totalSeen: Math.max(l.totalSeen || 0, c.totalSeen || 0),
+      totalCorrect: Math.max(l.totalCorrect || 0, c.totalCorrect || 0),
+      bestStreak: Math.max(l.bestStreak || 0, c.bestStreak || 0)
+    });
+  }
+};
+// Runs the right strategy for `key` (or keeps local, the old default, if
+// this key has none defined), saves the merged result locally, and returns
+// it so the caller can upload it as the new agreed-upon state.
+async function mergeSyncConflict(key, localRaw, cloudData){
+  let mergedValue = localRaw;
+  const strategy = mergeStrategies[key];
+  if(strategy){
+    try{
+      const localParsed = JSON.parse(localRaw);
+      const merged = strategy(localParsed, cloudData);
+      mergedValue = JSON.stringify(merged);
+    }catch(e){ console.error('Merge failed for', key, '— keeping local copy', e); }
+  }
+  await setLocalSyncValueFromCloud(key, mergedValue); // writes without re-queuing
+  await queueSyncOp(key); // then queue it again — the merged result still needs to go up
+  if(key === ATTEMPTS_KEY && strategy){
+    // LEARNING_KEY is derived from attempts, not stored independently —
+    // recompute it from the merged event log instead of trying to merge
+    // two derived snapshots against each other.
+    try{ rebuildLearningAnalytics(); }catch(e){}
+  }
+  return mergedValue;
+}
 async function uploadKey(key){
   const sb = getSupabase();
   if(!sb || !currentUser) return false;
@@ -6237,6 +6447,7 @@ async function uploadKey(key){
   if(data && data.updated_at){
     appDataUpdatedAt[key] = data.updated_at;
     await persistSyncedAt(key, data.updated_at);
+    await persistSyncedBaseline(key, data.updated_at);
   }
   await dequeueSyncOp(key);
   return true;
@@ -6258,6 +6469,21 @@ async function downloadAndMergeKey(key, queuedKeys){
   if(!sb || !currentUser) return;
   const isQueued = queuedKeys ? queuedKeys.has(key) : (await getQueuedSyncKeys()).includes(key);
   if(isQueued){
+    const { data, error } = await sb.from('user_app_data')
+      .select('data, updated_at')
+      .eq('user_id', currentUser.id)
+      .eq('data_key', key)
+      .maybeSingle();
+    if(error){ console.error('Cloud check failed for', key, error); await uploadKey(key); return; } // can't tell if there's a conflict; fall back to the old "local wins" behavior rather than blocking the upload
+    const baseline = appDataLastSyncedAt[key] ? new Date(appDataLastSyncedAt[key]).getTime() : 0;
+    const cloudTime = data ? new Date(data.updated_at).getTime() : 0;
+    if(data && cloudTime > baseline){
+      // The cloud moved since we last actually confirmed our state with it,
+      // AND we have our own unsynced local edit sitting in the queue — that's
+      // two devices having genuinely diverged, not just "we haven't synced
+      // yet." Merge both sides instead of one clobbering the other.
+      await mergeSyncConflict(key, getLocalSyncValue(key), data.data);
+    }
     await uploadKey(key);
     return;
   }
@@ -6278,12 +6504,15 @@ async function downloadAndMergeKey(key, queuedKeys){
   if(cloudTime > knownTime){
     appDataUpdatedAt[key] = data.updated_at;
     await setLocalSyncValueFromCloud(key, JSON.stringify(data.data));
+    await persistSyncedBaseline(key, data.updated_at);
     // Calendar re-reads 'uermExams' fresh from localStorage every time it
     // renders, so a merged calendar update shows up immediately. The pet
     // screen and streak/stats views cache their own state in a JS variable
     // read once at page load, so a merge that lands *while already on
     // that screen* won't visibly update it until you navigate away and
     // back (or reload) — the data itself is correctly saved either way.
+  } else {
+    await persistSyncedBaseline(key, data.updated_at);
   }
 }
 // Writes a downloaded cloud value into local storage without re-queuing it
@@ -6338,6 +6567,7 @@ function setSyncStatus(status){
   if(!line) return;
   const map = {
     synced: '✅ Synced',
+    pending: '⏳ Saving to cloud…',
     syncing: '🔄 Syncing…',
     offline: '📴 Offline — changes will sync when you\'re back online',
     error: '⚠️ Sync error — will retry automatically'
@@ -6415,6 +6645,7 @@ async function initCloudSync(){
   if(!sb) return; // offline on first load or CDN blocked; app keeps working locally
   sb.auth.onAuthStateChange((event, session) => {
     currentUser = session ? session.user : null;
+    currentAccessToken = session ? session.access_token : null;
     renderAccountUI();
     if(currentUser && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')){
       fullSync(); loadCommunityProfile().then(() => { startCommunityRealtime(); checkForNewCommunitySets(); });
@@ -6428,6 +6659,7 @@ async function initCloudSync(){
   });
   const { data: { session } } = await sb.auth.getSession();
   currentUser = session ? session.user : null;
+  currentAccessToken = session ? session.access_token : null;
   renderAccountUI();
   if(currentUser){
     fullSync();
@@ -7262,6 +7494,14 @@ function saveBeforeNavigation(){
   // but this catches the case where the tab closes mid-reveal-click or
   // between those events.
   else if(isCaseScreenVisible()) persistCaseProgress();
+  // The save above only guarantees the progress reaches THIS device's local
+  // storage. If the user is about to switch to another device, it also
+  // needs to reach the cloud before this tab is fully suspended/killed —
+  // otherwise the other device has nothing to pull down and the progress
+  // looks lost there even though it's safe here. See flushSyncQueueKeepalive
+  // for why this is a separate, best-effort path rather than just calling
+  // fullSync() here.
+  if(typeof flushSyncQueueKeepalive === 'function') flushSyncQueueKeepalive();
 }
 
 // Safety net: saveBeforeNavigation() is called from specific nav buttons
