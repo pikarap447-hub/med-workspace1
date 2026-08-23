@@ -4344,6 +4344,8 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
 .community-set-title{font-weight:800; font-size:15px; color:var(--text); line-height:1.25;}
 .community-set-author{font-size:11.5px; color:var(--text-muted); margin-top:4px;}
 .community-set-meta{font-size:11.5px; color:var(--text-muted); margin-top:8px; display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+.community-set-desc{font-size:12.5px; color:var(--text-muted); margin-top:7px; line-height:1.45; white-space:pre-wrap; word-break:break-word;}
+.community-preview-desc{font-size:13px; color:var(--text); line-height:1.5; margin-top:10px; white-space:pre-wrap; word-break:break-word;}
 .community-set-tag{
   background:var(--tile-blue-pale); color:var(--tile-blue-deep); border-radius:999px;
   padding:2px 9px; font-size:10.5px; font-weight:700;
@@ -4381,6 +4383,13 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
 .community-comment-del{background:none; border:none; color:var(--text-muted); font-size:11px; cursor:pointer; padding:0; margin-top:4px;}
 .community-comment-del:hover{color:var(--danger,#c0392b);}
 .community-comments-empty{font-size:12.5px; color:var(--text-muted); padding:4px 0;}
+.community-edit-backdrop{position:fixed; inset:0; z-index:100010; background:rgba(15,20,20,.46); display:flex; align-items:center; justify-content:center; padding:20px;}
+.community-edit-backdrop.hidden{display:none;}
+.community-edit-modal{width:min(480px,100%); max-height:min(82vh,700px); overflow:auto; background:var(--surface); border-radius:20px; box-shadow:0 18px 60px rgba(0,0,0,.28); padding:22px;}
+.community-edit-modal label{display:block; font-size:12px; font-weight:800; color:var(--text-muted); margin:14px 0 6px;}
+.community-edit-modal label:first-of-type{margin-top:4px;}
+.community-edit-modal textarea{width:100%; min-height:110px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; font-size:13px; font-family:inherit; background:var(--bg); color:var(--text); resize:vertical;}
+.community-edit-footer{display:flex; justify-content:flex-end; gap:8px; margin-top:18px;}
 @media(max-width:640px){
   .community-panel{padding:16px;}
   .community-set-card{flex-direction:column;}
@@ -5746,6 +5755,7 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
                   <button type="button" class="community-icon-btn" id="communityPreviewCloseBtn" aria-label="Close preview">✕</button>
                 </div>
                 <div id="communityPreviewStats" class="community-set-stats"></div>
+                <div id="communityPreviewDesc" class="community-preview-desc"></div>
                 <div id="communityPreviewSamples"></div>
                 <div class="community-preview-comments" style="margin-top:18px; border-top:1px solid var(--border); padding-top:14px;">
                   <div style="font-weight:800; font-size:14px; color:var(--text); margin-bottom:8px;">Comments</div>
@@ -5758,6 +5768,20 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
                 <div class="community-preview-footer">
                   <button type="button" class="btn-ghost" id="communityPreviewCloseBtn2">Close</button>
                   <button type="button" class="btn-primary" id="communityPreviewImportBtn">＋ Add to My Sets</button>
+                </div>
+              </div>
+            </div>
+
+            <div id="communityEditBackdrop" class="community-edit-backdrop hidden" aria-hidden="true">
+              <div class="community-edit-modal" role="dialog" aria-modal="true" aria-labelledby="communityEditTitle">
+                <div class="community-preview-title" id="communityEditTitle">Edit listing</div>
+                <div class="community-preview-sub" id="communityEditSub"></div>
+                <label for="communityEditDescInput">Description</label>
+                <textarea id="communityEditDescInput" maxlength="600" placeholder="Tell people what this deck covers…"></textarea>
+                <div class="hint" style="margin-top:6px;">Shown to other users when they preview this deck. This only updates the Community listing — your local set is unchanged.</div>
+                <div class="community-edit-footer">
+                  <button type="button" class="btn-ghost" id="communityEditCancelBtn">Cancel</button>
+                  <button type="button" class="btn-primary" id="communityEditSaveBtn">Save</button>
                 </div>
               </div>
             </div>
@@ -6747,7 +6771,12 @@ async function publishSetToCommunity(sid){
     le: s.le || null,
     kind: s.kind || null,
     cards: s.cards || [],
-    card_count: (s.cards || []).length
+    card_count: (s.cards || []).length,
+    // Description lives only on the Community listing (edited via the
+    // "Your Community" list's ✏️ Edit button) — carry it along on every
+    // re-publish so hitting "Update on Community" from the local set's
+    // menu never wipes out an edit made from the Community screen.
+    description: s.communityDescription || null
   };
   let wasAlreadyPublished = !!s.communityId;
   if(!wasAlreadyPublished){
@@ -6832,7 +6861,7 @@ async function renderCommunityMine(){
   let rows = null;
   if(sb && currentUser){
     const { data, error } = await sb.from('community_sets')
-      .select('id,title,subject,card_count,created_at,updated_at')
+      .select('id,title,subject,description,card_count,created_at,updated_at')
       .eq('owner_id', currentUser.id)
       .order('created_at', { ascending: false });
     if(!error) rows = data || [];
@@ -6844,6 +6873,7 @@ async function renderCommunityMine(){
     // the screen isn't just empty, using the locally-stamped publish date.
     rows = Object.entries(sets).filter(([,s]) => s.communityId).map(([sid, s]) => ({
       id: s.communityId, title: s.name || 'Untitled set', subject: s.subject || null,
+      description: s.communityDescription || null,
       card_count: (s.cards||[]).length, created_at: s.communityPublishedAt || null, _sid: sid
     }));
   }
@@ -6869,9 +6899,10 @@ async function renderCommunityMine(){
     div.className = 'community-set-card';
     const otherSets = Object.entries(sets).filter(([id2]) => id2 !== sid);
     div.innerHTML = `
-      <div>
+      <div class="community-set-main">
         <div class="community-set-title">${escapeHtml(row.title || 'Untitled set')}</div>
         <div class="community-set-meta">${Number(row.card_count||0)} cards${row.subject ? `<span class="community-set-tag">${escapeHtml(row.subject)}</span>` : ''}${uploadedLabel ? `<span>Uploaded ${uploadedLabel}</span>` : ''}${editedLabel ? `<span>Edited ${editedLabel}</span>` : ''}${!linked ? `<span class="community-set-tag" title="No local set is linked to this upload — link one below, or delete it.">Not linked</span>` : ''}</div>
+        ${row.description ? `<div class="community-set-desc">${escapeHtml(row.description)}</div>` : ''}
         ${!linked ? `<div style="display:flex; align-items:center; gap:6px; margin-top:8px; flex-wrap:wrap;">
           <select class="sort-select" data-relink-select="${row.id}">
             <option value="">Link to a local set…</option>
@@ -6880,8 +6911,14 @@ async function renderCommunityMine(){
           <button class="btn-ghost sm" data-act="relink" data-id="${row.id}" data-created="${row.created_at||''}">Link</button>
         </div>` : ''}
       </div>
-      <button class="btn-ghost sm" data-act="unpub" data-id="${row.id}">${linked ? 'Unpublish' : 'Delete'}</button>`;
+      <div class="community-set-actions">
+        <button class="community-icon-btn" data-act="comments" data-id="${row.id}" title="View and reply to comments">💬 Comments</button>
+        <button class="community-icon-btn" data-act="edit" data-id="${row.id}" title="Edit the description shown to other users">✏️ Edit</button>
+        <button class="btn-ghost sm" data-act="unpub" data-id="${row.id}">${linked ? 'Unpublish' : 'Delete'}</button>
+      </div>`;
     div.querySelector('[data-act="unpub"]').addEventListener('click', () => deleteCommunityRow(row.id, sid, row.title));
+    div.querySelector('[data-act="comments"]').addEventListener('click', () => openCommunityPreview(row.id));
+    div.querySelector('[data-act="edit"]').addEventListener('click', () => openCommunityEditModal(row.id, sid, row.title, row.description));
     const relinkBtn = div.querySelector('[data-act="relink"]');
     if(relinkBtn){
       relinkBtn.addEventListener('click', () => {
@@ -6952,7 +6989,7 @@ async function renderCommunityBrowse(){
   if(!sb || !currentUser || !statusEl) return;
   statusEl.textContent = 'Loading…';
   const { data, error } = await sb.from('community_sets')
-    .select('id, owner_id, username, title, subject, card_type, topic, le, kind, card_count, cards, created_at, updated_at, import_count, like_count, save_count')
+    .select('id, owner_id, username, title, subject, description, card_type, topic, le, kind, card_count, cards, created_at, updated_at, import_count, like_count, save_count')
     .order('created_at', { ascending: false })
     .limit(150);
   if(error){ statusEl.textContent = 'Could not load community sets: ' + error.message; return; }
@@ -7134,7 +7171,7 @@ async function p2FollowingFeed(){
   const sb=getSupabase();if(!sb||!currentUser)return;
   const ids=[...communityP2Following];
   if(!ids.length){$('communityPhase2Area').innerHTML='<div class="community-p2-empty"><b>Your Following feed is empty.</b><br>Open a creator profile and follow them to see their decks here.</div>';return;}
-  const {data,error}=await sb.from('community_sets').select('id,title,subject,card_type,topic,le,kind,card_count,owner_id,username,created_at,updated_at,import_count,like_count,save_count,cards').in('owner_id',ids).order('created_at',{ascending:false}).limit(100);
+  const {data,error}=await sb.from('community_sets').select('id,title,subject,description,card_type,topic,le,kind,card_count,owner_id,username,created_at,updated_at,import_count,like_count,save_count,cards').in('owner_id',ids).order('created_at',{ascending:false}).limit(100);
   if(error){$('communityPhase2Area').textContent=error.message;return;}
   communityBrowseCache=data||[];await loadCommunityInteractions(communityBrowseCache.map(x=>x.id));
   renderCommunitySubjectFilters();applyCommunitySearchFilter();
@@ -7313,6 +7350,7 @@ function renderCommunityCard(r){
       <div class="community-set-title">${escapeHtml(r.title || 'Untitled set')}</div>
       <div class="community-set-author">👤 @${escapeHtml(r.username || 'unknown')}${uploadedLabel ? ` · Uploaded ${uploadedLabel}` : ''}${editedLabel ? ` · <span title="Last edited ${editedLabel}">Edited ${editedLabel}</span>` : ''}</div>
       <div class="community-set-meta"><span>${Number(r.card_count||0)} cards</span>${tags}</div>
+      ${r.description ? `<div class="community-set-desc">${escapeHtml(r.description)}</div>` : ''}
       <div class="community-set-stats">
         <span class="community-set-stat">↓ ${Number(r.import_count||0)} imports</span>
         <span class="community-set-stat">❤️ ${Number(r.like_count||0)}</span>
@@ -7388,9 +7426,18 @@ async function toggleCommunitySave(id){
   applyCommunitySearchFilter();
 }
 
-function openCommunityPreview(id){
-  const row = communityBrowseCache.find(r => r.id === id);
-  if(!row) return;
+async function openCommunityPreview(id){
+  let row = communityBrowseCache.find(r => r.id === id);
+  if(!row){
+    // Not in the currently-loaded Discover feed (e.g. opened from "Your
+    // Community" for a set that's older than the feed's fetch window) —
+    // fetch it directly instead of silently doing nothing.
+    const sb = getSupabase();
+    if(!sb) return;
+    const { data, error } = await sb.from('community_sets').select('*').eq('id', id).maybeSingle();
+    if(error || !data){ alert('Could not load that set: ' + (error ? error.message : 'not found')); return; }
+    row = data;
+  }
   communityPreviewId = id;
   $('communityPreviewTitle').textContent = row.title || 'Untitled set';
   const uploadedLabel = row.created_at ? new Date(row.created_at).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : null;
@@ -7398,6 +7445,7 @@ function openCommunityPreview(id){
   const editedLabel = wasEdited ? new Date(row.updated_at).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : null;
   $('communityPreviewMeta').textContent = `by @${row.username || 'unknown'} · ${Number(row.card_count||0)} cards${row.subject ? ' · '+row.subject : ''}${uploadedLabel ? ' · Uploaded '+uploadedLabel : ''}${editedLabel ? ' · Edited '+editedLabel : ''}`;
   $('communityPreviewStats').innerHTML = `<span class="community-set-stat">↓ ${Number(row.import_count||0)} imports</span><span class="community-set-stat">❤️ ${Number(row.like_count||0)} likes</span><span class="community-set-stat">🔖 ${Number(row.save_count||0)} saves</span>`;
+  $('communityPreviewDesc').innerHTML = row.description ? escapeHtml(row.description) : '';
   const samples = (row.cards || []).slice(0,3);
   $('communityPreviewSamples').innerHTML = samples.length ? samples.map((c,i) => `<div class="community-preview-sample"><div class="community-preview-front">Sample ${i+1} · Front</div><div class="community-preview-text">${escapeHtml(c.front || '')}</div><div class="community-preview-front" style="margin-top:10px;">Back</div><div class="community-preview-text">${escapeHtml(c.back || '')}</div></div>`).join('') : `<div class="community-empty" style="margin-top:14px;">No preview cards available.</div>`;
   $('communityPreviewBackdrop').classList.remove('hidden');
@@ -7624,6 +7672,58 @@ function initCommunityUI(){
   $('communityPreviewBackdrop').addEventListener('click', e => { if(e.target === $('communityPreviewBackdrop')) closeCommunityPreview(); });
   $('communityPreviewImportBtn').onclick = () => { if(communityPreviewId) importCommunitySet(communityPreviewId); };
   document.addEventListener('keydown', e => { if(e.key === 'Escape' && communityPreviewId) closeCommunityPreview(); });
+
+  $('communityEditCancelBtn').onclick = closeCommunityEditModal;
+  $('communityEditBackdrop').addEventListener('click', e => { if(e.target === $('communityEditBackdrop')) closeCommunityEditModal(); });
+  $('communityEditSaveBtn').onclick = saveCommunityEditModal;
+  document.addEventListener('keydown', e => { if(e.key === 'Escape' && communityEditRowId) closeCommunityEditModal(); });
+}
+
+/* ===== COMMUNITY LISTING EDIT (title/description shown on the Community
+   screen only — separate from the local set, so it survives re-publishing
+   from the local set's ⋯ menu; see the "description" line in
+   publishSetToCommunity's row object). ===== */
+let communityEditRowId = null;
+let communityEditSid = null;
+function openCommunityEditModal(rowId, sid, title, description){
+  communityEditRowId = rowId;
+  communityEditSid = sid || null;
+  $('communityEditTitle').textContent = 'Edit listing';
+  $('communityEditSub').textContent = title || 'Untitled set';
+  $('communityEditDescInput').value = description || '';
+  $('communityEditBackdrop').classList.remove('hidden');
+  $('communityEditBackdrop').setAttribute('aria-hidden','false');
+  $('communityEditDescInput').focus();
+}
+function closeCommunityEditModal(){
+  $('communityEditBackdrop').classList.add('hidden');
+  $('communityEditBackdrop').setAttribute('aria-hidden','true');
+  communityEditRowId = null;
+  communityEditSid = null;
+}
+async function saveCommunityEditModal(){
+  if(!communityEditRowId) return;
+  const sb = getSupabase();
+  if(!sb || !currentUser){ alert('Sign in first — Settings → Account & Sync.'); return; }
+  const desc = $('communityEditDescInput').value.trim();
+  const saveBtn = $('communityEditSaveBtn');
+  saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+  const { error } = await sb.from('community_sets').update({ description: desc || null }).eq('id', communityEditRowId).eq('owner_id', currentUser.id);
+  saveBtn.disabled = false; saveBtn.textContent = 'Save';
+  if(error){ alert('Could not save: ' + error.message); return; }
+  // Persist on the linked local set too, so the next "Update on Community"
+  // re-publish (which rebuilds the whole row from the local set) carries
+  // this description forward instead of wiping it back to null.
+  if(communityEditSid){
+    const sets = loadSets();
+    const s = sets[communityEditSid];
+    if(s){
+      if(desc) s.communityDescription = desc; else delete s.communityDescription;
+      saveSetsData(sets);
+    }
+  }
+  closeCommunityEditModal();
+  renderCommunityMine();
 }
 
 // bucket for an in-progress quiz that was never saved as a named set
