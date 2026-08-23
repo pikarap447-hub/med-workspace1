@@ -2334,22 +2334,6 @@ body.theme-midnight .set-item-menu{background:var(--surface-elevated);}
   margin-bottom:5px;
 }
 .continue-heading .field-label{margin-bottom:0;}
-.streak-pill{
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-  padding:6px 10px;
-  border-radius:999px;
-  background:var(--surface);
-  border:1px solid var(--border);
-  color:var(--ink);
-  box-shadow:var(--shadow-sm);
-  font-size:11px;
-  font-weight:800;
-  white-space:nowrap;
-}
-.streak-pill .streak-flame{font-size:13px; line-height:1;}
-.streak-pill .streak-count{color:var(--tile-blue-deep);}
 .continue-hero-bottom{
   display:flex;
   align-items:center;
@@ -4533,10 +4517,6 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
           <div id="recentActivityWrap" class="landing-col-recent hidden">
             <div class="continue-heading">
               <label class="field-label">Continue studying</label>
-              <div class="streak-pill" id="dailyStreakPill" aria-label="Daily study streak">
-                <span class="streak-flame">🔥</span>
-                <span><span class="streak-count" id="dailyStreakCount">0</span> day streak</span>
-              </div>
             </div>
             <p class="landing-intro">Pick up where you left off.</p>
             <div class="recent-activity-list" id="recentActivityList"></div>
@@ -8030,17 +8010,6 @@ function getStudyStreakSummary(){
   return {current, best, todayCount, studiedToday: dates.has(today)};
 }
 
-function updateDailyStreakUI(){
-  const pill = $('dailyStreakPill');
-  const countEl = $('dailyStreakCount');
-  if(!pill || !countEl) return;
-  const streak = getStudyStreakSummary();
-  countEl.textContent = streak.current;
-  pill.title = streak.studiedToday
-    ? `${streak.todayCount} card${streak.todayCount === 1 ? '' : 's'} studied today`
-    : 'Study today to keep your streak going';
-}
-
 function genSetId(){ return 'set_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function genCardId(){ return 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2,9); }
 // IMPORTANT: cards have no other stable identity in this app (no field is
@@ -8534,7 +8503,6 @@ function renderRecentActivity(){
   }
   wrap.classList.remove('hidden');
   if(cols) cols.classList.remove('no-recent');
-  updateDailyStreakUI();
   items.forEach((item, idx) => {
     const {s, isCase, status, isScratch} = item;
     const isHero = idx === 0;
