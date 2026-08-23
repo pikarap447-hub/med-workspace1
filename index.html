@@ -640,6 +640,14 @@ transition:background var(--transition-normal), color var(--transition-normal), 
   :focus-visible{ outline:2px solid var(--tile-blue-mid); outline-offset:2px; border-radius:6px; }
   .frame{width:100%; max-width:680px;}
   .frame.wide{max-width:1020px; min-width:0; justify-self:center; width:100%;}
+  /* Folder browsing (LE/Topic-Cards/Samplex sub-folder tiles, the set list)
+     and the Calendar (a horizontally-scrolling exam timeline) both benefit
+     from more room than the standard 1020px frame — more sub-folder tiles
+     per row, and more days visible before the calendar needs horizontal
+     scrolling. Toggled on/off .frame.wide via the folderView/calendarView
+     visibility observer below, so every other screen keeps the narrower,
+     more readable width. */
+  .frame.wide.frame-xl{max-width:1320px;}
 
   /* ===== CSS-05 APP SHELL / HEADER ===== */
 /* ---- App shell: single centered column. Nav lives under the title
@@ -1974,7 +1982,7 @@ body.mode-dark .zoom-controls button:hover{
   padding-top:16px;
   border-top:1px solid #E6DFC8;
 }
-.saved-sets-list{display:flex; flex-direction:column; gap:8px; max-height:220px; overflow:auto;}
+.saved-sets-list{display:flex; flex-direction:column; gap:8px; max-height:min(64vh, 640px); overflow:auto;}
 .no-sets{font-size:13px; color:var(--ink-soft); padding:6px 2px;}
 .empty-state{
   display:flex; flex-direction:column; align-items:center; text-align:center;
@@ -6492,14 +6500,30 @@ async function publishSetToCommunity(sid){
     cards: s.cards || [],
     card_count: (s.cards || []).length
   };
-  const wasAlreadyPublished = !!s.communityId;
+  let wasAlreadyPublished = !!s.communityId;
+  if(!wasAlreadyPublished){
+    // A messed-up sync (two devices editing the "sets" blob around the same
+    // time) can silently drop the local communityId link even though the
+    // row is still live in Community. Without this check, publishing again
+    // would create an orphaned duplicate that only "My Uploads" could ever
+    // reach. Offer to relink to the existing row instead when the title
+    // matches one this account already has published.
+    const { data: existing } = await sb.from('community_sets').select('id').eq('owner_id', currentUser.id).eq('title', row.title).maybeSingle();
+    if(existing && existing.id && confirm(`You already have a Community set named "${row.title}" — update that one instead of publishing a new copy?`)){
+      s.communityId = existing.id;
+      wasAlreadyPublished = true;
+    }
+  }
   const result = wasAlreadyPublished
     ? await sb.from('community_sets').update(row).eq('id', s.communityId).eq('owner_id', currentUser.id).select('id').maybeSingle()
     : await sb.from('community_sets').insert(row).select('id').maybeSingle();
   if(result.error){ alert('Publish failed: ' + result.error.message); return; }
   if(!wasAlreadyPublished && result.data && result.data.id){
     s.communityId = result.data.id;
+    s.communityPublishedAt = new Date().toISOString();
     saveSetsData(sets); // also queues this set for cloud sync, so communityId follows to other devices
+  } else if(wasAlreadyPublished){
+    saveSetsData(sets); // persists a relinked communityId even when the cards themselves didn't change
   }
   if(!$('folderView').classList.contains('hidden')) renderFolderView();
   else if(!$('landing').classList.contains('hidden')){ renderLanding(); renderRecentActivity(); }
@@ -6507,41 +6531,112 @@ async function publishSetToCommunity(sid){
   renderCommunityMine();
 }
 
-async function unpublishSetFromCommunity(sid){
+// Deletes a Community row directly by its own id/owner, then — if a local
+// set is still linked to it — clears that link too. Going straight at the
+// row (instead of only working through a local set's s.communityId) is what
+// lets this succeed even when sync has dropped the local link: the row on
+// Supabase is always the source of truth for what's actually published.
+async function deleteCommunityRow(rowId, sid, title){
   const sb = getSupabase();
+  if(!sb || !currentUser) return;
+  if(!confirm(`Remove "${title || 'this set'}" from Community? It will no longer be visible to other users.`)) return;
+  const { error } = await sb.from('community_sets').delete().eq('id', rowId).eq('owner_id', currentUser.id);
+  if(error){ alert('Could not remove: ' + error.message); return; }
+  if(sid){
+    const sets = loadSets();
+    const s = sets[sid];
+    if(s && s.communityId === rowId){
+      delete s.communityId;
+      delete s.communityPublishedAt;
+      saveSetsData(sets);
+    }
+  }
+  renderCommunityMine();
+}
+
+// Restores a lost local<->cloud link: points a local set's communityId at
+// an already-published row so future updates/unpublishes go through the
+// normal linked path again, instead of staying an orphan only manageable
+// by direct delete.
+async function relinkCommunitySet(rowId, sid, createdAt){
+  if(!sid) return;
   const sets = loadSets();
   const s = sets[sid];
-  if(!sb || !currentUser || !s || !s.communityId) return;
-  if(!confirm(`Remove "${s.name}" from Community? It will no longer be visible to other users.`)) return;
-  const { error } = await sb.from('community_sets').delete().eq('id', s.communityId).eq('owner_id', currentUser.id);
-  if(error){ alert('Could not unpublish: ' + error.message); return; }
-  delete s.communityId;
+  if(!s) return;
+  s.communityId = rowId;
+  s.communityPublishedAt = createdAt || new Date().toISOString();
   saveSetsData(sets);
   renderCommunityMine();
 }
 
-function renderCommunityMine(){
+async function renderCommunityMine(){
   const listEl = $('communityMineList'), statusEl = $('communityMineStatus');
   if(!listEl || !statusEl) return;
+  const sb = getSupabase();
   const sets = loadSets();
-  const mine = Object.entries(sets).filter(([,s]) => s.communityId);
+  statusEl.textContent = 'Loading…';
+
+  // Fetch straight from Supabase (the real source of truth for what's
+  // published) rather than only trusting each local set's s.communityId —
+  // that's what lets this screen keep working (see, edit, delete) even
+  // when a sync hiccup dropped the local link on this device.
+  let rows = null;
+  if(sb && currentUser){
+    const { data, error } = await sb.from('community_sets')
+      .select('id,title,subject,card_count,created_at')
+      .eq('owner_id', currentUser.id)
+      .order('created_at', { ascending: false });
+    if(!error) rows = data || [];
+  }
+
   listEl.innerHTML = '';
-  if(!mine.length){
+  if(rows === null){
+    // Offline or fetch failed — fall back to whatever's known locally so
+    // the screen isn't just empty, using the locally-stamped publish date.
+    rows = Object.entries(sets).filter(([,s]) => s.communityId).map(([sid, s]) => ({
+      id: s.communityId, title: s.name || 'Untitled set', subject: s.subject || null,
+      card_count: (s.cards||[]).length, created_at: s.communityPublishedAt || null, _sid: sid
+    }));
+  }
+
+  if(!rows.length){
     listEl.innerHTML = `<div class="community-empty"><div class="community-empty-icon">📭</div>Nothing published yet. Use a set's ⋯ menu → Publish to Community.</div>`;
     statusEl.textContent = '';
     return;
   }
-  statusEl.textContent = `${mine.length} set${mine.length===1?'':'s'} live`;
-  mine.forEach(([sid, s]) => {
+  statusEl.textContent = `${rows.length} set${rows.length===1?'':'s'} live`;
+
+  rows.forEach(row => {
+    const sid = row._sid || Object.entries(sets).find(([,s]) => s.communityId === row.id)?.[0];
+    const linked = sid && sets[sid];
+    const uploadedLabel = row.created_at
+      ? new Date(row.created_at).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'})
+      : null;
     const div = document.createElement('div');
     div.className = 'community-set-card';
+    const otherSets = Object.entries(sets).filter(([id2]) => id2 !== sid);
     div.innerHTML = `
       <div>
-        <div class="community-set-title">${escapeHtml(s.name || 'Untitled set')}</div>
-        <div class="community-set-meta">${(s.cards||[]).length} cards${s.subject ? `<span class="community-set-tag">${escapeHtml(s.subject)}</span>` : ''}</div>
+        <div class="community-set-title">${escapeHtml(row.title || 'Untitled set')}</div>
+        <div class="community-set-meta">${Number(row.card_count||0)} cards${row.subject ? `<span class="community-set-tag">${escapeHtml(row.subject)}</span>` : ''}${uploadedLabel ? `<span>Uploaded ${uploadedLabel}</span>` : ''}${!linked ? `<span class="community-set-tag" title="No local set is linked to this upload — link one below, or delete it.">Not linked</span>` : ''}</div>
+        ${!linked ? `<div style="display:flex; align-items:center; gap:6px; margin-top:8px; flex-wrap:wrap;">
+          <select class="sort-select" data-relink-select="${row.id}">
+            <option value="">Link to a local set…</option>
+            ${otherSets.map(([id2, s2]) => `<option value="${id2}">${escapeHtml(s2.name || 'Untitled set')}</option>`).join('')}
+          </select>
+          <button class="btn-ghost sm" data-act="relink" data-id="${row.id}" data-created="${row.created_at||''}">Link</button>
+        </div>` : ''}
       </div>
-      <button class="btn-ghost sm" data-act="unpub" data-id="${sid}">Unpublish</button>`;
-    div.querySelector('[data-act="unpub"]').addEventListener('click', () => unpublishSetFromCommunity(sid));
+      <button class="btn-ghost sm" data-act="unpub" data-id="${row.id}">${linked ? 'Unpublish' : 'Delete'}</button>`;
+    div.querySelector('[data-act="unpub"]').addEventListener('click', () => deleteCommunityRow(row.id, sid, row.title));
+    const relinkBtn = div.querySelector('[data-act="relink"]');
+    if(relinkBtn){
+      relinkBtn.addEventListener('click', () => {
+        const sel = div.querySelector(`[data-relink-select="${row.id}"]`);
+        if(!sel || !sel.value){ alert('Pick a local set first.'); return; }
+        relinkCommunitySet(row.id, sel.value, row.created_at);
+      });
+    }
     listEl.appendChild(div);
   });
 }
@@ -6894,12 +6989,13 @@ function renderCommunityCard(r){
   const saved = communityInteractionCache.saved.has(r.id);
   const cardTypeLabel = r.card_type === 'samplex' ? 'Samplex' : (r.card_type === 'topic' ? 'Topic Cards' : r.card_type);
   const tags = [r.le ? `LE ${r.le}` : null, cardTypeLabel, r.subject, r.topic, r.kind === 'algorithm' ? 'Algorithm' : null].filter(Boolean).slice(0,4).map(t => `<span class="community-set-tag">${escapeHtml(t)}</span>`).join('');
+  const uploadedLabel = r.created_at ? new Date(r.created_at).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : null;
   const div = document.createElement('div');
   div.className = 'community-set-card';
   div.innerHTML = `
     <div class="community-set-main">
       <div class="community-set-title">${escapeHtml(r.title || 'Untitled set')}</div>
-      <div class="community-set-author">👤 @${escapeHtml(r.username || 'unknown')}</div>
+      <div class="community-set-author">👤 @${escapeHtml(r.username || 'unknown')}${uploadedLabel ? ` · Uploaded ${uploadedLabel}` : ''}</div>
       <div class="community-set-meta"><span>${Number(r.card_count||0)} cards</span>${tags}</div>
       <div class="community-set-stats">
         <span class="community-set-stat">↓ ${Number(r.import_count||0)} imports</span>
@@ -16506,6 +16602,33 @@ window.uermCalendarRefresh=render;
 window.uermCalendarJumpToday=()=>jump('TODAY','auto');
 // Land on today by default as soon as the calendar first renders.
 jump('TODAY','auto');
+})();
+
+// ---- Wide-frame toggle for Folders & Calendar ----
+// These two screens (LE/Topic-Cards/Samplex sub-folder tiles, the set list,
+// and the calendar's horizontally-scrolling exam timeline) read as cramped
+// at the standard 1020px frame width — more room means more sub-folder
+// tiles per row and fewer days needing a horizontal scroll. Every other
+// screen (quiz, forms, settings, etc.) stays at the narrower width, since
+// that's more readable for them. A MutationObserver on each view's
+// "hidden" class keeps this in sync with however navigation shows/hides
+// them, rather than needing every show/hide call site updated individually.
+(function(){
+  const frame = document.querySelector('.frame.wide');
+  if(!frame) return;
+  const wideViewIds = ['folderView', 'calendarView'];
+  function syncFrameWidth(){
+    const anyVisible = wideViewIds.some(id => {
+      const el = document.getElementById(id);
+      return el && !el.classList.contains('hidden');
+    });
+    frame.classList.toggle('frame-xl', anyVisible);
+  }
+  wideViewIds.forEach(id => {
+    const el = document.getElementById(id);
+    if(el) new MutationObserver(syncFrameWidth).observe(el, {attributes:true, attributeFilter:['class']});
+  });
+  syncFrameWidth();
 })();
 
 </script>
