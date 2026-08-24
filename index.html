@@ -4615,6 +4615,7 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
               <option value="6">LE 6</option>
             </select>
             <input type="text" id="setTopicInput" placeholder="Topic #" style="max-width:100px;">
+            <input type="text" id="setProfessorInput" placeholder="Professor (optional)" style="max-width:180px;">
             <select id="setTypeSelect">
               <option value="topic">Topic card</option>
               <option value="samplex">Samplex</option>
@@ -5784,7 +5785,35 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
                 <div class="community-preview-sub" id="communityEditSub"></div>
                 <label for="communityEditDescInput">Description</label>
                 <textarea id="communityEditDescInput" maxlength="600" placeholder="Tell people what this deck covers…"></textarea>
-                <div class="hint" style="margin-top:6px;">Shown to other users when they preview this deck. This only updates the Community listing — your local set is unchanged.</div>
+                <div class="row" style="margin-top:10px; flex-wrap:wrap; gap:8px;">
+                  <select id="communityEditSubjectSelect" style="min-width:110px;">
+                    <option value="">Subject…</option>
+                    <option value="PED2">PED2</option>
+                    <option value="PSY2">PSY2</option>
+                    <option value="LEG">LEG</option>
+                    <option value="OB">OB</option>
+                    <option value="OPT">OPT</option>
+                    <option value="MED2">MED2</option>
+                    <option value="NEU2">NEU2</option>
+                    <option value="SUR2">SUR2</option>
+                    <option value="GYN">GYN</option>
+                    <option value="ORL">ORL</option>
+                    <option value="CPT">CPT</option>
+                    <option value="CMD">CMD</option>
+                  </select>
+                  <select id="communityEditLESelect" style="min-width:90px;">
+                    <option value="">LE…</option>
+                    <option value="1">LE 1</option>
+                    <option value="2">LE 2</option>
+                    <option value="3">LE 3</option>
+                    <option value="4">LE 4</option>
+                    <option value="5">LE 5</option>
+                    <option value="6">LE 6</option>
+                  </select>
+                  <input type="text" id="communityEditTopicInput" placeholder="Topic #" style="max-width:100px;">
+                  <input type="text" id="communityEditProfessorInput" placeholder="Professor (optional)" style="max-width:180px;">
+                </div>
+                <div class="hint" style="margin-top:6px;">Description updates the Community listing only. Subject/LE/Topic/Professor also update your local set's tags (if it's still linked on this device), same as editing them in Set details.</div>
                 <div class="community-edit-footer">
                   <button type="button" class="btn-ghost" id="communityEditCancelBtn">Cancel</button>
                   <button type="button" class="btn-primary" id="communityEditSaveBtn">Save</button>
@@ -6775,6 +6804,7 @@ async function publishSetToCommunity(sid){
     card_type: s.cardType || null,
     topic: s.topic || null,
     le: s.le || null,
+    professor: s.professor || null,
     kind: s.kind || null,
     cards: s.cards || [],
     card_count: (s.cards || []).length,
@@ -6867,7 +6897,7 @@ async function renderCommunityMine(){
   let rows = null;
   if(sb && currentUser){
     const { data, error } = await sb.from('community_sets')
-      .select('id,title,subject,description,card_count,created_at,updated_at')
+      .select('id,title,subject,description,card_count,created_at,updated_at,le,topic,professor,card_type,kind')
       .eq('owner_id', currentUser.id)
       .order('created_at', { ascending: false });
     if(!error) rows = data || [];
@@ -6879,7 +6909,8 @@ async function renderCommunityMine(){
     // the screen isn't just empty, using the locally-stamped publish date.
     rows = Object.entries(sets).filter(([,s]) => s.communityId).map(([sid, s]) => ({
       id: s.communityId, title: s.name || 'Untitled set', subject: s.subject || null,
-      description: s.communityDescription || null,
+      description: s.communityDescription || null, le: s.le || null, topic: s.topic || null,
+      professor: s.professor || null, card_type: s.cardType || null, kind: s.kind || null,
       card_count: (s.cards||[]).length, created_at: s.communityPublishedAt || null, _sid: sid
     }));
   }
@@ -6907,7 +6938,7 @@ async function renderCommunityMine(){
     div.innerHTML = `
       <div class="community-set-main">
         <div class="community-set-title">${escapeHtml(row.title || 'Untitled set')}</div>
-        <div class="community-set-meta">${Number(row.card_count||0)} cards${row.subject ? `<span class="community-set-tag">${escapeHtml(row.subject)}</span>` : ''}${uploadedLabel ? `<span>Uploaded ${uploadedLabel}</span>` : ''}${editedLabel ? `<span>Edited ${editedLabel}</span>` : ''}${!linked ? `<span class="community-set-tag" title="No local set is linked to this upload — link one below, or delete it.">Not linked</span>` : ''}</div>
+        <div class="community-set-meta">${Number(row.card_count||0)} cards${row.subject ? `<span class="community-set-tag">${escapeHtml(row.subject)}</span>` : ''}${row.le ? `<span class="community-set-tag">LE ${escapeHtml(row.le)}</span>` : ''}${row.topic ? `<span class="community-set-tag">Topic ${escapeHtml(row.topic)}</span>` : ''}${row.professor ? `<span class="community-set-tag">👤 ${escapeHtml(row.professor)}</span>` : ''}${uploadedLabel ? `<span>Uploaded ${uploadedLabel}</span>` : ''}${editedLabel ? `<span>Edited ${editedLabel}</span>` : ''}${!linked ? `<span class="community-set-tag" title="No local set is linked to this upload — link one below, or delete it.">Not linked</span>` : ''}</div>
         ${row.description ? `<div class="community-set-desc">${escapeHtml(row.description)}</div>` : ''}
         ${!linked ? `<div style="display:flex; align-items:center; gap:6px; margin-top:8px; flex-wrap:wrap;">
           <select class="sort-select" data-relink-select="${row.id}">
@@ -6924,7 +6955,7 @@ async function renderCommunityMine(){
       </div>`;
     div.querySelector('[data-act="unpub"]').addEventListener('click', () => deleteCommunityRow(row.id, sid, row.title));
     div.querySelector('[data-act="comments"]').addEventListener('click', () => openCommunityPreview(row.id));
-    div.querySelector('[data-act="edit"]').addEventListener('click', () => openCommunityEditModal(row.id, sid, row.title, row.description));
+    div.querySelector('[data-act="edit"]').addEventListener('click', () => openCommunityEditModal(row.id, sid, row));
     const relinkBtn = div.querySelector('[data-act="relink"]');
     if(relinkBtn){
       relinkBtn.addEventListener('click', () => {
@@ -6998,7 +7029,7 @@ async function renderCommunityBrowse(){
   if(!sb || !currentUser || !statusEl) return;
   statusEl.textContent = 'Loading…';
   const { data, error } = await sb.from('community_sets')
-    .select('id, owner_id, username, title, subject, description, card_type, topic, le, kind, card_count, cards, created_at, updated_at, import_count, like_count, save_count')
+    .select('id, owner_id, username, title, subject, description, card_type, topic, le, professor, kind, card_count, cards, created_at, updated_at, import_count, like_count, save_count')
     .order('created_at', { ascending: false })
     .limit(150);
   if(error){ statusEl.textContent = 'Could not load community sets: ' + error.message; return; }
@@ -7347,7 +7378,7 @@ function renderCommunityCard(r){
   const cardTypeLabel = r.card_type === 'samplex' ? 'Samplex' : (r.card_type === 'topic' ? 'Topic Cards' : r.card_type);
   const subjColor = r.subject ? subjectColor(r.subject) : null;
   const subjectTag = r.subject ? `<span class="community-set-tag subject-tag" style="background:${subjColor}">${escapeHtml(r.subject)}</span>` : '';
-  const tags = subjectTag + [r.le ? `LE ${r.le}` : null, cardTypeLabel, r.topic, r.kind === 'algorithm' ? 'Algorithm' : null].filter(Boolean).slice(0,3).map(t => `<span class="community-set-tag">${escapeHtml(t)}</span>`).join('');
+  const tags = subjectTag + [r.le ? `LE ${r.le}` : null, cardTypeLabel, r.topic, r.professor ? `👤 ${r.professor}` : null, r.kind === 'algorithm' ? 'Algorithm' : null].filter(Boolean).slice(0,4).map(t => `<span class="community-set-tag">${escapeHtml(t)}</span>`).join('');
   const uploadedLabel = r.created_at ? new Date(r.created_at).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : null;
   // "Edited" only shows once the gap between created_at and updated_at is
   // large enough to be a real, later edit rather than noise from whatever
@@ -7731,18 +7762,24 @@ function initCommunityUI(){
   document.addEventListener('keydown', e => { if(e.key === 'Escape' && communityEditRowId) closeCommunityEditModal(); });
 }
 
-/* ===== COMMUNITY LISTING EDIT (title/description shown on the Community
-   screen only — separate from the local set, so it survives re-publishing
-   from the local set's ⋯ menu; see the "description" line in
-   publishSetToCommunity's row object). ===== */
+/* ===== COMMUNITY LISTING EDIT (title/description/tags shown on the
+   Community screen — description and tags are separate from the local set
+   for description (so it survives re-publishing), but tags (subject/LE/
+   topic/professor) sync both ways with the linked local set, same as
+   editing them in Set details; see publishSetToCommunity's row object). ===== */
 let communityEditRowId = null;
 let communityEditSid = null;
-function openCommunityEditModal(rowId, sid, title, description){
+function openCommunityEditModal(rowId, sid, row){
   communityEditRowId = rowId;
   communityEditSid = sid || null;
+  row = row || {};
   $('communityEditTitle').textContent = 'Edit listing';
-  $('communityEditSub').textContent = title || 'Untitled set';
-  $('communityEditDescInput').value = description || '';
+  $('communityEditSub').textContent = row.title || 'Untitled set';
+  $('communityEditDescInput').value = row.description || '';
+  $('communityEditSubjectSelect').value = row.subject || '';
+  $('communityEditLESelect').value = row.le || '';
+  $('communityEditTopicInput').value = row.topic || '';
+  $('communityEditProfessorInput').value = row.professor || '';
   $('communityEditBackdrop').classList.remove('hidden');
   $('communityEditBackdrop').setAttribute('aria-hidden','false');
   $('communityEditDescInput').focus();
@@ -7758,24 +7795,42 @@ async function saveCommunityEditModal(){
   const sb = getSupabase();
   if(!sb || !currentUser){ alert('Sign in first — Settings → Account & Sync.'); return; }
   const desc = $('communityEditDescInput').value.trim();
+  const subject = $('communityEditSubjectSelect').value;
+  const le = $('communityEditLESelect').value;
+  const topic = $('communityEditTopicInput').value.trim();
+  const professor = $('communityEditProfessorInput').value.trim();
   const saveBtn = $('communityEditSaveBtn');
   saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
-  const { error } = await sb.from('community_sets').update({ description: desc || null }).eq('id', communityEditRowId).eq('owner_id', currentUser.id);
+  const { error } = await sb.from('community_sets').update({
+    description: desc || null,
+    subject: subject || null,
+    le: le || null,
+    topic: topic || null,
+    professor: professor || null
+  }).eq('id', communityEditRowId).eq('owner_id', currentUser.id);
   saveBtn.disabled = false; saveBtn.textContent = 'Save';
   if(error){ alert('Could not save: ' + error.message); return; }
   // Persist on the linked local set too, so the next "Update on Community"
   // re-publish (which rebuilds the whole row from the local set) carries
-  // this description forward instead of wiping it back to null.
+  // these forward instead of wiping them back to whatever the local set
+  // still has. Tags mirror the actual local set fields (this also re-files
+  // the set locally if Subject/LE changed); description stays a
+  // Community-only field carried via communityDescription.
   if(communityEditSid){
     const sets = loadSets();
     const s = sets[communityEditSid];
     if(s){
       if(desc) s.communityDescription = desc; else delete s.communityDescription;
+      s.subject = subject;
+      s.le = le;
+      s.topic = topic;
+      if(professor) s.professor = professor; else delete s.professor;
       saveSetsData(sets);
     }
   }
   closeCommunityEditModal();
   renderCommunityMine();
+  applyCommunitySearchFilter();
 }
 
 // bucket for an in-progress quiz that was never saved as a named set
@@ -8395,6 +8450,7 @@ function buildSetRow(sid, s, opts){
   if(opts.showFolderTag && s.subject) tags.push(`<span class="set-tag">${escapeHtml(s.subject)}</span>`);
   if(s.le) tags.push(`<span class="set-tag">LE ${escapeHtml(s.le)}</span>`);
   if(s.topic) tags.push(`<span class="set-tag">Topic ${escapeHtml(s.topic)}</span>`);
+  if(s.professor) tags.push(`<span class="set-tag">👤 ${escapeHtml(s.professor)}</span>`);
   if(cardTypeOf(s) === 'samplex') tags.push(`<span class="set-tag">Samplex</span>`);
   const session = allSessions[sid];
   const inProgress = session && session.current && Array.isArray(session.cards) && session.cards.length;
@@ -9070,6 +9126,7 @@ function loadSetById(id){
   $('setSubjectSelect').value = s.subject || '';
   $('setLESelect').value = s.le || '';
   $('setTopicInput').value = s.topic || '';
+  $('setProfessorInput').value = s.professor || '';
   $('setTypeSelect').value = cardTypeOf(s);
   $('setupError').textContent = '';
   pendingAlgorithm = s.kind === 'algorithm';
@@ -11842,6 +11899,7 @@ $('clearTableBtn').onclick = () => {
   $('setSubjectSelect').value = '';
   $('setLESelect').value = '';
   $('setTopicInput').value = '';
+  $('setProfessorInput').value = '';
   $('setTypeSelect').value = 'topic';
 };
 
@@ -11854,6 +11912,7 @@ $('loadSample').onclick = () => {
   $('setSubjectSelect').value = '';
   $('setLESelect').value = '';
   $('setTopicInput').value = '';
+  $('setProfessorInput').value = '';
   $('setTypeSelect').value = 'topic';
 };
 
@@ -11913,6 +11972,7 @@ $('saveSetBtn').onclick = () => {
   const subject = $('setSubjectSelect').value;
   const le = $('setLESelect').value;
   const topic = $('setTopicInput').value.trim();
+  const professor = $('setProfessorInput').value.trim();
   const cardType = $('setTypeSelect').value === 'samplex' ? 'samplex' : 'topic';
   const sets = loadSets();
   // New sets always get a brand-new id — never silently match an existing
@@ -11927,6 +11987,7 @@ $('saveSetBtn').onclick = () => {
     subject,
     le,
     topic,
+    professor: professor || undefined,
     cardType,
     cards: parsed,
     mode: inputMode,
@@ -11954,6 +12015,7 @@ $('newSetBtn').onclick = () => {
   $('setSubjectSelect').value = '';
   $('setLESelect').value = '';
   $('setTopicInput').value = '';
+  $('setProfessorInput').value = '';
   $('setTypeSelect').value = 'topic';
   $('setupError').textContent = '';
   $('algoTextInput').value = '';
@@ -11971,6 +12033,7 @@ $('trySampleBtn').onclick = () => {
   $('setSubjectSelect').value = '';
   $('setLESelect').value = '';
   $('setTopicInput').value = '';
+  $('setProfessorInput').value = '';
   $('setTypeSelect').value = 'topic';
   $('setupError').textContent = '';
   $('algoTextInput').value = '';
@@ -12009,6 +12072,7 @@ $('newSetInFolderBtn').onclick = () => {
   $('setSubjectSelect').value = currentFolderId !== UNFILED ? currentFolderId : '';
   $('setLESelect').value = (currentFolderMode === 'subject' && currentFolderLE && currentFolderLE !== UNFILED) ? currentFolderLE : '';
   $('setTopicInput').value = '';
+  $('setProfessorInput').value = '';
   $('setTypeSelect').value = currentFolderCardType || 'topic';
   $('setupError').textContent = '';
   $('algoTextInput').value = '';
