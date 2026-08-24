@@ -4453,6 +4453,7 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
       <button class="btn-ghost stats-toggle" id="petToggleBtn" title="Pet" aria-label="Pet">🐶 <span>Pet</span></button>
       <button class="btn-ghost stats-toggle" id="calendarToggleBtn" title="Calendar" aria-label="Calendar">🗓️ <span>Calendar</span></button>
       <button class="btn-ghost stats-toggle" id="communityToggleBtn" title="Community" aria-label="Community">🌐 <span>Community</span><span class="nav-new-dot" id="communityNewDot"></span></button>
+      <button class="btn-ghost stats-toggle" id="profSearchToggleBtn" title="Find questions by Professor/Topic" aria-label="Find questions">🧑‍🏫 <span>Find Qs</span></button>
     </nav>
   </div>
 
@@ -4840,6 +4841,13 @@ OUTCOME: NEG
             <input type="text" id="editTopic" class="modal-input" placeholder="Topic (e.g. Cardiovascular)" style="flex:1; min-width:140px;">
             <input type="text" id="editSubtopic" class="modal-input" placeholder="Subtopic" style="flex:1; min-width:140px;">
           </div>
+          <div class="row" style="gap:8px; flex-wrap:wrap; margin-top:8px; align-items:center;">
+            <input type="text" id="editProfessor" class="modal-input" list="knownProfessorsList" placeholder="Professor (Last Name, F.)" style="flex:1; min-width:160px;">
+            <datalist id="knownProfessorsList"></datalist>
+            <input type="text" id="editYear" class="modal-input" placeholder="Year (e.g. 2023)" inputmode="numeric" style="max-width:110px;">
+            <button type="button" class="btn-ghost" id="applyProfYearToSetBtn" title="Tag every card in this set with this Professor/Year" style="font-size:11.5px; padding:6px 10px; white-space:nowrap;">Apply to whole set</button>
+          </div>
+          <div class="hint" id="applyProfYearHint" style="margin-top:4px; min-height:14px;"></div>
           <div class="row" style="gap:8px; flex-wrap:wrap; margin-top:8px;">
             <select id="editQuestionType" class="modal-input" style="flex:1; min-width:140px;">
               <option value="">Question type (optional)</option>
@@ -5820,6 +5828,57 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Find Questions (search cards by Professor / Topic) ===== -->
+      <div id="profSearchView" class="hidden">
+        <div class="row" style="margin-bottom:14px;">
+          <button class="btn-ghost back-on-photo" id="backFromProfSearchBtn">← Back</button>
+        </div>
+        <div class="community-panel">
+          <div class="community-hero">
+            <div class="community-hero-title">🧑‍🏫 Find Questions</div>
+            <div class="community-hero-sub">Search every tagged Samplex question across all your sets by Professor or Topic — spot patterns in test style, then practice just those questions.</div>
+          </div>
+
+          <div class="community-search-wrap">
+            <span class="community-search-icon">🔎</span>
+            <input type="text" id="profSearchInput" class="modal-input" placeholder="Search professor, topic, or question text…" style="width:100%; max-width:100%;">
+          </div>
+
+          <div class="row" style="gap:8px; margin-top:10px; flex-wrap:wrap;">
+            <select id="profSearchYearSelect" class="modal-input" style="max-width:160px;">
+              <option value="">Any year</option>
+            </select>
+            <button type="button" class="btn-ghost" id="profSearchClearBtn" style="font-size:12px;">Clear filters</button>
+          </div>
+
+          <div class="community-section" style="margin-top:16px; padding-top:16px;">
+            <div class="community-section-title" style="margin-bottom:6px;">👤 Professors</div>
+            <div class="community-filters" id="profSearchProfChips"></div>
+          </div>
+
+          <div class="community-section">
+            <div class="community-section-title" style="margin-bottom:6px;">🏷️ Topics</div>
+            <div class="community-filters" id="profSearchTopicChips"></div>
+          </div>
+
+          <div class="community-section" id="profSearchInsights" style="display:none;">
+            <div class="community-section-title" id="profSearchInsightsTitle">Pattern summary</div>
+            <div class="community-section-sub" id="profSearchInsightsBody" style="margin-top:6px; line-height:1.6;"></div>
+          </div>
+
+          <div class="community-section" style="margin-top:18px; padding-top:18px;">
+            <div class="community-section-head">
+              <div>
+                <div class="community-section-title" id="profSearchResultsHeading">All tagged questions</div>
+                <div class="community-section-sub" id="profSearchResultsStatus"></div>
+              </div>
+              <button type="button" class="btn-primary sm" id="profSearchPracticeAllBtn">▶ Practice these</button>
+            </div>
+            <div id="profSearchResultsList" class="community-list"></div>
           </div>
         </div>
       </div>
@@ -7726,6 +7785,185 @@ function renderCommunityView(){
   markCommunitySeenNow();
 }
 
+// ===== Find Questions: search every tagged card (across every set) by
+// Professor and/or Topic, so patterns in a professor's test style (which
+// topics they favor, which years are covered) become visible, and the
+// matching questions can be practiced together on the spot. =====
+let profSearchFilterProf = '';
+let profSearchFilterTopic = '';
+
+// Every card, deduped and tagged with the set it came from (_srcSetId) —
+// same dedup-by-cardKey approach used by the folder/weak-practice builders
+// above, so a card that's identical across two sets isn't listed twice.
+function getAllTaggedCardsForSearch(){
+  const sets = loadSets();
+  const seenKeys = new Set();
+  const out = [];
+  Object.entries(sets).forEach(([id, s]) => {
+    if(!Array.isArray(s.cards)) return;
+    s.cards.forEach(c => {
+      const k = cardKey(c);
+      if(seenKeys.has(k)) return;
+      seenKeys.add(k);
+      c._srcSetId = id;
+      c._srcSetName = s.name;
+      c._srcSubject = s.subject || '';
+      out.push(c);
+    });
+  });
+  return out;
+}
+
+function profSearchMatches(){
+  const q = ($('profSearchInput').value || '').trim().toLowerCase();
+  const yr = $('profSearchYearSelect').value;
+  return getAllTaggedCardsForSearch().filter(c => {
+    if(!c.professor && !c.topic && !q) return false; // untagged noise stays out of the browse-everything view
+    if(profSearchFilterProf && (c.professor || '') !== profSearchFilterProf) return false;
+    if(profSearchFilterTopic && (c.topic || '') !== profSearchFilterTopic) return false;
+    if(yr && (c.year || '') !== yr) return false;
+    if(q){
+      const hay = [c.professor, c.topic, c.subtopic, c.front].filter(Boolean).join(' ').toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function renderProfSearchChips(){
+  const all = getAllTaggedCardsForSearch();
+  const profCounts = new Map(), topicCounts = new Map();
+  all.forEach(c => {
+    if(c.professor) profCounts.set(c.professor, (profCounts.get(c.professor) || 0) + 1);
+    if(c.topic) topicCounts.set(c.topic, (topicCounts.get(c.topic) || 0) + 1);
+  });
+  const profBox = $('profSearchProfChips');
+  profBox.innerHTML = '';
+  if(profCounts.size === 0){
+    profBox.innerHTML = '<span class="community-section-sub">No questions tagged with a Professor yet — open a question during a quiz, tap ✏️, and fill in the Professor field.</span>';
+  } else {
+    Array.from(profCounts.entries()).sort((a,b) => b[1]-a[1]).forEach(([name, n]) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'community-chip' + (profSearchFilterProf === name ? ' active' : '');
+      chip.textContent = `${name} (${n})`;
+      chip.onclick = () => { profSearchFilterProf = (profSearchFilterProf === name) ? '' : name; renderProfSearchView(); };
+      profBox.appendChild(chip);
+    });
+  }
+  const topicBox = $('profSearchTopicChips');
+  topicBox.innerHTML = '';
+  if(topicCounts.size === 0){
+    topicBox.innerHTML = '<span class="community-section-sub">No questions tagged with a Topic yet.</span>';
+  } else {
+    Array.from(topicCounts.entries()).sort((a,b) => b[1]-a[1]).forEach(([name, n]) => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'community-chip' + (profSearchFilterTopic === name ? ' active' : '');
+      chip.textContent = `${name} (${n})`;
+      chip.onclick = () => { profSearchFilterTopic = (profSearchFilterTopic === name) ? '' : name; renderProfSearchView(); };
+      topicBox.appendChild(chip);
+    });
+  }
+  // Year dropdown, rebuilt from whatever years are actually in use.
+  const yearSel = $('profSearchYearSelect');
+  const curYear = yearSel.value;
+  const years = Array.from(new Set(all.map(c => c.year).filter(Boolean))).sort().reverse();
+  yearSel.innerHTML = '<option value="">Any year</option>' + years.map(y => `<option value="${escapeHtml(y)}">${escapeHtml(y)}</option>`).join('');
+  yearSel.value = years.includes(curYear) ? curYear : '';
+}
+
+function renderProfSearchInsights(matches){
+  const box = $('profSearchInsights');
+  if(!profSearchFilterProf){ box.style.display = 'none'; return; }
+  box.style.display = '';
+  $('profSearchInsightsTitle').textContent = `📊 ${profSearchFilterProf}'s pattern`;
+  const topicCounts = new Map(), yearSet = new Set();
+  matches.forEach(c => {
+    if(c.topic) topicCounts.set(c.topic, (topicCounts.get(c.topic) || 0) + 1);
+    if(c.year) yearSet.add(c.year);
+  });
+  const topTopics = Array.from(topicCounts.entries()).sort((a,b) => b[1]-a[1]).slice(0,5)
+    .map(([t,n]) => `${escapeHtml(t)} (${n})`).join(', ') || '—';
+  const yearsStr = Array.from(yearSet).sort().join(', ') || '—';
+  $('profSearchInsightsBody').innerHTML =
+    `<strong>${matches.length}</strong> question${matches.length===1?'':'s'} tagged so far · Years seen: ${escapeHtml(yearsStr)}<br>Most-tested topics: ${topTopics}`;
+}
+
+function renderProfSearchResults(matches){
+  const list = $('profSearchResultsList');
+  list.innerHTML = '';
+  $('profSearchResultsStatus').textContent = matches.length
+    ? `${matches.length} matching question${matches.length===1?'':'s'}`
+    : 'No matching questions.';
+  $('profSearchResultsHeading').textContent = (profSearchFilterProf || profSearchFilterTopic || $('profSearchInput').value.trim())
+    ? 'Matching questions' : 'All tagged questions';
+  $('profSearchPracticeAllBtn').disabled = matches.length === 0;
+  if(matches.length === 0){
+    const empty = document.createElement('div');
+    empty.className = 'community-empty';
+    empty.innerHTML = `<div class="community-empty-icon">🔎</div>No questions match yet. Tag a few more via the ✏️ editor during a quiz, or adjust filters.`;
+    list.appendChild(empty);
+    return;
+  }
+  matches.slice(0, 200).forEach(c => {
+    const row = document.createElement('div');
+    row.className = 'community-set-card';
+    const subjColor = c._srcSubject ? subjectColor(c._srcSubject) : null;
+    if(subjColor) row.style.setProperty('--subject-accent', subjColor);
+    const tags = [
+      c.professor ? `<span class="community-set-tag">👤 ${escapeHtml(c.professor)}</span>` : '',
+      c.year ? `<span class="community-set-tag">📅 ${escapeHtml(c.year)}</span>` : '',
+      c.topic ? `<span class="community-set-tag">🏷️ ${escapeHtml(c.topic)}</span>` : '',
+      c._srcSetName ? `<span class="community-set-tag">${escapeHtml(c._srcSetName)}</span>` : ''
+    ].join('');
+    row.innerHTML = `
+      <div class="community-set-main">
+        <div class="community-set-title" style="font-weight:700; font-size:13.5px;">${escapeHtml((c.front||'').slice(0,160))}${(c.front||'').length>160?'…':''}</div>
+        <div class="community-set-meta">${tags}</div>
+      </div>
+      <div class="community-set-actions">
+        <button type="button" class="community-icon-btn" title="Practice just this question">▶</button>
+      </div>`;
+    row.querySelector('.community-icon-btn').onclick = () => launchQuiz([c], PRACTICE_ID);
+    list.appendChild(row);
+  });
+}
+
+function renderProfSearchView(){
+  renderProfSearchChips();
+  const matches = profSearchMatches();
+  renderProfSearchInsights(matches);
+  renderProfSearchResults(matches);
+}
+
+function initProfSearchUI(){
+  $('profSearchToggleBtn').onclick = () => {
+    saveBeforeNavigation(); hideAllScreens(); $('profSearchView').classList.remove('hidden');
+    profSearchFilterProf = ''; profSearchFilterTopic = '';
+    $('profSearchInput').value = '';
+    renderProfSearchView();
+  };
+  $('backFromProfSearchBtn').onclick = () => { $('profSearchView').classList.add('hidden'); showLanding(); };
+  let profSearchDebounce;
+  $('profSearchInput').addEventListener('input', () => {
+    clearTimeout(profSearchDebounce);
+    profSearchDebounce = setTimeout(renderProfSearchView, 150);
+  });
+  $('profSearchYearSelect').addEventListener('change', renderProfSearchView);
+  $('profSearchClearBtn').onclick = () => {
+    profSearchFilterProf = ''; profSearchFilterTopic = '';
+    $('profSearchInput').value = '';
+    $('profSearchYearSelect').value = '';
+    renderProfSearchView();
+  };
+  $('profSearchPracticeAllBtn').onclick = () => {
+    const matches = profSearchMatches();
+    if(matches.length === 0) return;
+    launchQuiz(matches.slice(0, 200), PRACTICE_ID);
+  };
+}
+
 function initCommunityUI(){
   $('communityToggleBtn').onclick = () => {
     saveBeforeNavigation(); hideAllScreens(); $('communityView').classList.remove('hidden');
@@ -7910,7 +8148,7 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pagehide', saveBeforeNavigation);
 
 function hideAllScreens(){
-  ['landing','folderView','setup','quiz','caseGame','brainBreak','results','statsView','settingsView','petView','calendarView','communityView'].forEach(id => {
+  ['landing','folderView','setup','quiz','caseGame','brainBreak','results','statsView','settingsView','petView','calendarView','communityView','profSearchView'].forEach(id => {
     const el = $(id);
     if(el) el.classList.add('hidden');
   });
@@ -12099,6 +12337,7 @@ initAppDataStorage().then(() => {
 });
 initAccountSettingsUI();
 initCommunityUI();
+initProfSearchUI();
 initCloudSync();
 
 $('homeBtn').onclick = () => {
@@ -13381,6 +13620,10 @@ function openCardEditor(){
   $('editTip').value = current.tip || '';
   $('editTopic').value = current.topic || '';
   $('editSubtopic').value = current.subtopic || '';
+  $('editProfessor').value = current.professor || '';
+  $('editYear').value = current.year || '';
+  $('applyProfYearHint').textContent = '';
+  populateKnownProfessorsList();
   $('editQuestionType').value = current.questionType || '';
   $('editDifficulty').value = current.difficulty || '';
   $('editHighYield').checked = current.highYield === true;
@@ -13444,6 +13687,8 @@ $('saveCardEditBtn').onclick = () => {
   const newTip = $('editTip').value;
   const newTopic = $('editTopic').value.trim();
   const newSubtopic = $('editSubtopic').value.trim();
+  const newProfessor = $('editProfessor').value.trim();
+  const newYear = $('editYear').value.trim();
   const newQuestionType = $('editQuestionType').value;
   const newDifficulty = $('editDifficulty').value;
   const newHighYield = $('editHighYield').checked;
@@ -13496,6 +13741,8 @@ $('saveCardEditBtn').onclick = () => {
   current.rationale = newTip;
   current.topic = newTopic || undefined;
   current.subtopic = newSubtopic || undefined;
+  current.professor = newProfessor || undefined;
+  current.year = newYear || undefined;
   current.questionType = newQuestionType || undefined;
   current.difficulty = newDifficulty || undefined;
   current.highYield = newHighYield || undefined;
@@ -13548,6 +13795,8 @@ $('saveCardEditBtn').onclick = () => {
         s.cards[idx].rationale = newTip;
         s.cards[idx].topic = newTopic || undefined;
         s.cards[idx].subtopic = newSubtopic || undefined;
+        s.cards[idx].professor = newProfessor || undefined;
+        s.cards[idx].year = newYear || undefined;
         s.cards[idx].questionType = newQuestionType || undefined;
         s.cards[idx].difficulty = newDifficulty || undefined;
         s.cards[idx].highYield = newHighYield || undefined;
@@ -13562,6 +13811,52 @@ $('saveCardEditBtn').onclick = () => {
   closeCardEditor();
   showCard(); // re-render with the edited question/answer/tip, and rebuild
               // the answer options so they stay in sync with the new answer
+};
+
+// Suggests existing Professor tags (from every card in every set) in the
+// editor's datalist, so re-tagging more questions from the same professor
+// stays consistent (e.g. always "Dela Cruz, J." rather than drifting into
+// slightly different spellings) instead of retyping/mis-formatting it.
+function populateKnownProfessorsList(){
+  const dl = $('knownProfessorsList');
+  if(!dl) return;
+  const names = new Set();
+  Object.values(loadSets()).forEach(s => (s.cards || []).forEach(c => { if(c.professor) names.add(c.professor); }));
+  dl.innerHTML = Array.from(names).sort().map(n => `<option value="${escapeHtml(n)}"></option>`).join('');
+}
+
+// One-tap bulk tag: Samplex sets are usually one whole exam from a single
+// professor/year, so tagging every question in the set individually via
+// this same editor would be tedious. This stamps the Professor/Year fields
+// currently typed into the editor onto every card in the active real set
+// (not a practice-round bucket, which has no single set of its own).
+$('applyProfYearToSetBtn').onclick = () => {
+  const prof = $('editProfessor').value.trim();
+  const yr = $('editYear').value.trim();
+  const hint = $('applyProfYearHint');
+  if(!prof && !yr){ hint.textContent = 'Type a Professor and/or Year first.'; return; }
+  const targetSetId = (activeSetId === PRACTICE_ID) ? current._srcSetId : activeSetId;
+  if(!targetSetId){ hint.textContent = "Can't find this card's set to bulk-tag."; return; }
+  const setsData = loadSets();
+  const s = setsData[targetSetId];
+  if(!s || !Array.isArray(s.cards)){ hint.textContent = "Can't find this card's set to bulk-tag."; return; }
+  s.cards.forEach(c => {
+    if(prof) c.professor = prof;
+    if(yr) c.year = yr;
+  });
+  saveSetsData(setsData);
+  // Keep the in-memory session's cards in sync too, so it's reflected
+  // immediately without needing to reload the set.
+  if(Array.isArray(cards)){
+    cards.forEach(c => {
+      if(c.id){
+        const match = s.cards.find(sc => sc.id === c.id);
+        if(match){ if(prof) c.professor = prof; if(yr) c.year = yr; }
+      }
+    });
+  }
+  hint.textContent = `Tagged all ${s.cards.length} cards in "${s.name}".`;
+  populateKnownProfessorsList();
 };
 
 function showCard(restoreOptions){
