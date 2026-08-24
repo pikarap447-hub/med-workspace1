@@ -4334,6 +4334,13 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
 .community-chip:hover{border-color:var(--tile-blue-mid);}
 .community-chip.active{background:var(--tile-blue-mid); border-color:var(--tile-blue-mid); color:#fff;}
 .community-list{display:flex; flex-direction:column; gap:10px; margin-top:14px;}
+.community-pagination{display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-top:16px; padding-top:14px; border-top:1px solid var(--border, rgba(255,255,255,.12));}
+.community-pagination:empty{display:none;}
+.community-pagination-size{display:flex; align-items:center; gap:8px; font-size:13px; opacity:.85;}
+.community-pagination-size select{padding:4px 8px; border-radius:8px; border:1px solid var(--border, rgba(255,255,255,.2)); background:var(--card-bg, rgba(0,0,0,.25)); color:inherit;}
+.community-pagination-nav{display:flex; align-items:center; gap:10px; font-size:13px;}
+.community-pagination-nav button{padding:5px 12px; border-radius:8px; border:1px solid var(--border, rgba(255,255,255,.2)); background:var(--card-bg, rgba(0,0,0,.25)); color:inherit; cursor:pointer;}
+.community-pagination-nav button:disabled{opacity:.4; cursor:default;}
 .community-set-card{
   background:var(--bg); border:1.5px solid var(--border); border-left:5px solid var(--subject-accent, var(--border)); border-radius:16px;
   padding:16px; display:flex; align-items:flex-start; justify-content:space-between; gap:16px;
@@ -5734,6 +5741,7 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
                 </div>
               </div>
               <div id="communityBrowseList" class="community-list"></div>
+              <div id="communityPagination" class="community-pagination"></div>
             </div>
 
             <div class="community-section">
@@ -6931,6 +6939,8 @@ async function renderCommunityMine(){
 
 let communityActiveSubject = null; // null = "All"
 let communitySortMode = 'trending';
+let communityPageSize = 3;   // sets shown per page; 'all' shows everything
+let communityCurrentPage = 1;
 let communityPreviewId = null;
 let communityInteractionCache = {liked:new Set(), saved:new Set()};
 
@@ -6960,6 +6970,7 @@ function renderCommunitySubjectFilters(){
   wrap.querySelectorAll('.community-chip').forEach(btn => {
     btn.addEventListener('click', () => {
       communityActiveSubject = btn.dataset.subject || null;
+      communityCurrentPage = 1;
       renderCommunitySubjectFilters();
       applyCommunitySearchFilter();
     });
@@ -6992,6 +7003,7 @@ async function renderCommunityBrowse(){
     .limit(150);
   if(error){ statusEl.textContent = 'Could not load community sets: ' + error.message; return; }
   communityBrowseCache = data || [];
+  communityCurrentPage = 1;
   await loadCommunityInteractions(communityBrowseCache.map(r => r.id));
   renderCommunitySubjectFilters();
   applyCommunitySearchFilter();
@@ -7387,10 +7399,48 @@ function applyCommunitySearchFilter(){
   if(!rows.length){
     listEl.innerHTML = `<div class="community-empty"><div class="community-empty-icon">🌱</div>${communityBrowseCache.length ? 'No matches — try a different search or filter.' : 'No community sets yet — be the first to publish one!'}</div>`;
     statusEl.textContent = communityBrowseCache.length ? '0 matches' : '';
+    renderCommunityPagination(0);
     return;
   }
   statusEl.textContent = `${rows.length} set${rows.length===1?'':'s'}`;
-  rows.forEach(r => listEl.appendChild(renderCommunityCard(r)));
+
+  const pageSize = communityPageSize === 'all' ? rows.length : communityPageSize;
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  if(communityCurrentPage > totalPages) communityCurrentPage = totalPages;
+  if(communityCurrentPage < 1) communityCurrentPage = 1;
+  const start = (communityCurrentPage - 1) * pageSize;
+  const pageRows = rows.slice(start, start + pageSize);
+
+  pageRows.forEach(r => listEl.appendChild(renderCommunityCard(r)));
+  renderCommunityPagination(rows.length, totalPages);
+}
+
+function renderCommunityPagination(totalCount, totalPages){
+  const el = $('communityPagination');
+  if(!el) return;
+  if(!totalCount){ el.innerHTML = ''; return; }
+  const sizes = [3, 6, 10, 20];
+  const sizeOptions = sizes.map(n => `<option value="${n}"${communityPageSize===n?' selected':''}>${n}</option>`).join('') +
+    `<option value="all"${communityPageSize==='all'?' selected':''}>All</option>`;
+  el.innerHTML = `
+    <div class="community-pagination-size">
+      <span>Show</span>
+      <select id="communityPageSizeSelect">${sizeOptions}</select>
+      <span>at a time</span>
+    </div>
+    <div class="community-pagination-nav">
+      <button type="button" id="communityPagePrev"${communityCurrentPage<=1?' disabled':''}>← Prev</button>
+      <span>Page ${communityCurrentPage} of ${totalPages}</span>
+      <button type="button" id="communityPageNext"${communityCurrentPage>=totalPages?' disabled':''}>Next →</button>
+    </div>`;
+  $('communityPageSizeSelect').addEventListener('change', e => {
+    communityPageSize = e.target.value === 'all' ? 'all' : Number(e.target.value);
+    communityCurrentPage = 1;
+    applyCommunitySearchFilter();
+  });
+  const prevBtn = $('communityPagePrev'), nextBtn = $('communityPageNext');
+  if(prevBtn) prevBtn.addEventListener('click', () => { communityCurrentPage--; applyCommunitySearchFilter(); el.scrollIntoView({block:'nearest'}); });
+  if(nextBtn) nextBtn.addEventListener('click', () => { communityCurrentPage++; applyCommunitySearchFilter(); el.scrollIntoView({block:'nearest'}); });
 }
 
 function updateCommunityCachedRow(id, patch){
@@ -7659,11 +7709,12 @@ function initCommunityUI(){
   let searchDebounce;
   $('communitySearchInput').addEventListener('input', () => {
     clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(applyCommunitySearchFilter, 150);
+    searchDebounce = setTimeout(() => { communityCurrentPage = 1; applyCommunitySearchFilter(); }, 150);
   });
   document.querySelectorAll('#communityBrowseTabs .community-tab').forEach(btn => {
     btn.addEventListener('click', () => {
       communitySortMode = btn.dataset.sort || 'trending';
+      communityCurrentPage = 1;
       document.querySelectorAll('#communityBrowseTabs .community-tab').forEach(b => b.classList.toggle('active', b === btn));
       applyCommunitySearchFilter();
     });
