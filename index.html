@@ -1004,6 +1004,22 @@ transition:background var(--transition-normal), color var(--transition-normal), 
   .btn-primary:active{transform:scale(.97);}
   .btn-ghost{background:transparent; color:var(--tile-blue); border:1.5px solid var(--tile-blue-pale);}
   .btn-ghost:hover{background:var(--primary-soft); border-color:var(--tile-blue-mid);}
+  /* Back buttons on screens (Calendar, Community) that sit directly on the
+     app's background photo rather than inside an opaque card — plain
+     .btn-ghost's transparent fill + pale-blue text can vanish entirely
+     against a busy or light photo, since there's nothing behind it but the
+     image. This gives it its own solid, theme-aware backing (+ blur, for
+     photos showing through any edge anti-aliasing) so it stays legible no
+     matter what background the person has set. */
+  .back-on-photo{
+    background:var(--surface);
+    color:var(--ink);
+    border:1.5px solid var(--border);
+    box-shadow:var(--shadow-sm);
+    backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px);
+  }
+  .back-on-photo:hover{background:var(--surface); border-color:var(--tile-blue-mid);}
   .btn-sample{background:none; border:none; color:var(--tile-blue-deep); text-decoration:underline; font-weight:600; font-size:13px; padding:0; cursor:pointer;}
 
   .input-tabs{display:flex; gap:4px; background:var(--tile-blue-paler); border:1px solid var(--tile-blue-pale); border-radius:12px; padding:4px; margin-bottom:14px;}
@@ -13839,7 +13855,8 @@ function finishQuiz(){
   const headlineEl = $('resultHeadline');
   if(headlineEl){
     let headline;
-    if(pct === 100) headline = 'Perfect run! 🎉';
+    if(pct === 100 && missedSet.size === 0) headline = 'Perfect run! 🎉';
+    else if(pct === 100) headline = 'All mastered — nice recovery!';
     else if(pct >= 80) headline = 'Great work!';
     else if(pct >= 50) headline = 'Solid progress.';
     else headline = 'Keep going — every rep helps.';
