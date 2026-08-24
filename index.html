@@ -4724,7 +4724,7 @@ OUTCOME: NEG
           <div id="samplexPromptWrap" class="hidden">
             <label class="field-label" style="margin-top:14px;">Don't have questions typed up yet?</label>
             <div class="hint" style="margin-top:0;">
-              Copy a ready-made prompt to paste into ChatGPT, Claude, or any LLM, along with your source material (notes, a past exam, a textbook chapter) — it explains the exact Samplex table format to use. Export/paste the LLM's reply into an Excel sheet (or Google Sheets) first, then copy the rows from there into the grid below — pasting straight from the chat window can garble rows whenever a tip or rationale itself contains a "|" character or a line break.
+              Copy a ready-made prompt to paste into ChatGPT, Claude, or any LLM, along with your source material (notes, a past exam, a textbook chapter) — edit the "X" to how many cards you want, then paste it in. It asks the LLM to hand back an actual Excel (.xlsx) file (not a markdown table) in the exact Samplex column format. Open that file and copy the rows from there into the grid below — pasting straight from the chat window can garble rows whenever a tip or rationale itself contains a "|" character or a line break.
             </div>
             <input type="text" class="text-field" id="samplexPromptTopic" placeholder="Describe the subject/source material here (or paste/attach it directly to the LLM)">
             <div class="row" style="justify-content:flex-start; margin-top:10px;">
@@ -11453,15 +11453,16 @@ $('copyAlgoPromptBtn').onclick = async () => {
 };
 
 /* ---- Master prompt users can paste into any LLM to generate a Samplex
-   table — columns match COLS_SAMPLEX below. The LLM's raw markdown-table
-   reply CAN be pasted directly into the grid (onCellPaste's markdown-table
-   support), but that parser splits naively on "|", so any tip/rationale
-   that itself contains a "|" or a line break silently misaligns the row.
-   The instructions below tell the person to stage the reply in an actual
-   Excel sheet first and copy from there instead, which is both a clean
-   tab-delimited paste (parseClipboardGrid) and a chance to eyeball the
-   rows before they land in the grid. ---- */
-const SAMPLEX_LLM_PROMPT_TEMPLATE = `Please output the results as a Markdown table using exactly these columns: Front | A | B | C | D | Answer (A-D) | Exam Tip A | Exam Tip B | Exam Tip C | Exam Tip D | Rationale
+   table — columns match COLS_SAMPLEX below. Rather than asking for a
+   markdown table (which then has to be staged in Excel by hand before it's
+   safe to paste into the grid — the markdown parser splits naively on "|",
+   so any tip/rationale that itself contains a "|" or a line break used to
+   silently misalign the row), the prompt now asks the LLM to produce the
+   Excel (.xlsx) file directly. That's a clean, already-tab-delimited source
+   to copy rows from into the grid below, and skips the manual export step.
+   The leading "X" is a literal placeholder — the person edits it to the
+   number of cards they want before copying the prompt. ---- */
+const SAMPLEX_LLM_PROMPT_TEMPLATE = `Please generate X flashcards/questions from the source material below and output them as an actual Excel (.xlsx) file for me to download — not a markdown table, not plain text — using exactly these columns, in this order: Front | A | B | C | D | Answer (A-D) | Exam Tip A | Exam Tip B | Exam Tip C | Exam Tip D | Rationale
 
 Strict Content Rules:
 
@@ -11471,9 +11472,7 @@ Strict Content Rules:
 4. Exam Tips (A-D): Must be high-yield. Provide a specific, testable fact, mnemonic, or key distinguishing clinical feature for that specific option. CRITICAL: Do not just repeat the option text, and do not just say "This is incorrect because...".
 5. Rationale: Must be high-yield. Explain the underlying core concept, mechanism, or clinical reasoning behind the question. CRITICAL: Do not simply restate the correct answer. Focus on why it is correct and the broad takeaway.
 
-Output ONLY the markdown table. No preamble, no commentary, no code fences around it.
-
-After you produce the table, I will paste it into an Excel sheet (one column per "|"-separated field) and copy the finished rows from there — so keep every field's text free of unnecessary "|" characters and line breaks so nothing crosses into the wrong column.
+Give me the Excel file itself (one row per card, header row with the column names above) — no markdown table, no preamble, no commentary. Keep every field's text free of unnecessary "|" characters and line breaks.
 
 ===== SOURCE MATERIAL / TOPIC =====
 
@@ -11486,7 +11485,7 @@ $('copySamplexPromptBtn').onclick = async () => {
   const statusEl = $('samplexPromptStatus');
   try{
     await navigator.clipboard.writeText(text);
-    statusEl.textContent = '✓ Prompt copied — paste it into ChatGPT, Claude, or any LLM. Then export/paste its reply into an Excel sheet and copy the rows from there into the grid below.';
+    statusEl.textContent = '✓ Prompt copied — paste it into ChatGPT, Claude, or any LLM (edit the "X" to how many cards you want first). Open the Excel file it gives you and copy the rows from there into the grid below.';
     statusEl.style.color = 'var(--green)';
   }catch(e){
     window.prompt('Copy this prompt:', text);
