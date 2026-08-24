@@ -8190,7 +8190,7 @@ const SUBJECT_TAB_COLORS = ['#7A4E9E','#3E7A5C','#C9A24E','#B5493E','#4A7A9E','#
 // explicitly for guaranteed-distinct colors; anything else (e.g. an
 // imported set with a custom subject, or an LE number) falls back to a hash
 // of the string.
-const SUBJECT_COLOR_MAP = {PED2:'#B5493E', PSY2:'#9E6B4E', LEG:'#C9A24E', OB:'#7A4E9E', OPT:'#3F8A82', MED2:'#4A7A9E', NEU2:'#A85C7A', SUR2:'#3E7A5C', GYN:'#CD2678', ORL:'#2C6AE7', CPT:'#6233C1', CMD:'#622A0F'};
+const SUBJECT_COLOR_MAP = {MED2:'#6aa84f', SUR2:'#2bbf86', PED2:'#f1cc1a', NEU2:'#c01d1d', PSY2:'#e57b45', OB:'#cd2678', GYN:'#cd2678', ORL:'#2c6ae7', OPT:'#2c6ae7', CPT:'#6233c1', CMD:'#622a0f', LEG:'#d4961a'};
 function subjectColor(id){
   if(SUBJECT_COLOR_MAP[id]) return SUBJECT_COLOR_MAP[id];
   let hash = 5381;
