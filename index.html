@@ -4335,10 +4335,12 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
 .community-chip.active{background:var(--tile-blue-mid); border-color:var(--tile-blue-mid); color:#fff;}
 .community-list{display:flex; flex-direction:column; gap:10px; margin-top:14px;}
 .community-set-card{
-  background:var(--bg); border:1.5px solid var(--border); border-radius:16px;
+  background:var(--bg); border:1.5px solid var(--border); border-left:5px solid var(--subject-accent, var(--border)); border-radius:16px;
   padding:16px; display:flex; align-items:flex-start; justify-content:space-between; gap:16px;
   transition:transform .15s, box-shadow .15s, border-color .15s;
 }
+.community-set-tag.subject-tag{color:#fff; border:none;}
+.community-chip .subject-dot{display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle;}
 .community-set-card:hover{transform:translateY(-1px); box-shadow:var(--shadow-sm); border-color:var(--tile-blue-pale);}
 .community-set-main{min-width:0; flex:1;}
 .community-set-title{font-weight:800; font-size:15px; color:var(--text); line-height:1.25;}
@@ -6953,7 +6955,7 @@ function renderCommunitySubjectFilters(){
   if(!wrap) return;
   const subjects = [...new Set(communityBrowseCache.map(r => r.subject).filter(Boolean))].sort();
   if(!subjects.length){ wrap.innerHTML = ''; return; }
-  const chip = (label, value) => `<button type="button" class="community-chip${communityActiveSubject === value ? ' active' : ''}" data-subject="${value === null ? '' : escapeHtml(value)}">${escapeHtml(label)}</button>`;
+  const chip = (label, value) => `<button type="button" class="community-chip${communityActiveSubject === value ? ' active' : ''}" data-subject="${value === null ? '' : escapeHtml(value)}">${value ? `<span class="subject-dot" style="background:${subjectColor(value)}"></span>` : ''}${escapeHtml(label)}</button>`;
   wrap.innerHTML = chip('All subjects', null) + subjects.map(s => chip(s, s)).join('');
   wrap.querySelectorAll('.community-chip').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -7331,7 +7333,9 @@ function renderCommunityCard(r){
   const liked = communityInteractionCache.liked.has(r.id);
   const saved = communityInteractionCache.saved.has(r.id);
   const cardTypeLabel = r.card_type === 'samplex' ? 'Samplex' : (r.card_type === 'topic' ? 'Topic Cards' : r.card_type);
-  const tags = [r.le ? `LE ${r.le}` : null, cardTypeLabel, r.subject, r.topic, r.kind === 'algorithm' ? 'Algorithm' : null].filter(Boolean).slice(0,4).map(t => `<span class="community-set-tag">${escapeHtml(t)}</span>`).join('');
+  const subjColor = r.subject ? subjectColor(r.subject) : null;
+  const subjectTag = r.subject ? `<span class="community-set-tag subject-tag" style="background:${subjColor}">${escapeHtml(r.subject)}</span>` : '';
+  const tags = subjectTag + [r.le ? `LE ${r.le}` : null, cardTypeLabel, r.topic, r.kind === 'algorithm' ? 'Algorithm' : null].filter(Boolean).slice(0,3).map(t => `<span class="community-set-tag">${escapeHtml(t)}</span>`).join('');
   const uploadedLabel = r.created_at ? new Date(r.created_at).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : null;
   // "Edited" only shows once the gap between created_at and updated_at is
   // large enough to be a real, later edit rather than noise from whatever
@@ -7341,6 +7345,7 @@ function renderCommunityCard(r){
   const editedLabel = wasEdited ? new Date(r.updated_at).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : null;
   const div = document.createElement('div');
   div.className = 'community-set-card';
+  if(subjColor) div.style.setProperty('--subject-accent', subjColor);
   div.innerHTML = `
     <div class="community-set-main">
       <div class="community-set-title">${escapeHtml(r.title || 'Untitled set')}</div>
