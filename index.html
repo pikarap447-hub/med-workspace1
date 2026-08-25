@@ -6468,6 +6468,37 @@ function getSupabase(){
 let currentUser = null; // the Supabase auth user, or null when signed out
 let currentAccessToken = null; // kept in sync with currentUser so a keepalive fetch (see flushSyncQueueKeepalive) never has to await an async session lookup while the page is backgrounding
 
+// ---- Egress diagnostics (dev-only, off by default) ----
+// Not meant for production users — it's a way to see, from the browser
+// console, which operation categories are actually pulling data down.
+// Enable from the console with:  localStorage.setItem('topicReview_egressDebug','1')
+// then reload; disable the same way with '0' (or just clear the key).
+// Nothing here is sent anywhere or shown in the UI — it's console.table only.
+let _egressDebugOn = null;
+function egressDebugEnabled(){
+  if(_egressDebugOn === null){
+    try{ _egressDebugOn = localStorage.getItem('topicReview_egressDebug') === '1'; }
+    catch(e){ _egressDebugOn = false; }
+  }
+  return _egressDebugOn;
+}
+const _egressLog = [];
+function logEgress(category, table, op, meta){
+  if(!egressDebugEnabled()) return;
+  const entry = {t: new Date().toISOString().slice(11,19), category, table, op, ...meta};
+  _egressLog.push(entry);
+  if(_egressLog.length > 500) _egressLog.shift();
+  console.log('[egress]', category, table, op, meta || '');
+}
+// Call from the console: topicReviewEgressReport()
+window.topicReviewEgressReport = function(){
+  if(!egressDebugEnabled()){ console.log('Egress debug is off. Enable with localStorage.setItem(\'topicReview_egressDebug\',\'1\') and reload.'); return; }
+  console.table(_egressLog);
+  const byCategory = {};
+  _egressLog.forEach(e => { byCategory[e.category] = (byCategory[e.category]||0) + 1; });
+  console.log('Calls by category:', byCategory);
+};
+
 // ---- Offline sync queue (IndexedDB) ----
 // One pending entry per data_key, so re-saving the same key while offline
 // just overwrites the pending entry rather than piling up duplicate work.
@@ -6733,6 +6764,7 @@ async function uploadKey(key){
     data_key: key,
     data: parsed
   }, { onConflict: 'user_id,data_key' }).select('updated_at').single();
+  logEgress('SYNC_UPLOAD', 'user_app_data', 'upsert', {key});
   if(error){ console.error('Cloud upload failed for', key, error); return false; }
   if(data && data.updated_at){
     appDataUpdatedAt[key] = data.updated_at;
@@ -6754,47 +6786,85 @@ async function uploadKey(key){
 //   to do.
 // `queuedKeys` is an optional Set from a single getQueuedSyncKeys() call so
 // fullSync() doesn't re-query IndexedDB once per key.
-async function downloadAndMergeKey(key, queuedKeys){
+// Cheap check: just the server timestamp for one key, never the (possibly
+// large) data payload. Returns: an ISO string if a cloud row exists, null
+// if there's no cloud row yet, or undefined if the check itself failed
+// (network/API error) — callers treat undefined as "couldn't tell".
+async function fetchCloudUpdatedAt(key){
   const sb = getSupabase();
-  if(!sb || !currentUser) return;
-  const isQueued = queuedKeys ? queuedKeys.has(key) : (await getQueuedSyncKeys()).includes(key);
-  if(isQueued){
-    const { data, error } = await sb.from('user_app_data')
-      .select('data, updated_at')
-      .eq('user_id', currentUser.id)
-      .eq('data_key', key)
-      .maybeSingle();
-    if(error){ console.error('Cloud check failed for', key, error); await uploadKey(key); return; } // can't tell if there's a conflict; fall back to the old "local wins" behavior rather than blocking the upload
-    const baseline = appDataLastSyncedAt[key] ? new Date(appDataLastSyncedAt[key]).getTime() : 0;
-    const cloudTime = data ? new Date(data.updated_at).getTime() : 0;
-    if(data && cloudTime > baseline){
-      // The cloud moved since we last actually confirmed our state with it,
-      // AND we have our own unsynced local edit sitting in the queue — that's
-      // two devices having genuinely diverged, not just "we haven't synced
-      // yet." Merge both sides instead of one clobbering the other.
-      await mergeSyncConflict(key, getLocalSyncValue(key), data.data);
-    }
-    await uploadKey(key);
-    return;
-  }
+  if(!sb || !currentUser) return undefined;
+  const { data, error } = await sb.from('user_app_data')
+    .select('updated_at')
+    .eq('user_id', currentUser.id)
+    .eq('data_key', key)
+    .maybeSingle();
+  logEgress('SYNC_CHECK', 'user_app_data', 'timestamp-only', {key});
+  if(error){ console.error('Cloud timestamp check failed for', key, error); return undefined; }
+  return data ? data.updated_at : null;
+}
+// The actual (potentially large) payload for one key — only ever called
+// once fetchCloudUpdatedAt() above has already shown the cloud copy is
+// newer than what we know about, so this never runs "just to see".
+async function fetchCloudValue(key){
+  const sb = getSupabase();
+  if(!sb || !currentUser) return null;
   const { data, error } = await sb.from('user_app_data')
     .select('data, updated_at')
     .eq('user_id', currentUser.id)
     .eq('data_key', key)
     .maybeSingle();
-  if(error){ console.error('Cloud download failed for', key, error); return; }
-  if(!data){
+  logEgress('SYNC_DOWNLOAD', 'user_app_data', 'full-value', {key});
+  if(error){ console.error('Cloud download failed for', key, error); return null; }
+  return data;
+}
+async function downloadAndMergeKey(key, queuedKeys){
+  const sb = getSupabase();
+  if(!sb || !currentUser) return;
+  const isQueued = queuedKeys ? queuedKeys.has(key) : (await getQueuedSyncKeys()).includes(key);
+  if(isQueued){
+    // Cheap check first: do we even need to look at the cloud's data for
+    // this key, or just push local up? Only when the cloud has moved past
+    // our last-confirmed baseline is there a real conflict to merge, and
+    // only then do we pull the (possibly large) cloud value down at all.
+    const cloudUpdatedAt = await fetchCloudUpdatedAt(key);
+    if(cloudUpdatedAt === undefined){ await uploadKey(key); return; } // couldn't tell if there's a conflict; fall back to the old "local wins" behavior rather than blocking the upload
+    const baseline = appDataLastSyncedAt[key] ? new Date(appDataLastSyncedAt[key]).getTime() : 0;
+    const cloudTime = cloudUpdatedAt ? new Date(cloudUpdatedAt).getTime() : 0;
+    if(cloudUpdatedAt && cloudTime > baseline){
+      // The cloud moved since we last actually confirmed our state with it,
+      // AND we have our own unsynced local edit sitting in the queue — that's
+      // two devices having genuinely diverged, not just "we haven't synced
+      // yet." Only NOW pull the full cloud value down to merge both sides.
+      const full = await fetchCloudValue(key);
+      if(full) await mergeSyncConflict(key, getLocalSyncValue(key), full.data);
+    }
+    await uploadKey(key);
+    return;
+  }
+  // Not queued locally: same idea — check the timestamp first. This is the
+  // path that runs for every key, every ~90s, while the app just sits open,
+  // so this is where downloading the full blob "just to see" was the main
+  // source of unnecessary egress. If nothing changed on the server since we
+  // last synced, this now costs one small timestamp row instead of the
+  // whole key's data.
+  const cloudUpdatedAt = await fetchCloudUpdatedAt(key);
+  if(cloudUpdatedAt === undefined) return; // error already logged
+  if(!cloudUpdatedAt){
     // Nothing in the cloud yet for this key (e.g. first sign-in on this
     // account) — push whatever's local up instead of overwriting it.
     if(getLocalSyncValue(key) !== undefined && getLocalSyncValue(key) !== null) await uploadKey(key);
     return;
   }
   const knownTime = appDataUpdatedAt[key] ? new Date(appDataUpdatedAt[key]).getTime() : 0;
-  const cloudTime = new Date(data.updated_at).getTime();
+  const cloudTime = new Date(cloudUpdatedAt).getTime();
   if(cloudTime > knownTime){
-    appDataUpdatedAt[key] = data.updated_at;
-    await setLocalSyncValueFromCloud(key, JSON.stringify(data.data));
-    await persistSyncedBaseline(key, data.updated_at);
+    // Cloud genuinely changed since we last knew about it — only now
+    // download the full value.
+    const full = await fetchCloudValue(key);
+    if(!full) return;
+    appDataUpdatedAt[key] = full.updated_at;
+    await setLocalSyncValueFromCloud(key, JSON.stringify(full.data));
+    await persistSyncedBaseline(key, full.updated_at);
     // Calendar re-reads 'uermExams' fresh from localStorage every time it
     // renders, so a merged calendar update shows up immediately. The pet
     // screen and streak/stats views cache their own state in a JS variable
@@ -6802,7 +6872,7 @@ async function downloadAndMergeKey(key, queuedKeys){
     // that screen* won't visibly update it until you navigate away and
     // back (or reload) — the data itself is correctly saved either way.
   } else {
-    await persistSyncedBaseline(key, data.updated_at);
+    await persistSyncedBaseline(key, cloudUpdatedAt);
   }
 }
 // Writes a downloaded cloud value into local storage without re-queuing it
@@ -7237,17 +7307,39 @@ function communityTopScore(r){
   return likes * 5 + saves * 4 + imports;
 }
 
-async function renderCommunityBrowse(){
+// Discover feed metadata cache: re-opening Community (or switching back to
+// the Discover tab) within this window re-renders from what's already in
+// memory instead of re-downloading the whole feed. New publishes still show
+// up immediately via the Realtime INSERT handler below, which appends
+// straight into communityBrowseCache without waiting on this TTL.
+const COMMUNITY_BROWSE_CACHE_MS = 60000;
+let communityBrowseCacheAt = 0;
+
+async function renderCommunityBrowse(forceRefresh){
   const sb = getSupabase();
   const statusEl = $('communityBrowseStatus');
   if(!sb || !currentUser || !statusEl) return;
+  if(!forceRefresh && communityBrowseCache.length && (Date.now() - communityBrowseCacheAt) < COMMUNITY_BROWSE_CACHE_MS){
+    logEgress('COMMUNITY_METADATA', 'community_sets', 'cache-hit', {rows: communityBrowseCache.length});
+    communityCurrentPage = 1;
+    renderCommunitySubjectFilters();
+    applyCommunitySearchFilter();
+    return;
+  }
   statusEl.textContent = 'Loading…';
+  // Metadata only — NEVER select `cards` here. This feed can list up to 150
+  // sets; including each deck's full card array in a list query is what
+  // drove egress up in the first place. Full cards are fetched separately,
+  // only for the one deck a user actually opens (see openCommunityPreview /
+  // importCommunitySet / p2Remix).
   const { data, error } = await sb.from('community_sets')
-    .select('id, owner_id, username, title, subject, description, card_type, topic, le, professor, kind, card_count, cards, created_at, updated_at, import_count, like_count, save_count')
+    .select('id, owner_id, username, title, subject, description, card_type, topic, le, professor, kind, card_count, created_at, updated_at, import_count, like_count, save_count')
     .order('created_at', { ascending: false })
     .limit(150);
   if(error){ statusEl.textContent = 'Could not load community sets: ' + error.message; return; }
   communityBrowseCache = data || [];
+  communityBrowseCacheAt = Date.now();
+  logEgress('COMMUNITY_METADATA', 'community_sets', 'fetch', {rows: communityBrowseCache.length});
   communityCurrentPage = 1;
   await loadCommunityInteractions(communityBrowseCache.map(r => r.id));
   renderCommunitySubjectFilters();
@@ -7426,9 +7518,15 @@ async function p2FollowingFeed(){
   const sb=getSupabase();if(!sb||!currentUser)return;
   const ids=[...communityP2Following];
   if(!ids.length){$('communityPhase2Area').innerHTML='<div class="community-p2-empty"><b>Your Following feed is empty.</b><br>Open a creator profile and follow them to see their decks here.</div>';return;}
-  const {data,error}=await sb.from('community_sets').select('id,title,subject,description,card_type,topic,le,kind,card_count,owner_id,username,created_at,updated_at,import_count,like_count,save_count,cards').in('owner_id',ids).order('created_at',{ascending:false}).limit(100);
+  // Metadata only — same reasoning as renderCommunityBrowse(): a feed/list
+  // query must never pull every followed creator's full card arrays down
+  // just to render a list. Full cards are fetched only when a specific
+  // deck is opened (preview/import/remix).
+  const {data,error}=await sb.from('community_sets').select('id,title,subject,description,card_type,topic,le,kind,card_count,owner_id,username,created_at,updated_at,import_count,like_count,save_count').in('owner_id',ids).order('created_at',{ascending:false}).limit(100);
   if(error){$('communityPhase2Area').textContent=error.message;return;}
-  communityBrowseCache=data||[];await loadCommunityInteractions(communityBrowseCache.map(x=>x.id));
+  communityBrowseCache=data||[];communityBrowseCacheAt=Date.now();
+  logEgress('COMMUNITY_METADATA','community_sets','fetch',{rows:communityBrowseCache.length,feed:'following'});
+  await loadCommunityInteractions(communityBrowseCache.map(x=>x.id));
   renderCommunitySubjectFilters();applyCommunitySearchFilter();
 }
 
@@ -7527,7 +7625,7 @@ async function p2Versions(setId){
 }
 async function p2Remix(setId){
   const sb=getSupabase();if(!sb||!currentUser)return;
-  const {data,error}=await sb.from('community_sets').select('*').eq('id',setId).maybeSingle();if(error||!data){alert('Could not load deck.');return;}
+  const {data,error}=await sb.from('community_sets').select('*').eq('id',setId).maybeSingle();logEgress('COMMUNITY_FULL_DECK','community_sets','remix-fetch',{id:setId});if(error||!data){alert('Could not load deck.');return;}
   const sets=loadSets(),id=genSetId(),now=Date.now();
   sets[id]={name:`${data.title} (remix)`,subject:data.subject,cardType:data.card_type,topic:data.topic,cards:JSON.parse(JSON.stringify(data.cards||[])),completed:false,createdAt:now,updatedAt:now,remixOfCommunityId:data.id,remixOfUsername:data.username};
   saveSetsData(sets);await sb.from('community_set_forks').insert({community_set_id:data.id,forked_by:currentUser.id,fork_type:'remix'});
@@ -7567,6 +7665,7 @@ renderCommunityView=async function(){
   if(communityP2Feed==='following')await p2FollowingFeed();
   else if(communityP2Feed==='collections')await p2Collections();
   else if(communityP2Feed==='people')p2PeopleSearch();
+  else await renderCommunityBrowse();
 };
 
 function initCommunityPhase2(){
@@ -7727,10 +7826,12 @@ async function openCommunityPreview(id){
   if(!row){
     // Not in the currently-loaded Discover feed (e.g. opened from "Your
     // Community" for a set that's older than the feed's fetch window) —
-    // fetch it directly instead of silently doing nothing.
+    // fetch its metadata directly instead of silently doing nothing.
     const sb = getSupabase();
     if(!sb) return;
-    const { data, error } = await sb.from('community_sets').select('*').eq('id', id).maybeSingle();
+    const { data, error } = await sb.from('community_sets')
+      .select('id, owner_id, username, title, subject, description, card_type, topic, le, professor, kind, card_count, created_at, updated_at, import_count, like_count, save_count')
+      .eq('id', id).maybeSingle();
     if(error || !data){ alert('Could not load that set: ' + (error ? error.message : 'not found')); return; }
     row = data;
   }
@@ -7742,11 +7843,25 @@ async function openCommunityPreview(id){
   $('communityPreviewMeta').textContent = `by @${row.username || 'unknown'} · ${Number(row.card_count||0)} cards${row.subject ? ' · '+row.subject : ''}${uploadedLabel ? ' · Uploaded '+uploadedLabel : ''}${editedLabel ? ' · Edited '+editedLabel : ''}`;
   $('communityPreviewStats').innerHTML = `<span class="community-set-stat">↓ ${Number(row.import_count||0)} imports</span><span class="community-set-stat">❤️ ${Number(row.like_count||0)} likes</span><span class="community-set-stat">🔖 ${Number(row.save_count||0)} saves</span>`;
   $('communityPreviewDesc').innerHTML = row.description ? escapeHtml(row.description) : '';
-  const samples = (row.cards || []).slice(0,3);
-  $('communityPreviewSamples').innerHTML = samples.length ? samples.map((c,i) => `<div class="community-preview-sample"><div class="community-preview-front">Sample ${i+1} · Front</div><div class="community-preview-text">${escapeHtml(c.front || '')}</div><div class="community-preview-front" style="margin-top:10px;">Back</div><div class="community-preview-text">${escapeHtml(c.back || '')}</div></div>`).join('') : `<div class="community-empty" style="margin-top:14px;">No preview cards available.</div>`;
+  // Metadata rows (Discover/Following) never carry `cards` anymore — fetch
+  // just this one deck's cards now that the user has actually asked to
+  // preview it. This is the ONLY place a preview downloads card content.
+  $('communityPreviewSamples').innerHTML = `<div class="community-empty" style="margin-top:14px;">Loading preview…</div>`;
   $('communityPreviewBackdrop').classList.remove('hidden');
   $('communityPreviewBackdrop').setAttribute('aria-hidden','false');
   loadAndRenderComments(id);
+  let cards = row.cards; // already-fetched fallback path above may have it
+  if(!cards){
+    const sb = getSupabase();
+    if(sb){
+      const { data, error } = await sb.from('community_sets').select('cards').eq('id', id).maybeSingle();
+      logEgress('COMMUNITY_FULL_DECK', 'community_sets', 'preview-fetch', {id});
+      if(!error && data) cards = data.cards;
+    }
+  }
+  if(communityPreviewId !== id) return; // preview closed/changed while this was in flight
+  const samples = (cards || []).slice(0,3);
+  $('communityPreviewSamples').innerHTML = samples.length ? samples.map((c,i) => `<div class="community-preview-sample"><div class="community-preview-front">Sample ${i+1} · Front</div><div class="community-preview-text">${escapeHtml(c.front || '')}</div><div class="community-preview-front" style="margin-top:10px;">Back</div><div class="community-preview-text">${escapeHtml(c.back || '')}</div></div>`).join('') : `<div class="community-empty" style="margin-top:14px;">No preview cards available.</div>`;
 }
 
 function closeCommunityPreview(){
@@ -7857,6 +7972,7 @@ async function importCommunitySet(communitySetId){
   const sb = getSupabase();
   if(!sb || !currentUser) return;
   const { data, error } = await sb.from('community_sets').select('*').eq('id', communitySetId).maybeSingle();
+  logEgress('COMMUNITY_FULL_DECK', 'community_sets', 'import-fetch', {id: communitySetId});
   if(error || !data){ alert('Could not load that set: ' + (error ? error.message : 'not found')); return; }
   if(!confirm(`Add "${data.title}" (${data.card_count} cards) to your library?`)) return;
   const sets = loadSets();
@@ -7913,7 +8029,15 @@ function startCommunityRealtime(){
       const communityOpen = !$('communityView').classList.contains('hidden');
       if(communityOpen){
         // Live-append without a full refetch, so a friend's upload just appears.
-        communityBrowseCache.unshift({...row, import_count: Number(row.import_count||0), like_count: Number(row.like_count||0), save_count: Number(row.save_count||0)});
+        // Note: Supabase Realtime's postgres_changes payload includes every
+        // column on the row (including `cards`) — there's no server-side
+        // column filter for it, so this one small transfer per publish event
+        // can't be trimmed without a custom Realtime Broadcast + DB trigger
+        // (a schema change, out of scope for this pass). Drop `cards` from
+        // what we keep in memory here so it's at least not held onto.
+        const {cards, ...meta} = row;
+        communityBrowseCache.unshift({...meta, import_count: Number(row.import_count||0), like_count: Number(row.like_count||0), save_count: Number(row.save_count||0)});
+        communityBrowseCacheAt = Date.now();
         renderCommunitySubjectFilters();
         applyCommunitySearchFilter();
         markCommunitySeenNow();
@@ -7936,7 +8060,11 @@ function renderCommunityView(){
   $('communityUsernameBlock').classList.toggle('hidden', !!communityUsername);
   if(communityUsername) $('communityUsernameInput').value = communityUsername;
   renderCommunityMine();
-  renderCommunityBrowse();
+  // NOTE: the Discover fetch below is deliberately NOT called from here —
+  // see the Phase 2 wrapper for renderCommunityView, which only fetches
+  // Discover when Discover is actually the active sub-tab (Following/
+  // Collections/People previously triggered a redundant Discover fetch on
+  // every single Community tab open, on top of their own feed's fetch).
   markCommunitySeenNow();
 }
 
