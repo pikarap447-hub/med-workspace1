@@ -7012,7 +7012,7 @@ async function initCloudSync(){
     }
     if(!currentUser){
       communityUsername = null; stopCommunityRealtime(); showCommunityNewDot(false);
-      communityP2Following = new Set(); communityP2FollowPending = new Set();
+      communityP2Following = new Set(); communityP2FollowingAt = 0; communityP2FollowPending = new Set();
       communityP2Feed = 'discover'; communityP2OpenProfileUid = null;
       communityP2PeopleQuery = ''; communityP2PeopleReqId++; clearTimeout(communityP2PeopleDebounce);
     }
@@ -7364,6 +7364,15 @@ async function renderCommunityBrowse(forceRefresh){
 /* ===== COMMUNITY PHASE 2 JS ===== */
 let communityP2Feed='discover';
 let communityP2Following=new Set();
+// Timestamp of the last successful p2LoadFollowing() fetch. Community tab
+// switches call p2LoadFollowing() on every open (see renderCommunityView
+// wrapper below), but the follow list rarely changes mid-session, so it
+// gets the same TTL treatment as the Discover/Following feed caches
+// (COMMUNITY_BROWSE_CACHE_MS, above). A successful
+// follow/unfollow updates communityP2Following in memory directly without
+// going through this fetch, so staleness isn't a concern there; only the
+// error-reconcile path in p2ToggleFollow needs to force past this cache.
+let communityP2FollowingAt=0;
 let communityP2ProfileCache=new Map();
 let communityP2FollowPending=new Set(); // uids with an in-flight follow/unfollow request
 let communityP2OpenProfileUid=null;      // uid whose profile modal is currently open, if any
@@ -7379,8 +7388,12 @@ async function p2GetProfile(uid){
   if(data)communityP2ProfileCache.set(uid,data);
   return data;
 }
-async function p2LoadFollowing(){
-  const sb=getSupabase(); if(!sb||!currentUser){communityP2Following=new Set();return;}
+async function p2LoadFollowing(forceRefresh){
+  const sb=getSupabase(); if(!sb||!currentUser){communityP2Following=new Set();communityP2FollowingAt=0;return;}
+  if(!forceRefresh && communityP2FollowingAt && (Date.now()-communityP2FollowingAt)<COMMUNITY_BROWSE_CACHE_MS){
+    logEgress('COMMUNITY_FOLLOWING','community_follows','cache-hit',{count:communityP2Following.size});
+    return;
+  }
   const {data,error}=await sb.from('community_follows').select('following_id').eq('follower_id',currentUser.id);
   if(error){
     // Transient network/API failure: keep whatever we already had rather than
@@ -7391,18 +7404,36 @@ async function p2LoadFollowing(){
   const next=new Set();
   (data||[]).forEach(x=>next.add(x.following_id));
   communityP2Following=next;
+  communityP2FollowingAt=Date.now();
+  logEgress('COMMUNITY_FOLLOWING','community_follows','fetch',{count:communityP2Following.size});
 }
-async function p2RenderProfile(){
+// Own-profile follower/following/deck counts. Same TTL treatment as the
+// following-list cache above: p2RenderProfile() runs on every Community
+// tab switch (see renderCommunityView wrapper) but these 3 counts only
+// actually change on a follow/unfollow or a publish/delete, so most of
+// those re-fetches were pure waste. forceRefresh is passed by callers that
+// just changed one of these counts (see p2ToggleFollow).
+let communityP2ProfileStatsCache={at:0,followers:0,following:0,decks:0};
+async function p2RenderProfile(forceRefresh){
   const el=$('communityPhase2Profile'); if(!el||!currentUser)return;
   const p=await p2GetProfile(currentUser.id);
   if(!p){el.style.display='none';return;}
   el.style.display='flex';
   const sb=getSupabase();
-  const [{count:followers},{count:following},{count:decks}]=await Promise.all([
-    sb.from('community_follows').select('*',{count:'exact',head:true}).eq('following_id',currentUser.id),
-    sb.from('community_follows').select('*',{count:'exact',head:true}).eq('follower_id',currentUser.id),
-    sb.from('community_sets').select('*',{count:'exact',head:true}).eq('owner_id',currentUser.id)
-  ]);
+  let followers,following,decks;
+  const statsCache=communityP2ProfileStatsCache;
+  if(!forceRefresh && statsCache.at && (Date.now()-statsCache.at)<COMMUNITY_BROWSE_CACHE_MS){
+    logEgress('COMMUNITY_PROFILE_STATS','community_follows','cache-hit',{});
+    ({followers,following,decks}=statsCache);
+  } else {
+    [{count:followers},{count:following},{count:decks}]=await Promise.all([
+      sb.from('community_follows').select('*',{count:'exact',head:true}).eq('following_id',currentUser.id),
+      sb.from('community_follows').select('*',{count:'exact',head:true}).eq('follower_id',currentUser.id),
+      sb.from('community_sets').select('*',{count:'exact',head:true}).eq('owner_id',currentUser.id)
+    ]);
+    communityP2ProfileStatsCache={at:Date.now(),followers,following,decks};
+    logEgress('COMMUNITY_PROFILE_STATS','community_follows','fetch',{});
+  }
   el.innerHTML=`<div class="community-p2-avatar">${p2Esc(p.avatar_emoji||'🩺')}</div>
     <div style="min-width:0;flex:1"><div class="community-p2-name">${p2Esc(p.display_name||p.username)}</div>
     <div class="community-p2-handle">@${p2Esc(p.username)}</div><div class="community-p2-bio">${p2Esc(p.bio||'')}</div>
@@ -7485,7 +7516,7 @@ async function p2ToggleFollow(uid,btn){
     if(/duplicate|already exists|unique/i.test(error.message)) communityP2Following.add(uid);
     else if(/no rows|not found/i.test(error.message)) communityP2Following.delete(uid);
     else alert(error.message);
-    await p2LoadFollowing();
+    await p2LoadFollowing(true);
   } else {
     following?communityP2Following.delete(uid):communityP2Following.add(uid);
   }
@@ -7497,7 +7528,7 @@ async function p2ToggleFollow(uid,btn){
     btn.classList.toggle('active',nowFollowing);
   }
   communityP2FollowPending.delete(uid);
-  p2RenderProfile();
+  p2RenderProfile(true);
   // If this uid's profile modal is currently open, refresh its follower/
   // following counts too — they'd otherwise go stale until the modal is reopened.
   if(communityP2OpenProfileUid===uid) p2OpenProfile(uid);
@@ -7546,6 +7577,7 @@ async function p2FollowingFeed(){
   if(cache.rows.length && cache.idsKey===idsKey && (Date.now()-cache.at)<COMMUNITY_BROWSE_CACHE_MS){
     logEgress('COMMUNITY_METADATA','community_sets','cache-hit',{rows:cache.rows.length,feed:'following'});
     communityBrowseCache=cache.rows;
+    communityCurrentPage=1;
     renderCommunitySubjectFilters();applyCommunitySearchFilter();
     return;
   }
@@ -7557,6 +7589,7 @@ async function p2FollowingFeed(){
   if(error){$('communityPhase2Area').textContent=error.message;return;}
   cache.rows=data||[];cache.at=Date.now();cache.idsKey=idsKey;
   communityBrowseCache=cache.rows;
+  communityCurrentPage=1;
   logEgress('COMMUNITY_METADATA','community_sets','fetch',{rows:communityBrowseCache.length,feed:'following'});
   await loadCommunityInteractions(communityBrowseCache.map(x=>x.id));
   renderCommunitySubjectFilters();applyCommunitySearchFilter();
