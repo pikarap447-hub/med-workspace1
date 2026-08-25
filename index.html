@@ -7045,7 +7045,17 @@ function initAccountSettingsUI(){
    shape the existing "Send" export already uses; stats and progress never
    leave the device. */
 let communityUsername = null;
+// `communityBrowseCache` is always the array currently on screen (rendered
+// by applyCommunitySearchFilter / looked up by id elsewhere) — it gets
+// pointed at whichever feed cache below is active. `communityFeedCaches`
+// holds Discover and Following separately, each with its own TTL, so
+// switching tabs within the cache window can never show one feed's rows
+// under the other's heading (previously both fed the same cache slot).
 let communityBrowseCache = [];
+const communityFeedCaches = {
+  discover: { rows: [], at: 0 },
+  following: { rows: [], at: 0, idsKey: '' }
+};
 
 async function loadCommunityProfile(){
   const sb = getSupabase();
@@ -7307,20 +7317,23 @@ function communityTopScore(r){
   return likes * 5 + saves * 4 + imports;
 }
 
-// Discover feed metadata cache: re-opening Community (or switching back to
-// the Discover tab) within this window re-renders from what's already in
-// memory instead of re-downloading the whole feed. New publishes still show
-// up immediately via the Realtime INSERT handler below, which appends
-// straight into communityBrowseCache without waiting on this TTL.
+// Feed metadata cache window, shared by both Discover and Following (each
+// keeps its own slot in communityFeedCaches — see declaration above).
+// Re-opening Community, or switching back to a feed's tab, within this
+// window re-renders from what's already in memory instead of re-fetching.
+// New publishes still show up immediately via the Realtime INSERT handler
+// below, which updates the Discover cache slot directly without waiting on
+// this TTL.
 const COMMUNITY_BROWSE_CACHE_MS = 60000;
-let communityBrowseCacheAt = 0;
 
 async function renderCommunityBrowse(forceRefresh){
   const sb = getSupabase();
   const statusEl = $('communityBrowseStatus');
   if(!sb || !currentUser || !statusEl) return;
-  if(!forceRefresh && communityBrowseCache.length && (Date.now() - communityBrowseCacheAt) < COMMUNITY_BROWSE_CACHE_MS){
-    logEgress('COMMUNITY_METADATA', 'community_sets', 'cache-hit', {rows: communityBrowseCache.length});
+  const cache = communityFeedCaches.discover;
+  if(!forceRefresh && cache.rows.length && (Date.now() - cache.at) < COMMUNITY_BROWSE_CACHE_MS){
+    logEgress('COMMUNITY_METADATA', 'community_sets', 'cache-hit', {rows: cache.rows.length, feed: 'discover'});
+    communityBrowseCache = cache.rows;
     communityCurrentPage = 1;
     renderCommunitySubjectFilters();
     applyCommunitySearchFilter();
@@ -7337,9 +7350,10 @@ async function renderCommunityBrowse(forceRefresh){
     .order('created_at', { ascending: false })
     .limit(150);
   if(error){ statusEl.textContent = 'Could not load community sets: ' + error.message; return; }
-  communityBrowseCache = data || [];
-  communityBrowseCacheAt = Date.now();
-  logEgress('COMMUNITY_METADATA', 'community_sets', 'fetch', {rows: communityBrowseCache.length});
+  cache.rows = data || [];
+  cache.at = Date.now();
+  communityBrowseCache = cache.rows;
+  logEgress('COMMUNITY_METADATA', 'community_sets', 'fetch', {rows: communityBrowseCache.length, feed: 'discover'});
   communityCurrentPage = 1;
   await loadCommunityInteractions(communityBrowseCache.map(r => r.id));
   renderCommunitySubjectFilters();
@@ -7517,14 +7531,32 @@ function p2CloseModal(){$('communityP2Modal').classList.add('hidden');communityP
 async function p2FollowingFeed(){
   const sb=getSupabase();if(!sb||!currentUser)return;
   const ids=[...communityP2Following];
-  if(!ids.length){$('communityPhase2Area').innerHTML='<div class="community-p2-empty"><b>Your Following feed is empty.</b><br>Open a creator profile and follow them to see their decks here.</div>';return;}
+  const cache=communityFeedCaches.following;
+  if(!ids.length){
+    $('communityPhase2Area').innerHTML='<div class="community-p2-empty"><b>Your Following feed is empty.</b><br>Open a creator profile and follow them to see their decks here.</div>';
+    cache.rows=[];cache.at=0;cache.idsKey='';
+    return;
+  }
+  // Own TTL'd cache slot (separate from Discover's — see communityFeedCaches
+  // above), keyed by the current follow list. Re-opening Following (or
+  // switching back to it) within the window re-renders from memory instead
+  // of re-fetching, same as Discover already did. A change in who you
+  // follow changes idsKey, which forces a real refetch even inside the TTL.
+  const idsKey=ids.slice().sort().join(',');
+  if(cache.rows.length && cache.idsKey===idsKey && (Date.now()-cache.at)<COMMUNITY_BROWSE_CACHE_MS){
+    logEgress('COMMUNITY_METADATA','community_sets','cache-hit',{rows:cache.rows.length,feed:'following'});
+    communityBrowseCache=cache.rows;
+    renderCommunitySubjectFilters();applyCommunitySearchFilter();
+    return;
+  }
   // Metadata only — same reasoning as renderCommunityBrowse(): a feed/list
   // query must never pull every followed creator's full card arrays down
   // just to render a list. Full cards are fetched only when a specific
   // deck is opened (preview/import/remix).
   const {data,error}=await sb.from('community_sets').select('id,title,subject,description,card_type,topic,le,kind,card_count,owner_id,username,created_at,updated_at,import_count,like_count,save_count').in('owner_id',ids).order('created_at',{ascending:false}).limit(100);
   if(error){$('communityPhase2Area').textContent=error.message;return;}
-  communityBrowseCache=data||[];communityBrowseCacheAt=Date.now();
+  cache.rows=data||[];cache.at=Date.now();cache.idsKey=idsKey;
+  communityBrowseCache=cache.rows;
   logEgress('COMMUNITY_METADATA','community_sets','fetch',{rows:communityBrowseCache.length,feed:'following'});
   await loadCommunityInteractions(communityBrowseCache.map(x=>x.id));
   renderCommunitySubjectFilters();applyCommunitySearchFilter();
@@ -8027,21 +8059,33 @@ function startCommunityRealtime(){
       const row = payload.new;
       if(!row || row.owner_id === currentUser.id) return; // don't badge your own publishes
       const communityOpen = !$('communityView').classList.contains('hidden');
-      if(communityOpen){
+      // Note: Supabase Realtime's postgres_changes payload includes every
+      // column on the row (including `cards`) — there's no server-side
+      // column filter for it, so this one small transfer per publish event
+      // can't be trimmed without a custom Realtime Broadcast + DB trigger
+      // (a schema change, out of scope for this pass). Drop `cards` from
+      // what we keep in memory here so it's at least not held onto.
+      const {cards, ...meta} = row;
+      const metaRow = {...meta, import_count: Number(row.import_count||0), like_count: Number(row.like_count||0), save_count: Number(row.save_count||0)};
+      // A newly-published public set always belongs in the Discover cache,
+      // regardless of which sub-tab is on screen right now — update that
+      // cache unconditionally so Discover is current whenever it's next
+      // opened. (Previously this unshifted into whatever `communityBrowseCache`
+      // happened to be pointing at, which could be the Following list if
+      // that was the active tab — splicing an unfollowed creator's set into
+      // Following.)
+      communityFeedCaches.discover.rows.unshift(metaRow);
+      communityFeedCaches.discover.at = Date.now();
+      if(communityOpen && communityP2Feed === 'discover'){
         // Live-append without a full refetch, so a friend's upload just appears.
-        // Note: Supabase Realtime's postgres_changes payload includes every
-        // column on the row (including `cards`) — there's no server-side
-        // column filter for it, so this one small transfer per publish event
-        // can't be trimmed without a custom Realtime Broadcast + DB trigger
-        // (a schema change, out of scope for this pass). Drop `cards` from
-        // what we keep in memory here so it's at least not held onto.
-        const {cards, ...meta} = row;
-        communityBrowseCache.unshift({...meta, import_count: Number(row.import_count||0), like_count: Number(row.like_count||0), save_count: Number(row.save_count||0)});
-        communityBrowseCacheAt = Date.now();
+        communityBrowseCache = communityFeedCaches.discover.rows;
         renderCommunitySubjectFilters();
         applyCommunitySearchFilter();
         markCommunitySeenNow();
       } else {
+        // Following/Collections/People is on screen (or Community isn't
+        // open at all) — don't touch what's currently rendered, just badge
+        // that something new landed; the Discover cache above already has it.
         showCommunityNewDot(true);
       }
     })
