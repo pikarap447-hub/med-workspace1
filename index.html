@@ -6510,29 +6510,29 @@ function queueSyncOp(key){
   })).catch(() => {});
 }
 // Previously the ONLY thing that pushed a queued edit to the cloud while the
-// app just sat open was the 90s setInterval in fullSync's background tick
-// (see below), or an explicit sign-in/online/"Sync Now" trigger. That left
-// up to a 90-second window where real progress (a finished quiz card, a
-// case-game choice) sat locally-only — if the user switched to another
-// device inside that window, the new device had nothing to pull, and the
-// progress *looked* lost even though it was safely saved on the original
-// device the whole time. This debounce shrinks that window to a couple of
-// seconds any time something gets queued, without spamming fullSync() on
-// every single keystroke-equivalent write.
+// app just sat open was the periodic setInterval in fullSync's background
+// tick (see below), or an explicit sign-in/online/"Sync Now" trigger. That
+// left a window where real progress (a finished quiz card, a case-game
+// choice) sat locally-only — if the user switched to another device inside
+// that window, the new device had nothing to pull, and the progress
+// *looked* lost even though it was safely saved on the original device the
+// whole time. This debounce shrinks that window to a couple of seconds any
+// time something gets queued.
+// Local writes no longer trigger a full cloud scan here. They are coalesced
+// for a short moment, then only the keys that actually changed are
+// reconciled and uploaded via syncQueuedChanges() below — a full SYNC_KEYS
+// scan (fullSync()) is left to the low-frequency background poll and
+// explicit sign-in/reconnect/"Sync Now" triggers. visibilitychange/pagehide
+// still provide the immediate keepalive safety net when the user
+// backgrounds or closes the page.
 let _quickSyncTimer = null;
-let _quickSyncBurstActive = false;
 function scheduleQuickSync(){
   if(!currentUser || !navigator.onLine) return;
   if(typeof setSyncStatus === 'function') setSyncStatus('pending');
   clearTimeout(_quickSyncTimer);
-  if(!_quickSyncBurstActive){
-    // First write in a burst (e.g. the one card someone answers right
-    // before switching devices) — don't make it wait behind a debounce
-    // window it doesn't need to share with anything yet.
-    _quickSyncBurstActive = true;
-    fullSync().finally(() => { _quickSyncBurstActive = false; });
-  }
-  _quickSyncTimer = setTimeout(() => { fullSync(); }, 2500);
+  _quickSyncTimer = setTimeout(() => {
+    syncQueuedChanges().catch(e => console.error('Queued sync failed', e));
+  }, 2000);
 }
 // Last-resort push attempt for the moment the tab is actually backgrounded
 // or closed (see the visibilitychange/pagehide listeners below) — i.e. the
@@ -6771,7 +6771,16 @@ async function uploadKey(key){
     await persistSyncedAt(key, data.updated_at);
     await persistSyncedBaseline(key, data.updated_at);
   }
-  await dequeueSyncOp(key);
+  // A second local save may have happened while this request was in flight.
+  // Only clear the queue if the value just uploaded is still the current
+  // local value; otherwise keep the key queued so the newer edit gets its
+  // own upload instead of being silently marked as already synced.
+  if(getLocalSyncValue(key) === raw){
+    await dequeueSyncOp(key);
+  } else {
+    await queueSyncOp(key);
+    scheduleQuickSync();
+  }
   return true;
 }
 // Decides, for one data_key, whether to push local up or pull cloud down.
@@ -6786,26 +6795,29 @@ async function uploadKey(key){
 //   to do.
 // `queuedKeys` is an optional Set from a single getQueuedSyncKeys() call so
 // fullSync() doesn't re-query IndexedDB once per key.
-// Cheap check: just the server timestamp for one key, never the (possibly
-// large) data payload. Returns: an ISO string if a cloud row exists, null
-// if there's no cloud row yet, or undefined if the check itself failed
-// (network/API error) — callers treat undefined as "couldn't tell".
-async function fetchCloudUpdatedAt(key){
+// Fetches only the lightweight server metadata needed to decide whether a
+// payload must move — one small PostgREST response covering every key
+// passed in (or every synced key, if `keys` is omitted), instead of one
+// network round trip per key. This is the main egress optimization: unless
+// `keys` narrows it to exactly what's queued, unchanged JSON blobs never
+// get downloaded just to check whether they changed.
+async function fetchSyncMetadata(keys){
   const sb = getSupabase();
-  if(!sb || !currentUser) return undefined;
-  const { data, error } = await sb.from('user_app_data')
-    .select('updated_at')
-    .eq('user_id', currentUser.id)
-    .eq('data_key', key)
-    .maybeSingle();
-  logEgress('SYNC_CHECK', 'user_app_data', 'timestamp-only', {key});
-  if(error){ console.error('Cloud timestamp check failed for', key, error); return undefined; }
-  return data ? data.updated_at : null;
+  if(!sb || !currentUser) return new Map();
+  if(Array.isArray(keys) && !keys.length) return new Map();
+  let q = sb.from('user_app_data')
+    .select('data_key, updated_at')
+    .eq('user_id', currentUser.id);
+  if(Array.isArray(keys)) q = q.in('data_key', keys);
+  const { data, error } = await q;
+  logEgress('SYNC_CHECK', 'user_app_data', 'metadata-batch', {keys: Array.isArray(keys) ? keys : 'all'});
+  if(error) throw error;
+  return new Map((data || []).map(row => [row.data_key, row]));
 }
 // The actual (potentially large) payload for one key — only ever called
-// once fetchCloudUpdatedAt() above has already shown the cloud copy is
-// newer than what we know about, so this never runs "just to see".
-async function fetchCloudValue(key){
+// once fetchSyncMetadata() above has already shown the cloud copy is newer
+// than what we know about, or a genuine two-device conflict must be merged.
+async function fetchCloudPayload(key){
   const sb = getSupabase();
   if(!sb || !currentUser) return null;
   const { data, error } = await sb.from('user_app_data')
@@ -6814,65 +6826,81 @@ async function fetchCloudValue(key){
     .eq('data_key', key)
     .maybeSingle();
   logEgress('SYNC_DOWNLOAD', 'user_app_data', 'full-value', {key});
-  if(error){ console.error('Cloud download failed for', key, error); return null; }
-  return data;
+  if(error) throw error;
+  return data || null;
 }
-async function downloadAndMergeKey(key, queuedKeys){
-  const sb = getSupabase();
-  if(!sb || !currentUser) return;
-  const isQueued = queuedKeys ? queuedKeys.has(key) : (await getQueuedSyncKeys()).includes(key);
-  if(isQueued){
-    // Cheap check first: do we even need to look at the cloud's data for
-    // this key, or just push local up? Only when the cloud has moved past
-    // our last-confirmed baseline is there a real conflict to merge, and
-    // only then do we pull the (possibly large) cloud value down at all.
-    const cloudUpdatedAt = await fetchCloudUpdatedAt(key);
-    if(cloudUpdatedAt === undefined){ await uploadKey(key); return; } // couldn't tell if there's a conflict; fall back to the old "local wins" behavior rather than blocking the upload
+// Decides, for one data_key, whether to push local up or pull cloud down.
+// `cloudMeta` is a Map returned by fetchSyncMetadata(), letting a caller
+// inspect every key with one small batched query instead of one full-blob
+// (or even one metadata) round trip per key. If `cloudMeta` is omitted, a
+// single-key metadata lookup is made just for this key. If `queuedKeys` is
+// omitted, the live local queue is checked so a write that occurs while
+// fullSync() is running can never be overwritten.
+async function downloadAndMergeKey(key, queuedKeys, cloudMeta){
+  if(!currentUser) return;
+  const liveQueued = queuedKeys
+    ? queuedKeys.has(key)
+    : (await getQueuedSyncKeys()).includes(key);
+
+  let metaMap = cloudMeta;
+  if(!metaMap){
+    try{ metaMap = await fetchSyncMetadata([key]); }
+    catch(error){ console.error('Cloud metadata check failed for', key, error); return; }
+  }
+  const meta = metaMap.get(key) || null;
+
+  if(liveQueued){
+    // Only download the cloud JSON when the server row actually changed
+    // since this device's last confirmed baseline — that's two devices
+    // having genuinely diverged, not just "we haven't synced yet."
+    // Otherwise upload the local edit directly; there is nothing to merge.
     const baseline = appDataLastSyncedAt[key] ? new Date(appDataLastSyncedAt[key]).getTime() : 0;
-    const cloudTime = cloudUpdatedAt ? new Date(cloudUpdatedAt).getTime() : 0;
-    if(cloudUpdatedAt && cloudTime > baseline){
-      // The cloud moved since we last actually confirmed our state with it,
-      // AND we have our own unsynced local edit sitting in the queue — that's
-      // two devices having genuinely diverged, not just "we haven't synced
-      // yet." Only NOW pull the full cloud value down to merge both sides.
-      const full = await fetchCloudValue(key);
-      if(full) await mergeSyncConflict(key, getLocalSyncValue(key), full.data);
+    const cloudTime = meta && meta.updated_at ? new Date(meta.updated_at).getTime() : 0;
+    if(meta && cloudTime > baseline){
+      try{
+        const cloud = await fetchCloudPayload(key);
+        if(cloud && new Date(cloud.updated_at).getTime() > baseline){
+          await mergeSyncConflict(key, getLocalSyncValue(key), cloud.data);
+        }
+      }catch(error){
+        console.error('Cloud conflict fetch failed for', key, error);
+        return; // keep the queued edit for a later retry; do not overwrite blindly
+      }
     }
     await uploadKey(key);
     return;
   }
-  // Not queued locally: same idea — check the timestamp first. This is the
-  // path that runs for every key, every ~90s, while the app just sits open,
-  // so this is where downloading the full blob "just to see" was the main
-  // source of unnecessary egress. If nothing changed on the server since we
-  // last synced, this now costs one small timestamp row instead of the
-  // whole key's data.
-  const cloudUpdatedAt = await fetchCloudUpdatedAt(key);
-  if(cloudUpdatedAt === undefined) return; // error already logged
-  if(!cloudUpdatedAt){
+
+  if(!meta){
     // Nothing in the cloud yet for this key (e.g. first sign-in on this
     // account) — push whatever's local up instead of overwriting it.
     if(getLocalSyncValue(key) !== undefined && getLocalSyncValue(key) !== null) await uploadKey(key);
     return;
   }
+
   const knownTime = appDataUpdatedAt[key] ? new Date(appDataUpdatedAt[key]).getTime() : 0;
-  const cloudTime = new Date(cloudUpdatedAt).getTime();
+  const cloudTime = new Date(meta.updated_at).getTime();
   if(cloudTime > knownTime){
     // Cloud genuinely changed since we last knew about it — only now
     // download the full value.
-    const full = await fetchCloudValue(key);
-    if(!full) return;
-    appDataUpdatedAt[key] = full.updated_at;
-    await setLocalSyncValueFromCloud(key, JSON.stringify(full.data));
-    await persistSyncedBaseline(key, full.updated_at);
-    // Calendar re-reads 'uermExams' fresh from localStorage every time it
-    // renders, so a merged calendar update shows up immediately. The pet
-    // screen and streak/stats views cache their own state in a JS variable
-    // read once at page load, so a merge that lands *while already on
-    // that screen* won't visibly update it until you navigate away and
-    // back (or reload) — the data itself is correctly saved either way.
+    try{
+      const cloud = await fetchCloudPayload(key);
+      if(!cloud) return;
+      appDataUpdatedAt[key] = cloud.updated_at;
+      await setLocalSyncValueFromCloud(key, JSON.stringify(cloud.data));
+      await persistSyncedAt(key, cloud.updated_at);
+      await persistSyncedBaseline(key, cloud.updated_at);
+      // Calendar re-reads 'uermExams' fresh from localStorage every time it
+      // renders, so a merged calendar update shows up immediately. The pet
+      // screen and streak/stats views cache their own state in a JS variable
+      // read once at page load, so a merge that lands *while already on
+      // that screen* won't visibly update it until you navigate away and
+      // back (or reload) — the data itself is correctly saved either way.
+    }catch(error){
+      console.error('Cloud download failed for', key, error);
+    }
   } else {
-    await persistSyncedBaseline(key, cloudUpdatedAt);
+    await persistSyncedBaseline(key, meta.updated_at);
   }
 }
 // Writes a downloaded cloud value into local storage without re-queuing it
@@ -6887,9 +6915,40 @@ async function appDataSetLocalOnly(key, value){
     tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
   });
 }
-async function processSyncQueue(){
+// Fast path for ordinary local edits. It checks metadata only for queued
+// keys, preserves the existing conflict-merge semantics (downloadAndMergeKey
+// still does the actual merge/upload work per key), and never scans or
+// downloads unrelated app data the way a full SYNC_KEYS sweep would.
+// Replaces the old processSyncQueue() — that plain upload-only retry loop is
+// now redundant, since downloadAndMergeKey() already uploads each queued key
+// itself (after resolving any real conflict first) as part of the loop below.
+let _queuedSyncInFlight = false;
+async function syncQueuedChanges(){
+  if(!currentUser || !navigator.onLine || _queuedSyncInFlight) return;
+  if(_syncInFlight){
+    // A full sync is already running (and will itself upload any queued
+    // key via downloadAndMergeKey). Don't race it — just retry shortly.
+    clearTimeout(_quickSyncTimer);
+    _quickSyncTimer = setTimeout(() => syncQueuedChanges().catch(() => {}), 1500);
+    return;
+  }
   const keys = await getQueuedSyncKeys();
-  for(const key of keys) await uploadKey(key);
+  if(!keys.length){ setSyncStatus('synced'); return; }
+
+  _queuedSyncInFlight = true;
+  setSyncStatus('syncing');
+  try{
+    const meta = await fetchSyncMetadata(keys);
+    const queued = new Set(keys);
+    for(const key of keys) await downloadAndMergeKey(key, queued, meta);
+    const remaining = await getQueuedSyncKeys();
+    setSyncStatus(remaining.length ? 'pending' : 'synced');
+  }catch(e){
+    console.error('Queued sync failed', e);
+    setSyncStatus('error');
+  } finally {
+    _queuedSyncInFlight = false;
+  }
 }
 // Guards every fullSync() entry point (sign-in, reconnect, the manual
 // "Sync Now" button, and the periodic background tick below) so two of
@@ -6897,13 +6956,23 @@ async function processSyncQueue(){
 let _syncInFlight = false;
 async function fullSync(){
   if(!currentUser || _syncInFlight) return;
+  if(_queuedSyncInFlight){
+    // A queued write is already being reconciled. The next periodic/manual
+    // sync can safely do the remote pull after that short operation finishes
+    // rather than racing it for the same keys.
+    return;
+  }
   _syncInFlight = true;
   setSyncStatus('syncing');
   try{
-    const queued = new Set(await getQueuedSyncKeys());
-    for(const key of SYNC_KEYS) await downloadAndMergeKey(key, queued);
-    await processSyncQueue(); // retries anything that failed to upload above
-    setSyncStatus('synced');
+    // One small metadata query covering every sync key. downloadAndMergeKey()
+    // then fetches a full JSON payload only for keys whose cloud timestamp
+    // is actually newer than what this device already knows about.
+    const meta = await fetchSyncMetadata();
+    for(const key of SYNC_KEYS) await downloadAndMergeKey(key, null, meta);
+    const remaining = await getQueuedSyncKeys();
+    setSyncStatus(remaining.length ? 'pending' : 'synced');
+    if(remaining.length) scheduleQuickSync();
     try{ renderLanding(); renderRecentActivity(); }catch(e){}
   }catch(e){
     console.error('Sync failed', e);
@@ -6913,13 +6982,13 @@ async function fullSync(){
   }
 }
 // ---- Periodic background sync ----
-// Sign-in, reconnecting, and "Sync Now" all trigger a fullSync(), but
-// nothing used to while the app just sat open and signed in — so an edit
-// could sit queued locally for a long time before actually reaching the
-// cloud, and the device that happened to sync last "won" rather than the
-// device with the actually-newest edit. This keeps it moving in the
-// background too.
-setInterval(() => { if(currentUser && navigator.onLine) fullSync(); }, 90000);
+// Local changes are pushed promptly by syncQueuedChanges() (see
+// scheduleQuickSync above), so this timer is only a low-frequency remote-
+// change check — mainly for picking up edits made on another device while
+// this tab just sits open and signed in. Ten minutes is enough to keep a
+// long-open tab reasonably fresh without generating needless API reads.
+const SYNC_POLL_MS = 10 * 60 * 1000;
+setInterval(() => { if(currentUser && navigator.onLine) fullSync(); }, SYNC_POLL_MS);
 
 // ---- UI: sync status indicator ----
 function setSyncStatus(status){
