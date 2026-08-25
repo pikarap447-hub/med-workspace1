@@ -1110,6 +1110,138 @@ transition:background var(--transition-normal), color var(--transition-normal), 
     margin:4px 0 24px;
     color:var(--ink);
   }
+  /* ---- Question reference image (derm/patho photos, etc.) ----
+     Manually attached per-card via card.img (a plain URL — the site
+     hotlinks the image rather than storing it, so it only ever
+     renders when the device actually has a network path to that URL).
+     Three states, toggled by class on the wrap:
+       (default)   image loaded, tap to open the lightbox
+       .is-offline navigator.onLine is false when we tried to show it
+       .is-error   the image element itself failed to load (dead link,
+                   blocked hotlink, 404, or the network dropped mid-load
+                   even though navigator.onLine hadn't flipped yet) */
+  .question-image-wrap{
+    position:relative;
+    margin:2px 0 20px;
+    border-radius:14px;
+    overflow:hidden;
+    background:#F3EDDC;
+    border:1.5px solid var(--tile-blue-pale);
+    max-height:280px;
+    cursor:zoom-in;
+  }
+  .question-image-wrap img{
+    display:block;
+    width:100%;
+    max-height:280px;
+    object-fit:contain;
+    background:#0000;
+  }
+  .question-image-fallback{
+    display:none;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    min-height:120px;
+    padding:18px;
+    font-size:13px;
+    font-weight:600;
+    color:var(--ink-soft);
+    text-align:center;
+    line-height:1.4;
+  }
+  .question-image-wrap.is-offline img,
+  .question-image-wrap.is-error img{display:none;}
+  .question-image-wrap.is-offline .question-image-fallback,
+  .question-image-wrap.is-error .question-image-fallback{display:flex;}
+  .question-image-wrap.is-offline,
+  .question-image-wrap.is-error{cursor:default;}
+  .question-image-fallback{flex-direction:column;}
+  .question-image-fix-btn{display:none;margin-top:2px;padding:5px 12px;font-size:12px;}
+  .question-image-wrap.is-error .question-image-fix-btn{display:inline-flex;cursor:pointer;}
+  .question-image-hint{
+    position:absolute;
+    right:8px;
+    bottom:8px;
+    background:rgba(0,0,0,.55);
+    color:#fff;
+    font-size:11px;
+    font-weight:700;
+    padding:4px 8px;
+    border-radius:8px;
+    pointer-events:none;
+  }
+  .question-image-wrap.is-offline .question-image-hint,
+  .question-image-wrap.is-error .question-image-hint{display:none;}
+  @media (max-width: 480px){
+    .question-image-wrap, .question-image-wrap img{max-height:210px;}
+  }
+
+  /* ---- Lightbox: tap-to-float the question image full-screen so a
+     small phone still shows fine derm/patho detail. Plain <img> at
+     max-width/max-height:100% — pinch-zoom is left to the browser's
+     native touch-action handling rather than reimplemented here. ---- */
+  #imageLightbox{
+    position:fixed; inset:0; z-index:99999;
+    background:rgba(20,15,10,.92);
+    display:flex; align-items:center; justify-content:center;
+    padding:28px;
+  }
+  #imageLightbox.hidden{display:none;}
+  #imageLightbox img{
+    max-width:100%; max-height:100%;
+    object-fit:contain;
+    border-radius:10px;
+    touch-action:pinch-zoom;
+  }
+  .lightbox-close{
+    position:absolute; top:16px; right:16px;
+    width:40px; height:40px; border-radius:50%;
+    background:rgba(255,255,255,.15); color:#fff;
+    border:none; font-size:20px; line-height:1;
+    cursor:pointer;
+  }
+  .lightbox-close:hover{background:rgba(255,255,255,.28);}
+
+  /* ---- Edit Mode: breeze-through card editor ---- */
+  .edit-mode-bar{
+    display:none;
+    align-items:center;
+    gap:10px;
+    flex-wrap:wrap;
+    margin-bottom:14px;
+    padding:10px 12px;
+    background:#F3EDDC;
+    border:1.5px solid var(--tile-blue-pale);
+    border-radius:12px;
+  }
+  .edit-mode-bar .btn-ghost.sm, .edit-mode-bar .btn-primary.sm{
+    font-size:12.5px;
+    padding:7px 14px;
+    white-space:nowrap;
+  }
+  .edit-mode-counter{
+    font-weight:700;
+    font-size:13px;
+    color:var(--ink-soft);
+    flex:1;
+    text-align:center;
+  }
+  #editModeExitBtn{margin-left:auto;}
+  @media (max-width:480px){
+    .edit-mode-bar{justify-content:center;}
+    .edit-mode-counter{order:-1; flex-basis:100%; text-align:center; margin-bottom:2px;}
+    #editModeExitBtn{margin-left:0;}
+  }
+  /* While active: hide the normal quiz chrome (mastery/score, the
+     CARD-NNN row with its pencil/flag/timer icons) in favor of the bar
+     above, and always keep the edit panel open — there's no "answer view"
+     to fall back to in this mode. */
+  #quiz.edit-mode .progress-row,
+  #quiz.edit-mode .progress-track,
+  #quiz.edit-mode .index-no-row{display:none;}
+  #quiz.edit-mode .edit-mode-bar{display:flex;}
+
   .options{display:flex; flex-direction:column; gap:10px; margin-bottom:6px;}
   .opt{
     text-align:left;
@@ -4791,8 +4923,9 @@ OUTCOME: NEG
             </label>
             <span style="font-size:12.5px; color:var(--ink-soft);">Both can run together — a finished focus block hands off into a brain break.</span>
           </div>
-          <div class="row">
+          <div class="row" style="gap:10px; flex-wrap:wrap;">
             <button class="btn-primary" id="startBtn">Start quiz</button>
+            <button class="btn-ghost" id="editModeBtn" type="button" title="Step through every card to edit — no answering required">✎ Edit mode</button>
           </div>
         </div>
         <div class="row" style="margin-top:10px;">
@@ -4817,7 +4950,21 @@ OUTCOME: NEG
             <button type="button" class="flag-btn" id="ssClockBtn" title="Study session timers">⏱️</button>
           </div>
         </div>
+        <div class="edit-mode-bar" id="editModeBar">
+          <button type="button" class="btn-ghost sm" id="editModePrevBtn">‹ Prev</button>
+          <span class="edit-mode-counter" id="editModeCounter">Card 1 / 1</span>
+          <button type="button" class="btn-primary sm" id="editModeNextBtn">Next ›</button>
+          <button type="button" class="btn-ghost sm" id="editModeExitBtn">Exit edit mode</button>
+        </div>
         <div class="question" id="questionText"></div>
+        <div class="question-image-wrap hidden" id="questionImageWrap" title="Tap to enlarge">
+          <img id="questionImage" alt="Reference image" referrerpolicy="no-referrer">
+          <div class="question-image-fallback" id="questionImageFallback">
+            <span id="questionImageFallbackText">📵 Image not available<br>(no connection, or the link is down)</span>
+            <button type="button" class="btn-ghost sm question-image-fix-btn" id="questionImageFixBtn">Fix link</button>
+          </div>
+          <span class="question-image-hint">Tap to enlarge</span>
+        </div>
         <div class="options" id="optionsList"></div>
         <div class="review-hint hidden" id="reviewHint">Tap an option to review it</div>
         <div class="tip-box option-feedback-box hidden" id="optionFeedbackBox">
@@ -4828,6 +4975,14 @@ OUTCOME: NEG
         <div class="card-edit-panel hidden" id="cardEditPanel">
           <label class="field-label">Question</label>
           <textarea id="editFront" class="edit-textarea" rows="2"></textarea>
+          <label class="field-label" style="margin-top:10px;">Image URL <span style="font-weight:400; color:var(--ink-soft);">(optional — paste a link to a derm/patho photo; it's hotlinked, not stored, so it only shows when there's a connection)</span></label>
+          <div class="row" style="gap:8px; align-items:center;">
+            <input type="url" id="editImg" class="modal-input" placeholder="https://..." style="flex:1;">
+            <button type="button" class="btn-ghost" id="clearEditImgBtn" style="font-size:12px; padding:8px 12px; white-space:nowrap;">Remove</button>
+          </div>
+          <div class="tip-image-wrap hidden" id="editImgPreviewWrap" style="max-height:140px;">
+            <img id="editImgPreview" alt="" referrerpolicy="no-referrer" style="max-height:140px;">
+          </div>
           <label class="field-label" style="margin-top:10px;">Answer choices — tap a letter to mark the correct one</label>
           <div id="editOptionsList"></div>
           <button type="button" class="btn-ghost" id="addEditOptionBtn" style="font-size:12px; padding:6px 12px;">+ Add another choice</button>
@@ -11823,6 +11978,11 @@ function makeCell(colKey, value){
 function addRow(data){
   data = data || {};
   const tr = document.createElement('tr');
+  // The sheet has no visible "image" column, but a card can still carry a
+  // manually-attached reference photo (card.img — see Edit Mode). Stash it
+  // on the row itself so collectCardsFromTable() round-trips it instead of
+  // silently dropping it the next time this set gets saved.
+  tr.dataset.img = data.img || '';
 
   const numTd = document.createElement('td');
   numTd.className = 'rownum';
@@ -11874,7 +12034,8 @@ function cardToRowData(card){
       a: opts[0] || '', b: opts[1] || '', c: opts[2] || '', d: opts[3] || '',
       correct: correctIdx >= 0 ? String.fromCharCode(65 + correctIdx) : '',
       tipa: tips[0] || '', tipb: tips[1] || '', tipc: tips[2] || '', tipd: tips[3] || '',
-      rationale: card.rationale || card.tip || ''
+      rationale: card.rationale || card.tip || '',
+      img: card.img || ''
     };
   }
   if(inputMode === 'full'){
@@ -11888,10 +12049,11 @@ function cardToRowData(card){
       front: card.front || '',
       a: opts[0] || '', b: opts[1] || '', c: opts[2] || '', d: opts[3] || '',
       correct: correctIdx >= 0 ? String.fromCharCode(65 + correctIdx) : '',
-      tip: card.tip || ''
+      tip: card.tip || '',
+      img: card.img || ''
     };
   }
-  return {front: card.front || '', back: card.back || '', tip: card.tip || ''};
+  return {front: card.front || '', back: card.back || '', tip: card.tip || '', img: card.img || ''};
 }
 
 function loadCardsIntoTable(cardArr){
@@ -12432,7 +12594,7 @@ function collectClassicRows(){
     const tip = cells[2].textContent.trim();
     if(!front || !back) return;
     if(headerWords1.includes(front.toLowerCase()) && headerWords2.includes(back.toLowerCase())) return;
-    rows.push({front, back, tip});
+    rows.push({front, back, tip, img: tr.dataset.img || undefined});
   });
   return rows;
 }
@@ -12465,7 +12627,7 @@ function collectFullRows(){
     }
     if(correctIndex === -1) return;
 
-    rows.push({front, tip, options, correctIndex, back: options[correctIndex], mode: 'full'});
+    rows.push({front, tip, options, correctIndex, back: options[correctIndex], mode: 'full', img: tr.dataset.img || undefined});
   });
   return rows;
 }
@@ -12508,7 +12670,8 @@ function collectSamplexRows(){
       front, options, optionTips, correctIndex,
       back: options[correctIndex],
       rationale, tip: rationale,
-      mode: 'full'
+      mode: 'full',
+      img: tr.dataset.img || undefined
     });
   });
   return rows;
@@ -12816,6 +12979,9 @@ $('startBtn').onclick = () => {
   }
   $('setupError').textContent = '';
   launchQuiz(parsed, activeSetId);
+};
+$('editModeBtn').onclick = () => {
+  launchEditMode(collectCardsFromTable(), activeSetId);
 };
 
 // Shared quiz-launch path used by "Start quiz", and by the weak-cards
@@ -13615,8 +13781,22 @@ else initStudySessionControls();
 const EDIT_LETTERS = ['A','B','C','D','E','F'];
 let editCorrectIndex = 0;
 
+function updateEditImgPreview(){
+  const url = $('editImg').value.trim();
+  const wrap = $('editImgPreviewWrap');
+  const img = $('editImgPreview');
+  if(!url){ wrap.classList.add('hidden'); img.src=''; return; }
+  img.onload = () => wrap.classList.remove('hidden');
+  img.onerror = () => wrap.classList.add('hidden');
+  img.src = url;
+}
+$('editImg').addEventListener('input', updateEditImgPreview);
+$('clearEditImgBtn').onclick = () => { $('editImg').value=''; updateEditImgPreview(); };
+
 function openCardEditor(){
   $('editFront').value = current.front || '';
+  $('editImg').value = current.img || '';
+  updateEditImgPreview();
   $('editTip').value = current.tip || '';
   $('editTopic').value = current.topic || '';
   $('editSubtopic').value = current.subtopic || '';
@@ -13680,10 +13860,32 @@ function closeCardEditor(){
   if(typeof window.pomodoroResumeAfterEditing === 'function') window.pomodoroResumeAfterEditing();
 }
 $('editCardBtn').onclick = openCardEditor;
-$('cancelCardEditBtn').onclick = closeCardEditor;
+$('cancelCardEditBtn').onclick = () => {
+  // Edit Mode has no "un-edited" quiz view to fall back to (the panel IS
+  // the screen) — Cancel there means "discard my changes to this card",
+  // so re-seed the fields from whatever's still saved rather than closing.
+  if(editModeActive){ openCardEditor(); return; }
+  closeCardEditor();
+};
 $('saveCardEditBtn').onclick = () => {
+  if(!saveCardEditFields()) return;
+  if(editModeActive){
+    flashEditModeSaved();
+  } else {
+    closeCardEditor();
+    showCard(); // re-render with the edited question/answer/tip, and rebuild
+                // the answer options so they stay in sync with the new answer
+  }
+};
+// Pulled out of the Save button's own handler so Edit Mode's Prev/Next/Exit
+// can trigger the same save-and-validate before moving off a card, instead
+// of silently discarding whatever was just typed. Returns false (and shows
+// the same validation alert as before) when the card isn't left in a
+// savable state — callers should not navigate away in that case.
+function saveCardEditFields(){
   const originalFront = current.front;
   const newFront = $('editFront').value.trim();
+  const newImg = $('editImg').value.trim();
   const newTip = $('editTip').value;
   const newTopic = $('editTopic').value.trim();
   const newSubtopic = $('editSubtopic').value.trim();
@@ -13694,7 +13896,7 @@ $('saveCardEditBtn').onclick = () => {
   const newHighYield = $('editHighYield').checked;
   const optionTextareas = Array.from($('editOptionsList').querySelectorAll('textarea'));
   const newOptions = optionTextareas.map(ta => ta.value.trim()).filter(Boolean);
-  if(!newFront || newOptions.length < 2){ alert("Question needs text, and at least 2 answer choices."); return; }
+  if(!newFront || newOptions.length < 2){ alert("Question needs text, and at least 2 answer choices."); return false; }
   const correctIdx = Math.min(editCorrectIndex, newOptions.length - 1);
   const newBack = newOptions[correctIdx];
 
@@ -13720,6 +13922,7 @@ $('saveCardEditBtn').onclick = () => {
   });
 
   current.front = newFront;
+  current.img = newImg || undefined;
   current.back = newBack;
   current.tip = newTip;
   current.options = newOptions;
@@ -13782,6 +13985,7 @@ $('saveCardEditBtn').onclick = () => {
       if(idx === -1) idx = current.id ? s.cards.findIndex(c => c.id === current.id) : s.cards.findIndex(c => c.front === originalFront);
       if(idx !== -1){
         s.cards[idx].front = newFront;
+        s.cards[idx].img = newImg || undefined;
         s.cards[idx].back = newBack;
         s.cards[idx].tip = newTip;
         s.cards[idx].options = newOptions;
@@ -13808,9 +14012,90 @@ $('saveCardEditBtn').onclick = () => {
       alert("Couldn't find this card's original set, so the edit only applies for the rest of this practice round and won't be saved. The set it came from may have been deleted.");
     }
   }
-  closeCardEditor();
-  showCard(); // re-render with the edited question/answer/tip, and rebuild
-              // the answer options so they stay in sync with the new answer
+  return true;
+}
+
+/* ---- Edit Mode: "breeze through and edit" ---------------------------
+   Steps through every card in a set sequentially with the card-edit-panel
+   already open on each one — no answering required, just Prev/Next/Exit.
+   Reuses the exact same panel, fields, and save-to-set logic as the
+   in-quiz pencil-edit (openCardEditor/saveCardEditFields above); the only
+   things this adds are: a simple index instead of the quiz's shuffled
+   queue, a small Prev/Next/counter bar in place of the quiz chrome, and a
+   table refresh on the way out so the setup screen's sheet doesn't go
+   stale (and silently wipe fresh edits, e.g. an added image, the next
+   time "Save current set" is hit — see the tr.dataset.img plumbing in
+   addRow/cardToRowData/collect*Rows above for the image half of that). */
+let editModeActive = false;
+let editModeIndex = 0;
+
+function launchEditMode(cardArr, setId){
+  if(!cardArr.length){
+    $('setupError').textContent = 'Add at least 1 card to edit.';
+    return;
+  }
+  $('setupError').textContent = '';
+  cards = cardArr;
+  activeSetId = setId;
+  totalCards = cards.length;
+  editModeActive = true;
+  editModeIndex = 0;
+  hideAllScreens();
+  $('quiz').classList.remove('hidden');
+  $('quiz').classList.add('edit-mode');
+  showEditModeCard();
+}
+
+function showEditModeCard(){
+  current = cards[editModeIndex];
+  // Seed straight from the card's own stored options — this is a raw data
+  // editor, not a quiz, so there's no reason to shuffle them the way
+  // buildOptions() does for an actual question attempt.
+  currentOptions = (current.options && current.options.length) ? current.options.slice() : [current.back || ''];
+  setQuestionImage(current);
+  openCardEditor();
+  $('editModeCounter').textContent = `Card ${editModeIndex + 1} / ${cards.length}`;
+  $('editModePrevBtn').disabled = editModeIndex === 0;
+  $('editModeNextBtn').textContent = (editModeIndex === cards.length - 1) ? 'Finish ✓' : 'Next ›';
+}
+
+function flashEditModeSaved(){
+  const btn = $('saveCardEditBtn');
+  const original = btn.textContent;
+  btn.textContent = 'Saved ✓';
+  btn.disabled = true;
+  setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 700);
+}
+
+function exitEditMode(){
+  editModeActive = false;
+  $('quiz').classList.remove('edit-mode');
+  // Write the (possibly edited) cards back into the setup sheet so it
+  // isn't left showing stale text/options — and now carries forward
+  // whatever image URLs were just attached — for whenever "Save current
+  // set" or "Start quiz" next reads from the table.
+  if(typeof loadCardsIntoTable === 'function') loadCardsIntoTable(cards);
+  showSetupScreen();
+}
+
+$('editModePrevBtn').onclick = () => {
+  if(editModeIndex === 0) return;
+  if(!saveCardEditFields()) return;
+  editModeIndex -= 1;
+  showEditModeCard();
+};
+$('editModeNextBtn').onclick = () => {
+  if(!saveCardEditFields()) return;
+  if(editModeIndex === cards.length - 1){ exitEditMode(); return; }
+  editModeIndex += 1;
+  showEditModeCard();
+};
+$('editModeExitBtn').onclick = () => {
+  // Exiting should never lose an in-progress edit — try to save first, but
+  // leave without saving rather than trap someone on the card if the save
+  // itself is what's failing validation (e.g. they deleted all the options).
+  saveCardEditFields();
+  exitEditMode();
 };
 
 // Suggests existing Professor tags (from every card in every set) in the
@@ -13859,6 +14144,115 @@ $('applyProfYearToSetBtn').onclick = () => {
   populateKnownProfessorsList();
 };
 
+/* ---- Manually-attached question image (card.img) ----
+   Distinct from maybeShowTipImage() above: that one auto-searches for a
+   *related* photo to show after answering. This one shows a specific,
+   hand-picked photo (e.g. a derm/patho image) attached to the card,
+   visible while answering, since the photo often *is* the question.
+   The image is hotlinked from wherever it was pasted from — nothing is
+   downloaded or stored — so it naturally only renders when the device
+   currently has a path to that URL, and otherwise falls back to a
+   plain "not available" message instead of a broken-image icon. */
+function setQuestionImage(card){
+  const wrap = $('questionImageWrap');
+  const imgEl = $('questionImage');
+  const fallbackText = $('questionImageFallbackText');
+  if(!wrap || !imgEl) return;
+  wrap.classList.remove('is-error','is-offline');
+  imgEl.onload = null; imgEl.onerror = null;
+  if(!card || !card.img){
+    wrap.classList.add('hidden');
+    imgEl.removeAttribute('src');
+    return;
+  }
+  wrap.classList.remove('hidden');
+  if(navigator.onLine === false){
+    // Skip even attempting the request — knowing we're offline lets the
+    // fallback message say so immediately instead of waiting on a load
+    // that's guaranteed to fail. Not shown as "invalid" since the link
+    // itself may be perfectly fine once back online.
+    wrap.classList.add('is-offline');
+    if(fallbackText) fallbackText.innerHTML = '📵 No connection right now<br>(the image will retry once you\'re back online)';
+    imgEl.removeAttribute('src');
+    return;
+  }
+  imgEl.onload = () => wrap.classList.remove('is-error','is-offline');
+  imgEl.onerror = () => {
+    // Distinct from offline: we ARE online and the request still failed —
+    // the link itself is the problem (deleted, expired, or hotlink-blocked
+    // on this device/host), most commonly after a set gets shared via
+    // Community and opened somewhere the original host won't serve it to.
+    // Surface that plainly instead of leaving a silently-vanished image,
+    // and offer an immediate way to replace or clear the broken link.
+    wrap.classList.add('is-error');
+    if(fallbackText) fallbackText.innerHTML = '⚠️ This image link is invalid<br>(it may have expired or been removed)';
+  };
+  imgEl.src = card.img;
+}
+function fixBrokenImageLink(){
+  if(!current) return;
+  const next = prompt('This image link is invalid. Paste a new image URL (or leave blank to remove the image):', current.img || '');
+  if(next === null) return; // cancelled — leave everything as-is
+  const newImg = next.trim();
+  current.img = newImg || undefined;
+  // Same set-resolution logic used by the per-card editor's own save path
+  // (see saveCardEditFields) so this sticks whether we're in a normal
+  // study session or a weak/adaptive/cram/confusion practice round.
+  if(activeSetId){
+    const setsData = loadSets();
+    const targetSetId = (activeSetId === PRACTICE_ID) ? current._srcSetId : activeSetId;
+    const s = targetSetId ? setsData[targetSetId] : null;
+    if(s && Array.isArray(s.cards)){
+      const posIdx = cards.indexOf(current);
+      let idx = (activeSetId !== PRACTICE_ID && posIdx !== -1 && s.cards.length === cards.length) ? posIdx : -1;
+      if(idx === -1) idx = current.id ? s.cards.findIndex(c => c.id === current.id) : s.cards.findIndex(c => c.front === current.front);
+      if(idx !== -1){
+        s.cards[idx].img = newImg || undefined;
+        saveSetsData(setsData);
+      }
+    }
+  }
+  setQuestionImage(current);
+}
+function initQuestionImageLightbox(){
+  const wrap = $('questionImageWrap');
+  const lightbox = $('imageLightbox');
+  const lbImg = $('lightboxImage');
+  const closeBtn = $('lightboxCloseBtn');
+  const fixBtn = $('questionImageFixBtn');
+  if(!wrap || !lightbox) return;
+  wrap.addEventListener('click', () => {
+    if(wrap.classList.contains('is-error') || wrap.classList.contains('is-offline')) return;
+    const src = $('questionImage').getAttribute('src');
+    if(!src) return;
+    lbImg.src = src;
+    lightbox.classList.remove('hidden');
+  });
+  if(fixBtn){
+    fixBtn.addEventListener('click', e => {
+      e.stopPropagation(); // don't let this bubble into the wrap's own click handler
+      fixBrokenImageLink();
+    });
+  }
+  function closeLightbox(){ lightbox.classList.add('hidden'); lbImg.removeAttribute('src'); }
+  closeBtn.addEventListener('click', closeLightbox);
+  lightbox.addEventListener('click', e => { if(e.target === lightbox) closeLightbox(); });
+  document.addEventListener('keydown', e => { if(e.key === 'Escape') closeLightbox(); });
+  // If connectivity changes mid-quiz, re-evaluate the current card's image
+  // instead of leaving a stale offline/error state up (or a broken icon
+  // that never gets retried once the network comes back).
+  window.addEventListener('online', () => { if(typeof current !== 'undefined' && current && current.img) setQuestionImage(current); });
+  window.addEventListener('offline', () => { if(typeof current !== 'undefined' && current && current.img) setQuestionImage(current); });
+}
+// #imageLightbox lives right before </body>, well after this <script> block
+// in document order — calling this immediately (as an IIFE, the previous
+// shape of this code) ran before that element existed, so $('imageLightbox')
+// was always null and the click listener never got attached: tap-to-enlarge
+// was silently dead on every load. Defer to DOMContentLoaded like the other
+// late-DOM inits in this file (see initStudySessionControls above).
+if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initQuestionImageLightbox);
+else initQuestionImageLightbox();
+
 function showCard(restoreOptions){
   answered = false;
   currentChosen = null;
@@ -13879,6 +14273,7 @@ function showCard(restoreOptions){
   renderBrainBreakCountdown();
   $('progressFill').style.width = (masteredCount / totalCards * 100) + '%';
   $('questionText').textContent = card.front;
+  setQuestionImage(card);
   $('tipBox').style.display = 'none';
   $('tipImageWrap').classList.add('hidden');
   $('nextBtn').classList.add('hidden');
@@ -17335,6 +17730,39 @@ const SAMPLE=[
 function added(){return JSON.parse(localStorage.getItem('uermExams')||'[]')}
 function saveAdded(a){lsSet('uermExams',JSON.stringify(a))}
 function exams(){return SAMPLE.concat(added())}
+
+/* ---- Custom subjects: user-added subjects that live alongside the
+   built-in SUBJECTS list without ever mutating that constant. Stored
+   as {CODE:{name,color}} and merged in wherever SUBJECTS is read for
+   display/lookup via allSubjects(). ---- */
+const CUSTOM_SUBJECT_PALETTE=['#0e7490','#9333ea','#b45309','#4d7c0f','#be185d','#0369a1','#a16207','#6d28d9','#15803d','#be123c'];
+function customSubjects(){return JSON.parse(localStorage.getItem('uermCustomSubjects')||'{}')}
+function saveCustomSubjects(o){lsSet('uermCustomSubjects',JSON.stringify(o))}
+function allSubjects(){return {...SUBJECTS,...customSubjects()}}
+function addCustomSubject(){
+  const name=(prompt('Subject name (e.g. "Family Medicine"):')||'').trim();
+  if(!name)return null;
+  const cs=customSubjects();
+  let code=name.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,6)||'SUBJ';
+  if(allSubjects()[code]){
+    let n=2;
+    while(allSubjects()[code+n])n++;
+    code=code+n;
+  }
+  const usedColors=Object.values(allSubjects()).map(s=>s.color);
+  const color=CUSTOM_SUBJECT_PALETTE.find(c=>!usedColors.includes(c))||CUSTOM_SUBJECT_PALETTE[Object.keys(cs).length%CUSTOM_SUBJECT_PALETTE.length];
+  cs[code]={name,color,custom:true};
+  saveCustomSubjects(cs);
+  return code;
+}
+function removeCustomSubject(code){
+  const cs=customSubjects();
+  if(!cs[code])return;
+  if(!confirm(`Remove custom subject "${cs[code].name}"? Any exams already using it will keep showing its code until you edit them.`))return;
+  delete cs[code];
+  saveCustomSubjects(cs);
+  refreshSubjectUI();
+}
 function diff(a,b){return Math.round((new Date(b+'T00:00:00')-new Date(a+'T00:00:00'))/86400000)}
 function index(date){return diff('2026-07-01',date)}
 function fmtTime(t){const [h,m]=t.split(':').map(Number);return `${h%12||12}:${m} ${h>=12?'PM':'AM'}`}
@@ -17440,7 +17868,7 @@ function render(){
    const col=grid.querySelector(`[data-date="${date}"]`);if(!col)return;
    items.sort((a,b)=>a.start.localeCompare(b.start));
    items.forEach(e=>{
-     const s=SUBJECTS[e.subject],card=document.createElement('div');card.className='exam';card.style.setProperty('--subject',s?.color||'#64748b');
+     const s=allSubjects()[e.subject],card=document.createElement('div');card.className='exam';card.style.setProperty('--subject',s?.color||'#64748b');
      if(level<2)card.style.padding='4px 5px';
      if(level===0){
        card.innerHTML=`<div class="name">${s?.name||e.subject}</div>`;
@@ -17472,7 +17900,7 @@ function openInfo(e){
   const deleteBtn=document.getElementById('deleteBtn');
   const saveBtn=document.getElementById('saveBtn');
   const canDelete=e._addedIndex!==undefined;
-  document.getElementById('modalTitle').textContent=(SUBJECTS[e.subject]?.name||e.subject)+' · '+e.exam;
+  document.getElementById('modalTitle').textContent=(allSubjects()[e.subject]?.name||e.subject)+' · '+e.exam;
   document.getElementById('modalSub').textContent=label(e.date)+' · '+fmtTime(e.start)+' – '+fmtTime(e.end);
   deleteBtn.style.display=canDelete?'block':'none';
   saveBtn.style.display='none';
@@ -17486,7 +17914,22 @@ function close(){
 }
 
 const subjectSelect=document.getElementById('subject');
-Object.entries(SUBJECTS).forEach(([code,s])=>{const o=document.createElement('option');o.value=code;o.textContent=`${s.name} (${code})`;subjectSelect.appendChild(o)});
+const ADD_CUSTOM_SUBJECT_VALUE='__add_custom_subject__';
+function populateSubjectSelect(selectCode){
+  const prev=selectCode||subjectSelect.value;
+  subjectSelect.innerHTML='';
+  Object.entries(allSubjects()).forEach(([code,s])=>{const o=document.createElement('option');o.value=code;o.textContent=`${s.name} (${code})`;subjectSelect.appendChild(o)});
+  const addOpt=document.createElement('option');addOpt.value=ADD_CUSTOM_SUBJECT_VALUE;addOpt.textContent='+ Add custom subject…';subjectSelect.appendChild(addOpt);
+  if(prev&&allSubjects()[prev])subjectSelect.value=prev;
+}
+populateSubjectSelect();
+subjectSelect.addEventListener('change',()=>{
+  if(subjectSelect.value!==ADD_CUSTOM_SUBJECT_VALUE)return;
+  const code=addCustomSubject();
+  populateSubjectSelect(code||undefined);
+  renderSubjectsLegend();
+  if(!code)subjectSelect.selectedIndex=0;
+});
 function openAdd(){
   document.getElementById('modalTitle').textContent='Add Subject Exam';
   document.getElementById('modalSub').textContent='Enter an exact date and time.';
@@ -17512,7 +17955,7 @@ function deleteExam(){
   const a=added();
   if(!a[i])return;
   const e=a[i];
-  const name=(SUBJECTS[e.subject]?.name||e.subject)+' · '+e.exam;
+  const name=(allSubjects()[e.subject]?.name||e.subject)+' · '+e.exam;
   if(confirm(`Delete "${name}" on ${label(e.date)}?`)){
     a.splice(i,1);
     saveAdded(a);
@@ -17524,7 +17967,7 @@ function deleteExam(){
 function parseICS(text){
  const blocks=text.replace(/\r?\n[ \t]/g,'').split('BEGIN:VEVENT').slice(1),out=[];
  function dt(raw){const v=(raw||'').trim(),m=v.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);return m?{date:`${m[1]}-${m[2]}-${m[3]}`,time:`${m[4]}:${m[5]}`} : null}
- function subject(text){const u=text.toUpperCase();for(const [c,s] of Object.entries(SUBJECTS))if(u.includes(c)||u.includes(s.name.toUpperCase()))return c;return null}
+ function subject(text){const u=text.toUpperCase();for(const [c,s] of Object.entries(allSubjects()))if(u.includes(c)||u.includes(s.name.toUpperCase()))return c;return null}
  blocks.forEach(b=>{
    const summary=(b.match(/(?:^|\n)SUMMARY[^:]*:(.*)/)||[])[1]||'',desc=(b.match(/(?:^|\n)DESCRIPTION[^:]*:(.*)/)||[])[1]||'';
    const a=dt((b.match(/(?:^|\n)DTSTART[^:]*:(.*)/)||[])[1]),z=dt((b.match(/(?:^|\n)DTEND[^:]*:(.*)/)||[])[1]),s=subject(summary+' '+desc);
@@ -17547,7 +17990,33 @@ document.getElementById('ics').addEventListener('change',async e=>{
  const a=added();saveAdded(a.concat(got));render();alert(got.length+' exam(s) imported.');e.target.value=''
 });
 
-Object.entries(SUBJECTS).forEach(([code,s])=>{const el=document.createElement('div');el.className='subject';el.innerHTML=`<span class="swatch" style="background:${s.color}"></span><div><div class="sname">${s.name}</div><div class="scode">${code}</div></div>`;document.getElementById('subjects').appendChild(el)});
+function renderSubjectsLegend(){
+  const holder=document.getElementById('subjects');
+  holder.innerHTML='';
+  Object.entries(allSubjects()).forEach(([code,s])=>{
+    const el=document.createElement('div');el.className='subject';el.style.position='relative';
+    el.innerHTML=`<span class="swatch" style="background:${s.color}"></span><div><div class="sname">${s.name}</div><div class="scode">${code}</div></div>`;
+    if(s.custom){
+      const rm=document.createElement('button');
+      rm.type='button';rm.textContent='×';rm.title='Remove custom subject';
+      rm.style.cssText='position:absolute;top:2px;right:4px;border:none;background:none;font-size:12px;line-height:1;cursor:pointer;color:#9aa0aa;padding:2px';
+      rm.addEventListener('click',ev=>{ev.stopPropagation();removeCustomSubject(code)});
+      el.appendChild(rm);
+    }
+    holder.appendChild(el);
+  });
+  const addTile=document.createElement('button');
+  addTile.type='button';addTile.className='subject';
+  addTile.style.cssText='cursor:pointer;justify-content:center;border-style:dashed;color:var(--tile-blue,#3F6E52);font-weight:700;background:none;font-family:inherit;font-size:9px';
+  addTile.textContent='+ Add subject';
+  addTile.addEventListener('click',()=>{
+    const code=addCustomSubject();
+    if(code){populateSubjectSelect(code);renderSubjectsLegend()}
+  });
+  holder.appendChild(addTile);
+}
+function refreshSubjectUI(){populateSubjectSelect();renderSubjectsLegend()}
+renderSubjectsLegend();
 
 const holidayToggle=document.getElementById('holidayToggle');
 function syncHolidayToggle(){
@@ -17703,6 +18172,11 @@ jump('TODAY','auto');
     <span class="ss-collapsed-dot" aria-hidden="true">·</span>
     <span class="ss-collapsed-summary" id="ssCollapsedSummary">No active timers</span>
   </button>
+</div>
+
+<div id="imageLightbox" class="hidden">
+  <button type="button" class="lightbox-close" id="lightboxCloseBtn" aria-label="Close image">✕</button>
+  <img id="lightboxImage" alt="">
 </div>
 
 </body>
