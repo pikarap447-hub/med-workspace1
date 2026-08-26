@@ -5003,6 +5003,13 @@ OUTCOME: NEG
             <button type="button" class="btn-ghost" id="applyProfYearToSetBtn" title="Tag every card in this set with this Professor/Year" style="font-size:11.5px; padding:6px 10px; white-space:nowrap;">Apply to whole set</button>
           </div>
           <div class="hint" id="applyProfYearHint" style="margin-top:4px; min-height:14px;"></div>
+          <label class="switch-row" for="editSameLecAsPrevYear" style="margin:10px 0 0;">
+            <span class="switch">
+              <input type="checkbox" id="editSameLecAsPrevYear">
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </span>
+            <span class="switch-label">🔁 Same lecture as previous year <span style="font-weight:400; color:var(--ink-soft);">(this year's exam repeated last year's lecture material)</span></span>
+          </label>
           <div class="row" style="gap:8px; flex-wrap:wrap; margin-top:8px;">
             <select id="editQuestionType" class="modal-input" style="flex:1; min-width:140px;">
               <option value="">Question type (optional)</option>
@@ -5927,6 +5934,7 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
                 <div id="communityPreviewStats" class="community-set-stats"></div>
                 <div id="communityPreviewDesc" class="community-preview-desc"></div>
                 <div id="communityPreviewSamples"></div>
+                <div id="communityPreviewTagSummary" class="community-preview-desc hidden" style="margin-top:12px; padding-top:12px; border-top:1px solid var(--border);"></div>
                 <div class="community-preview-comments" style="margin-top:18px; border-top:1px solid var(--border); padding-top:14px;">
                   <div style="font-weight:800; font-size:14px; color:var(--text); margin-bottom:8px;">Comments</div>
                   <div id="communityPreviewCommentForm" style="display:flex; gap:8px; margin-bottom:12px;">
@@ -6003,10 +6011,11 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
             <input type="text" id="profSearchInput" class="modal-input" placeholder="Search professor, topic, or question text…" style="width:100%; max-width:100%;">
           </div>
 
-          <div class="row" style="gap:8px; margin-top:10px; flex-wrap:wrap;">
+          <div class="row" style="gap:8px; margin-top:10px; flex-wrap:wrap; align-items:center;">
             <select id="profSearchYearSelect" class="modal-input" style="max-width:160px;">
               <option value="">Any year</option>
             </select>
+            <button type="button" class="btn-ghost" id="profSearchRepeatToggle" style="font-size:12px;">🔁 Same lecture as last year</button>
             <button type="button" class="btn-ghost" id="profSearchClearBtn" style="font-size:12px;">Clear filters</button>
           </div>
 
@@ -7981,6 +7990,8 @@ async function openCommunityPreview(id){
   // just this one deck's cards now that the user has actually asked to
   // preview it. This is the ONLY place a preview downloads card content.
   $('communityPreviewSamples').innerHTML = `<div class="community-empty" style="margin-top:14px;">Loading preview…</div>`;
+  $('communityPreviewTagSummary').classList.add('hidden');
+  $('communityPreviewTagSummary').innerHTML = '';
   $('communityPreviewBackdrop').classList.remove('hidden');
   $('communityPreviewBackdrop').setAttribute('aria-hidden','false');
   loadAndRenderComments(id);
@@ -7996,6 +8007,32 @@ async function openCommunityPreview(id){
   if(communityPreviewId !== id) return; // preview closed/changed while this was in flight
   const samples = (cards || []).slice(0,3);
   $('communityPreviewSamples').innerHTML = samples.length ? samples.map((c,i) => `<div class="community-preview-sample"><div class="community-preview-front">Sample ${i+1} · Front</div><div class="community-preview-text">${escapeHtml(c.front || '')}</div><div class="community-preview-front" style="margin-top:10px;">Back</div><div class="community-preview-text">${escapeHtml(c.back || '')}</div></div>`).join('') : `<div class="community-empty" style="margin-top:14px;">No preview cards available.</div>`;
+  renderCommunityPreviewTagSummary(cards || []);
+}
+
+// Surfaces the per-question tags (Professor, Topic, "same lecture as
+// previous year") a set's uploader added, so someone deciding whether to
+// import a set can see them too — not just the person who tagged them.
+// Reuses the exact card data already fetched for the sample preview above,
+// so this adds no extra Supabase reads.
+function renderCommunityPreviewTagSummary(cards){
+  const box = $('communityPreviewTagSummary');
+  const profCounts = buildChipCounts(cards, 'professor');
+  const topicCounts = buildChipCounts(cards, 'topic');
+  const repeatCount = cards.filter(c => c.sameLecAsPrevYear === true).length;
+  if(profCounts.size === 0 && topicCounts.size === 0 && repeatCount === 0){
+    box.classList.add('hidden');
+    box.innerHTML = '';
+    return;
+  }
+  box.classList.remove('hidden');
+  const fmt = counts => Array.from(counts.values()).sort((a,b) => b.n - a.n).slice(0,6)
+    .map(({label,n}) => `${escapeHtml(label)} (${n})`).join(', ');
+  const rows = [];
+  if(profCounts.size) rows.push(`<div><strong>👤 Professors:</strong> ${fmt(profCounts)}</div>`);
+  if(topicCounts.size) rows.push(`<div style="margin-top:4px;"><strong>🏷️ Topics:</strong> ${fmt(topicCounts)}</div>`);
+  if(repeatCount) rows.push(`<div style="margin-top:4px;">🔁 ${repeatCount} question${repeatCount===1?'':'s'} flagged as repeating last year's lecture</div>`);
+  box.innerHTML = `<div style="font-weight:800; font-size:13px; color:var(--text); margin-bottom:6px;">Tagged questions in this set</div>` + rows.join('');
 }
 
 function closeCommunityPreview(){
@@ -8218,8 +8255,23 @@ function renderCommunityView(){
 // Professor and/or Topic, so patterns in a professor's test style (which
 // topics they favor, which years are covered) become visible, and the
 // matching questions can be practiced together on the spot. =====
+// Filters are stored NORMALIZED (trimmed + lowercased), since that's what
+// they're compared against — see normTag() below. Chips display whatever
+// casing was actually typed on the first card that used that tag.
 let profSearchFilterProf = '';
 let profSearchFilterTopic = '';
+let profSearchRepeatOnly = false;
+
+// Professor/Topic/Lecturer are free-typed text, so the same person/topic
+// can end up saved under slightly different casing on different cards
+// (e.g. "Dela Cruz, J." on one card, "dela cruz, j." on another after
+// autocomplete didn't kick in). Comparing/grouping tags by their raw string
+// silently split one professor into multiple chips, and clicking a chip did
+// an exact (case-sensitive) match — so cards tagged with a differently-cased
+// spelling of the same name were invisible from that chip's results even
+// though the tag box below listed the name once. Normalize once, here, and
+// use that everywhere tags are grouped or filtered.
+function normTag(v){ return (v || '').trim().toLowerCase(); }
 
 // Every card, deduped and tagged with the set it came from (_srcSetId) —
 // same dedup-by-cardKey approach used by the folder/weak-practice builders
@@ -8247,11 +8299,14 @@ function profSearchMatches(){
   const q = ($('profSearchInput').value || '').trim().toLowerCase();
   const yr = $('profSearchYearSelect').value;
   return getAllTaggedCardsForSearch().filter(c => {
-    if(!c.professor && !c.topic && !q) return false; // untagged noise stays out of the browse-everything view
-    if(profSearchFilterProf && (c.professor || '') !== profSearchFilterProf) return false;
-    if(profSearchFilterTopic && (c.topic || '') !== profSearchFilterTopic) return false;
+    // untagged noise stays out of the browse-everything view
+    if(!c.professor && !c.topic && !q) return false;
+    if(profSearchFilterProf && normTag(c.professor) !== profSearchFilterProf) return false;
+    if(profSearchFilterTopic && normTag(c.topic) !== profSearchFilterTopic) return false;
+    if(profSearchRepeatOnly && c.sameLecAsPrevYear !== true) return false;
     if(yr && (c.year || '') !== yr) return false;
     if(q){
+      // Case-insensitive on both sides (q is already lowercased above).
       const hay = [c.professor, c.topic, c.subtopic, c.front].filter(Boolean).join(' ').toLowerCase();
       if(!hay.includes(q)) return false;
     }
@@ -8259,54 +8314,62 @@ function profSearchMatches(){
   });
 }
 
+// Shared by the Professor/Lecturer/Topic chip builders below: groups cards
+// by a normalized (case-insensitive) key so "Dela Cruz, J." and
+// "dela cruz, j." count as the same person/tag instead of splitting into
+// two chips, while still displaying the first casing actually typed.
+function buildChipCounts(cards, field){
+  const counts = new Map(); // normKey -> {label, n}
+  cards.forEach(c => {
+    const raw = c[field];
+    if(!raw) return;
+    const key = normTag(raw);
+    const entry = counts.get(key);
+    if(entry) entry.n++; else counts.set(key, {label: raw, n: 1});
+  });
+  return counts;
+}
+function renderChipBox(box, counts, activeKey, emptyMsg, onPick){
+  box.innerHTML = '';
+  if(counts.size === 0){
+    box.innerHTML = `<span class="community-section-sub">${emptyMsg}</span>`;
+    return;
+  }
+  Array.from(counts.entries()).sort((a,b) => b[1].n - a[1].n).forEach(([key, {label, n}]) => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'community-chip' + (activeKey === key ? ' active' : '');
+    chip.textContent = `${label} (${n})`;
+    chip.onclick = () => onPick(key);
+    box.appendChild(chip);
+  });
+}
+
 function renderProfSearchChips(){
   const all = getAllTaggedCardsForSearch();
-  const profCounts = new Map(), topicCounts = new Map();
-  all.forEach(c => {
-    if(c.professor) profCounts.set(c.professor, (profCounts.get(c.professor) || 0) + 1);
-    if(c.topic) topicCounts.set(c.topic, (topicCounts.get(c.topic) || 0) + 1);
-  });
-  const profBox = $('profSearchProfChips');
-  profBox.innerHTML = '';
-  if(profCounts.size === 0){
-    profBox.innerHTML = '<span class="community-section-sub">No questions tagged with a Professor yet — open a question during a quiz, tap ✏️, and fill in the Professor field.</span>';
-  } else {
-    Array.from(profCounts.entries()).sort((a,b) => b[1]-a[1]).forEach(([name, n]) => {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'community-chip' + (profSearchFilterProf === name ? ' active' : '');
-      chip.textContent = `${name} (${n})`;
-      chip.onclick = () => { profSearchFilterProf = (profSearchFilterProf === name) ? '' : name; renderProfSearchView(); };
-      profBox.appendChild(chip);
-    });
-  }
-  const topicBox = $('profSearchTopicChips');
-  topicBox.innerHTML = '';
-  if(topicCounts.size === 0){
-    topicBox.innerHTML = '<span class="community-section-sub">No questions tagged with a Topic yet.</span>';
-  } else {
-    Array.from(topicCounts.entries()).sort((a,b) => b[1]-a[1]).forEach(([name, n]) => {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'community-chip' + (profSearchFilterTopic === name ? ' active' : '');
-      chip.textContent = `${name} (${n})`;
-      chip.onclick = () => { profSearchFilterTopic = (profSearchFilterTopic === name) ? '' : name; renderProfSearchView(); };
-      topicBox.appendChild(chip);
-    });
-  }
+  renderChipBox($('profSearchProfChips'), buildChipCounts(all, 'professor'), profSearchFilterProf,
+    'No questions tagged with a Professor yet — open a question during a quiz, tap ✏️, and fill in the Professor field.',
+    key => { profSearchFilterProf = (profSearchFilterProf === key) ? '' : key; renderProfSearchView(); });
+  renderChipBox($('profSearchTopicChips'), buildChipCounts(all, 'topic'), profSearchFilterTopic,
+    'No questions tagged with a Topic yet.',
+    key => { profSearchFilterTopic = (profSearchFilterTopic === key) ? '' : key; renderProfSearchView(); });
   // Year dropdown, rebuilt from whatever years are actually in use.
   const yearSel = $('profSearchYearSelect');
   const curYear = yearSel.value;
   const years = Array.from(new Set(all.map(c => c.year).filter(Boolean))).sort().reverse();
   yearSel.innerHTML = '<option value="">Any year</option>' + years.map(y => `<option value="${escapeHtml(y)}">${escapeHtml(y)}</option>`).join('');
   yearSel.value = years.includes(curYear) ? curYear : '';
+  $('profSearchRepeatToggle').classList.toggle('active', profSearchRepeatOnly);
 }
 
 function renderProfSearchInsights(matches){
   const box = $('profSearchInsights');
   if(!profSearchFilterProf){ box.style.display = 'none'; return; }
   box.style.display = '';
-  $('profSearchInsightsTitle').textContent = `📊 ${profSearchFilterProf}'s pattern`;
+  // profSearchFilterProf is the normalized (lowercased) key — pull the
+  // actual typed casing back from a matching card for display.
+  const displayName = (matches.find(c => c.professor)?.professor) || profSearchFilterProf;
+  $('profSearchInsightsTitle').textContent = `📊 ${escapeHtml(displayName)}'s pattern`;
   const topicCounts = new Map(), yearSet = new Set();
   matches.forEach(c => {
     if(c.topic) topicCounts.set(c.topic, (topicCounts.get(c.topic) || 0) + 1);
@@ -8325,7 +8388,7 @@ function renderProfSearchResults(matches){
   $('profSearchResultsStatus').textContent = matches.length
     ? `${matches.length} matching question${matches.length===1?'':'s'}`
     : 'No matching questions.';
-  $('profSearchResultsHeading').textContent = (profSearchFilterProf || profSearchFilterTopic || $('profSearchInput').value.trim())
+  $('profSearchResultsHeading').textContent = (profSearchFilterProf || profSearchFilterTopic || profSearchRepeatOnly || $('profSearchInput').value.trim())
     ? 'Matching questions' : 'All tagged questions';
   $('profSearchPracticeAllBtn').disabled = matches.length === 0;
   if(matches.length === 0){
@@ -8344,6 +8407,7 @@ function renderProfSearchResults(matches){
       c.professor ? `<span class="community-set-tag">👤 ${escapeHtml(c.professor)}</span>` : '',
       c.year ? `<span class="community-set-tag">📅 ${escapeHtml(c.year)}</span>` : '',
       c.topic ? `<span class="community-set-tag">🏷️ ${escapeHtml(c.topic)}</span>` : '',
+      c.sameLecAsPrevYear ? `<span class="community-set-tag">🔁 Same lecture as last year</span>` : '',
       c._srcSetName ? `<span class="community-set-tag">${escapeHtml(c._srcSetName)}</span>` : ''
     ].join('');
     row.innerHTML = `
@@ -8369,7 +8433,7 @@ function renderProfSearchView(){
 function initProfSearchUI(){
   $('profSearchToggleBtn').onclick = () => {
     saveBeforeNavigation(); hideAllScreens(); $('profSearchView').classList.remove('hidden');
-    profSearchFilterProf = ''; profSearchFilterTopic = '';
+    profSearchFilterProf = ''; profSearchFilterTopic = ''; profSearchRepeatOnly = false;
     $('profSearchInput').value = '';
     renderProfSearchView();
   };
@@ -8380,8 +8444,9 @@ function initProfSearchUI(){
     profSearchDebounce = setTimeout(renderProfSearchView, 150);
   });
   $('profSearchYearSelect').addEventListener('change', renderProfSearchView);
+  $('profSearchRepeatToggle').onclick = () => { profSearchRepeatOnly = !profSearchRepeatOnly; renderProfSearchView(); };
   $('profSearchClearBtn').onclick = () => {
-    profSearchFilterProf = ''; profSearchFilterTopic = '';
+    profSearchFilterProf = ''; profSearchFilterTopic = ''; profSearchRepeatOnly = false;
     $('profSearchInput').value = '';
     $('profSearchYearSelect').value = '';
     renderProfSearchView();
@@ -14078,6 +14143,7 @@ function openCardEditor(){
   $('editYear').value = current.year || '';
   $('applyProfYearHint').textContent = '';
   populateKnownProfessorsList();
+  $('editSameLecAsPrevYear').checked = current.sameLecAsPrevYear === true;
   $('editQuestionType').value = current.questionType || '';
   $('editDifficulty').value = current.difficulty || '';
   $('editHighYield').checked = current.highYield === true;
@@ -14165,6 +14231,7 @@ function saveCardEditFields(){
   const newSubtopic = $('editSubtopic').value.trim();
   const newProfessor = $('editProfessor').value.trim();
   const newYear = $('editYear').value.trim();
+  const newSameLecAsPrevYear = $('editSameLecAsPrevYear').checked;
   const newQuestionType = $('editQuestionType').value;
   const newDifficulty = $('editDifficulty').value;
   const newHighYield = $('editHighYield').checked;
@@ -14220,6 +14287,7 @@ function saveCardEditFields(){
   current.subtopic = newSubtopic || undefined;
   current.professor = newProfessor || undefined;
   current.year = newYear || undefined;
+  current.sameLecAsPrevYear = newSameLecAsPrevYear || undefined;
   current.questionType = newQuestionType || undefined;
   current.difficulty = newDifficulty || undefined;
   current.highYield = newHighYield || undefined;
@@ -14275,6 +14343,7 @@ function saveCardEditFields(){
         s.cards[idx].subtopic = newSubtopic || undefined;
         s.cards[idx].professor = newProfessor || undefined;
         s.cards[idx].year = newYear || undefined;
+        s.cards[idx].sameLecAsPrevYear = newSameLecAsPrevYear || undefined;
         s.cards[idx].questionType = newQuestionType || undefined;
         s.cards[idx].difficulty = newDifficulty || undefined;
         s.cards[idx].highYield = newHighYield || undefined;
