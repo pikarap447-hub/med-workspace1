@@ -5596,6 +5596,9 @@ OUTCOME: NEG
           <p class="modal-hint">
             Works with any Bluetooth gamepad — Xbox, PlayStation, 8BitDo, Switch Pro Controller, and so on. Quiz answers and menu navigation are mapped separately, so you can keep the same button for both or use different ones. Click "Remap" next to an action and press the button you want to use — then press Escape or click again to cancel.
           </p>
+          <p class="modal-hint">
+            "Directional nav" and "Shortcuts" below are optional extras, unmapped until you set them. Directional nav moves menu focus with a button press instead of a stick — handy on compact/stickless pads (like the 8BitDo Micro) that otherwise can only click whatever's already focused. Shortcuts add Back, Home, and Flag/mark-for-review to spare buttons (shoulder buttons, Minus, etc.) so nothing on the pad goes unused.
+          </p>
           <div id="gpStatus" class="hint" style="margin-top:0;">No controller detected yet — press any button on it to connect.</div>
           <div id="gpLastPress" class="hint" style="margin-top:2px; font-family:var(--font-mono); font-size:11.5px;"></div>
           <div id="gpMacBtHint" class="hint hidden" style="margin-top:8px; line-height:1.55;">
@@ -15385,14 +15388,26 @@ document.addEventListener('keydown', e => {
   // Xbox pad: raw button 1=A, 0=B, 3=X, 2=Y.
   const QUIZ_ACTIONS = ['optionA','optionB','optionC','optionD'];
   const NAV_ACTIONS = ['confirm'];
-  const ALL_ACTIONS = [...QUIZ_ACTIONS, ...NAV_ACTIONS];
+  // Directional nav (button-press, not stick) and quick shortcuts are left
+  // unmapped by default — they're opt-in extras, mainly useful for
+  // controllers with no analog stick (compact/handheld pads like the
+  // 8BitDo Micro) that would otherwise only be able to click whatever
+  // already has focus, with no way to move focus around a menu at all.
+  const DIR_ACTIONS = ['navUp','navDown','navLeft','navRight'];
+  const SHORTCUT_ACTIONS = ['back','home','flag'];
+  const OPTIONAL_ACTIONS = [...DIR_ACTIONS, ...SHORTCUT_ACTIONS];
+  const ALL_ACTIONS = [...QUIZ_ACTIONS, ...NAV_ACTIONS, ...OPTIONAL_ACTIONS];
   const ACTION_LABELS = {
     optionA:'Option A', optionB:'Option B', optionC:'Option C', optionD:'Option D',
-    confirm:'Confirm / select'
+    confirm:'Confirm / select',
+    navUp:'Navigate ↑', navDown:'Navigate ↓', navLeft:'Navigate ←', navRight:'Navigate →',
+    back:'Back', home:'Home', flag:'Flag / mark for review'
   };
   const GROUPS = [
     {label:'Quiz answers', actions:QUIZ_ACTIONS},
-    {label:'Menu navigation', actions:NAV_ACTIONS}
+    {label:'Menu navigation', actions:NAV_ACTIONS},
+    {label:'Directional nav (no stick needed)', actions:DIR_ACTIONS},
+    {label:'Shortcuts', actions:SHORTCUT_ACTIONS}
   ];
   const DEFAULT_MAP = {optionA:1, optionB:0, optionC:3, optionD:2, confirm:1};
   const MAP_KEY = 'topicReviewGamepadMap';
@@ -15471,6 +15486,19 @@ document.addEventListener('keydown', e => {
         return;
       }
     }
+    // Shortcuts and button-press directional nav — fall back here for any
+    // button not already consumed above (quiz answer/confirm, or a brain
+    // break's continue). These are opt-in (unmapped by default), so this
+    // is a no-op for anyone who hasn't bound them. Directional nav reuses
+    // the same moveFocus() the left stick drives, just triggered by a
+    // discrete press instead of a held axis — this is what lets a
+    // stickless pad (e.g. 8BitDo Micro) move focus around a menu at all.
+    if(i === gpMap.back){ triggerBack(); return; }
+    if(i === gpMap.home){ const btn = $('homeBtn'); if(btn && isVisible(btn)) btn.click(); return; }
+    if(i === gpMap.flag){ const btn = $('flagBtn'); if(btn && isVisible(btn)) btn.click(); return; }
+    for(const [action, dir] of Object.entries(DIR_TO_VECTOR_KEY)){
+      if(i === gpMap[action]){ moveFocus(dir); return; }
+    }
     // Any other screen (landing, setup, results, editing, ...): the
     // separately-mapped "Confirm / select" button activates whatever the
     // left stick currently has focused.
@@ -15478,6 +15506,19 @@ document.addEventListener('keydown', e => {
       const el = document.activeElement;
       if(el && el !== document.body && el.matches && el.matches(GP_FOCUSABLE_SELECTOR)) el.click();
     }
+  }
+  const DIR_TO_VECTOR_KEY = {navUp:'up', navDown:'down', navLeft:'left', navRight:'right'};
+  // Clicks whatever "← ..." back control is visible on the current screen
+  // — the app uses many different back buttons (folder, setup, settings
+  // sub-pages, calendar, community, ...) rather than one shared element,
+  // so this looks for whichever one is actually showing right now instead
+  // of hard-coding an id.
+  function triggerBack(){
+    const candidates = Array.from(document.querySelectorAll('button')).filter(b => {
+      const t = (b.textContent || '').trim();
+      return t.startsWith('←') && isVisible(b);
+    });
+    if(candidates.length) candidates[0].click();
   }
 
   /* ---- Settings panel: view/remap the mapping above ---- */
@@ -15502,13 +15543,32 @@ document.addEventListener('keydown', e => {
         label.textContent = ACTION_LABELS[action];
         const current = document.createElement('span');
         current.className = 'gp-map-current';
-        current.textContent = captureAction === action ? 'Press a button… (Esc to cancel)' : `Button ${gpMap[action]}`;
+        const isSet = gpMap[action] !== undefined && gpMap[action] !== null;
+        current.textContent = captureAction === action
+          ? 'Press a button… (Esc to cancel)'
+          : (isSet ? `Button ${gpMap[action]}` : 'Not set');
+        const btnWrap = document.createElement('div');
+        btnWrap.style.display = 'flex';
+        btnWrap.style.gap = '6px';
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'btn-ghost gp-remap-btn' + (captureAction === action ? ' listening' : '');
         btn.textContent = captureAction === action ? 'Cancel' : 'Remap';
         btn.onclick = () => { captureAction === action ? cancelCapture() : startCapture(action); };
-        row.append(label, current, btn);
+        btnWrap.appendChild(btn);
+        // Quiz answers and Confirm always have a default binding — only
+        // the opt-in directional/shortcut actions can be cleared back to
+        // "Not set" individually, without wiping everything via the
+        // bottom-of-page Reset.
+        if(OPTIONAL_ACTIONS.includes(action) && isSet && captureAction !== action){
+          const clearBtn = document.createElement('button');
+          clearBtn.type = 'button';
+          clearBtn.className = 'btn-ghost gp-remap-btn';
+          clearBtn.textContent = 'Clear';
+          clearBtn.onclick = () => { delete gpMap[action]; saveMap(); renderGpSettings(); };
+          btnWrap.appendChild(clearBtn);
+        }
+        row.append(label, current, btnWrap);
         rowsEl.appendChild(row);
       });
     });
