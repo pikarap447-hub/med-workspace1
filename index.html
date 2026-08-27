@@ -696,6 +696,21 @@ transition:background var(--transition-normal), color var(--transition-normal), 
     display:flex;
     align-items:center;
     gap:12px;
+    /* Sits directly on the app's background (which can be a user-set
+       custom photo/video, not just the theme's flat --bg color) — same
+       situation as .back-on-photo. Without its own backdrop, the
+       low-contrast greeting/title text (var(--ink-soft)/var(--ink), no
+       fill behind them) can blend into a busy or similarly-colored photo
+       and become unreadable. Gets the same solid, theme-aware pill
+       treatment as the nav (.sidebar-nav) next to it, so logo + greeting
+       + title stay legible on any background. */
+    background:var(--surface);
+    border:1.5px solid var(--border);
+    border-radius:16px;
+    padding:6px 16px 6px 6px;
+    box-shadow:var(--shadow-sm);
+    backdrop-filter:blur(8px);
+    -webkit-backdrop-filter:blur(8px);
   }
   .header-mark{
     flex-shrink:0;
