@@ -7803,9 +7803,13 @@ publishSetToCommunity=async function(sid){
   const sets=loadSets(),s=sets[sid];const sb=getSupabase();
   if(!sb||!currentUser||!s?.communityId)return;
   const note=prompt('Version note (optional):','Updated deck');
-  const {data:live}=await sb.from('community_sets').select('*').eq('id',s.communityId).maybeSingle();
-  if(!live)return;
-  const {error}=await sb.rpc('create_community_set_version',{p_set_id:s.communityId,p_title:live.title,p_subject:live.subject,p_card_type:live.card_type,p_topic:live.topic,p_cards:live.cards||s.cards||[],p_change_note:note||null});
+  // Previously re-fetched the just-published row from Supabase (select('*'),
+  // full cards array included) purely to read back title/subject/card_type/
+  // topic/cards — all five of which this device already has in `s`, since
+  // it's exactly what was used to publish/update the row two lines above.
+  // No network round trip needed; this removes one full-deck download from
+  // every re-publish.
+  const {error}=await sb.rpc('create_community_set_version',{p_set_id:s.communityId,p_title:s.name||'Untitled set',p_subject:s.subject||null,p_card_type:s.cardType||null,p_topic:s.topic||null,p_cards:s.cards||[],p_change_note:note||null});
   if(error)console.warn('Phase 2 version history:',error.message);
 };
 
