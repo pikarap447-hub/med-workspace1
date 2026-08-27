@@ -7183,6 +7183,12 @@ async function publishSetToCommunity(sid){
     kind: s.kind || null,
     cards: s.cards || [],
     card_count: (s.cards || []).length,
+    // Case-game sets (kind:'algorithm') keep their playable content in
+    // algoSource, not cards (cards is always [] for these — see the save
+    // logic in the setup screen). Without this, publishing a case set
+    // uploads an empty shell: kind says "algorithm" but there's no script
+    // to parse, so it can't be played after import/remix.
+    algo_source: s.algoSource || null,
     // Description lives only on the Community listing (edited via the
     // "Your Community" list's ✏️ Edit button) — carry it along on every
     // re-publish so hitting "Update on Community" from the local set's
@@ -7773,7 +7779,7 @@ async function p2Remix(setId){
   const sb=getSupabase();if(!sb||!currentUser)return;
   const {data,error}=await sb.from('community_sets').select('*').eq('id',setId).maybeSingle();logEgress('COMMUNITY_FULL_DECK','community_sets','remix-fetch',{id:setId});if(error||!data){alert('Could not load deck.');return;}
   const sets=loadSets(),id=genSetId(),now=Date.now();
-  sets[id]={name:`${data.title} (remix)`,subject:data.subject,cardType:data.card_type,topic:data.topic,cards:JSON.parse(JSON.stringify(data.cards||[])),completed:false,createdAt:now,updatedAt:now,remixOfCommunityId:data.id,remixOfUsername:data.username};
+  sets[id]={name:`${data.title} (remix)`,subject:data.subject,cardType:data.card_type,topic:data.topic,kind:data.kind||undefined,cards:JSON.parse(JSON.stringify(data.cards||[])),algoSource:data.algo_source||undefined,completed:false,createdAt:now,updatedAt:now,remixOfCommunityId:data.id,remixOfUsername:data.username};
   saveSetsData(sets);await sb.from('community_set_forks').insert({community_set_id:data.id,forked_by:currentUser.id,fork_type:'remix'});
   p2CloseModal();closeCommunityPreview();alert(`"${data.title}" was remixed into your sets.`);showLanding();
 }
@@ -8154,7 +8160,7 @@ async function importCommunitySet(communitySetId){
   sets[genSetId()] = {
     name: data.title, subject: data.subject || undefined, cardType: data.card_type || undefined,
     topic: data.topic || undefined, le: data.le || undefined, kind: data.kind || undefined,
-    cards: data.cards || [], completed: false, completedAt: undefined,
+    cards: data.cards || [], algoSource: data.algo_source || undefined, completed: false, completedAt: undefined,
     createdAt: now, updatedAt: now
   };
   saveSetsData(sets);
