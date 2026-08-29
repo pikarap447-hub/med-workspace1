@@ -7293,7 +7293,13 @@ async function publishSetToCommunity(sid){
     // would create an orphaned duplicate that only "My Uploads" could ever
     // reach. Offer to relink to the existing row instead when the title
     // matches one this account already has published.
-    const { data: existing } = await sb.from('community_sets').select('id').eq('owner_id', currentUser.id).eq('title', row.title).maybeSingle();
+    // Match on title AND subject/LE — sets can share a name across different
+    // subjects (e.g. the same "SAMPLEX" title reused under NEURO, PSYCH, and
+    // SURG), and those are distinct sets, not re-publishes of one another.
+    let dupQuery = sb.from('community_sets').select('id').eq('owner_id', currentUser.id).eq('title', row.title);
+    dupQuery = row.subject ? dupQuery.eq('subject', row.subject) : dupQuery.is('subject', null);
+    dupQuery = row.le ? dupQuery.eq('le', row.le) : dupQuery.is('le', null);
+    const { data: existing } = await dupQuery.maybeSingle();
     if(existing && existing.id && confirm(`You already have a Community set named "${row.title}" — update that one instead of publishing a new copy?`)){
       s.communityId = existing.id;
       wasAlreadyPublished = true;
