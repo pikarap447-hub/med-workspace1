@@ -6247,6 +6247,14 @@ let masteredCount = 0;
 // second time.
 let masteredCards = new Set();
 let askedCount = 0;
+// Distinct cards shown at least once this session, keyed by cardKey() —
+// unlike askedCount (which counts every *presentation*, so a missed card
+// that gets requeue()'d and shown again bumps it a second time), this only
+// grows the first time a given card appears. Used anywhere we want to show
+// "how far into the deck" the user actually is (e.g. the home-screen
+// Continue card's "Card X of Y"), so retries don't make that number run
+// ahead of the card the user is really looking at.
+let seenCardKeys = new Set();
 let score = 0;
 let missedSet = new Map();
 let flaggedSet = new Set(); // card keys the user has marked for review mid-quiz
@@ -8461,6 +8469,19 @@ function getAllTaggedCardsForSearch(){
       c._srcSetId = id;
       c._srcSetName = s.name;
       c._srcSubject = s.subject || '';
+      // Sets have their own optional "Professor" field (set at set-creation
+      // time, in the Set details form) which is a SEPARATE piece of data
+      // from a card's own per-card Professor tag (set via the ✏️ editor
+      // during quiz play). Find Questions only ever searched/filtered on
+      // the per-card tag, so anyone who tagged the professor at the SET
+      // level instead (the more obvious place to do it for a whole
+      // Samplex exam) saw every one of that exam's questions silently
+      // excluded from search/chips/results, even though the set clearly
+      // shows the professor's name everywhere else in the app. Compute an
+      // "effective" professor here — the card's own tag if it has one,
+      // else the set's — and use that everywhere below instead of the raw
+      // per-card field, so both ways of tagging actually work.
+      c._effProfessor = c.professor || s.professor || undefined;
       out.push(c);
     });
   });
@@ -8472,14 +8493,16 @@ function profSearchMatches(){
   const yr = $('profSearchYearSelect').value;
   return getAllTaggedCardsForSearch().filter(c => {
     // untagged noise stays out of the browse-everything view
-    if(!c.professor && !c.topic && !q) return false;
-    if(profSearchFilterProf && normTag(c.professor) !== profSearchFilterProf) return false;
+    if(!c._effProfessor && !c.topic && !q) return false;
+    if(profSearchFilterProf && normTag(c._effProfessor) !== profSearchFilterProf) return false;
     if(profSearchFilterTopic && normTag(c.topic) !== profSearchFilterTopic) return false;
     if(profSearchRepeatOnly && c.sameLecAsPrevYear !== true) return false;
     if(yr && (c.year || '') !== yr) return false;
     if(q){
       // Case-insensitive on both sides (q is already lowercased above).
-      const hay = [c.professor, c.topic, c.subtopic, c.front].filter(Boolean).join(' ').toLowerCase();
+      // _effProfessor (not the raw per-card field) so a professor tagged
+      // at the set level is searchable by typed name too.
+      const hay = [c._effProfessor, c.topic, c.subtopic, c.front].filter(Boolean).join(' ').toLowerCase();
       if(!hay.includes(q)) return false;
     }
     return true;
@@ -8519,7 +8542,7 @@ function renderChipBox(box, counts, activeKey, emptyMsg, onPick){
 
 function renderProfSearchChips(){
   const all = getAllTaggedCardsForSearch();
-  renderChipBox($('profSearchProfChips'), buildChipCounts(all, 'professor'), profSearchFilterProf,
+  renderChipBox($('profSearchProfChips'), buildChipCounts(all, '_effProfessor'), profSearchFilterProf,
     'No questions tagged with a Professor yet — open a question during a quiz, tap ✏️, and fill in the Professor field.',
     key => { profSearchFilterProf = (profSearchFilterProf === key) ? '' : key; renderProfSearchView(); });
   renderChipBox($('profSearchTopicChips'), buildChipCounts(all, 'topic'), profSearchFilterTopic,
@@ -8540,7 +8563,7 @@ function renderProfSearchInsights(matches){
   box.style.display = '';
   // profSearchFilterProf is the normalized (lowercased) key — pull the
   // actual typed casing back from a matching card for display.
-  const displayName = (matches.find(c => c.professor)?.professor) || profSearchFilterProf;
+  const displayName = (matches.find(c => c._effProfessor)?._effProfessor) || profSearchFilterProf;
   $('profSearchInsightsTitle').textContent = `📊 ${escapeHtml(displayName)}'s pattern`;
   const topicCounts = new Map(), yearSet = new Set();
   matches.forEach(c => {
@@ -8576,7 +8599,7 @@ function renderProfSearchResults(matches){
     const subjColor = c._srcSubject ? subjectColor(c._srcSubject) : null;
     if(subjColor) row.style.setProperty('--subject-accent', subjColor);
     const tags = [
-      c.professor ? `<span class="community-set-tag">👤 ${escapeHtml(c.professor)}</span>` : '',
+      c._effProfessor ? `<span class="community-set-tag">👤 ${escapeHtml(c._effProfessor)}${!c.professor ? ' (set)' : ''}</span>` : '',
       c.year ? `<span class="community-set-tag">📅 ${escapeHtml(c.year)}</span>` : '',
       c.topic ? `<span class="community-set-tag">🏷️ ${escapeHtml(c.topic)}</span>` : '',
       c.sameLecAsPrevYear ? `<span class="community-set-tag">🔁 Same lecture as last year</span>` : '',
@@ -8940,6 +8963,7 @@ function saveSession(extra){
       totalCards,
       masteredCount,
       askedCount,
+      seenCards: Array.from(seenCardKeys),
       score,
       missedList: Array.from(missedSet.values()),
       options: currentOptions,
@@ -9374,7 +9398,7 @@ function buildSetRow(sid, s, opts){
     }
   }
   const progressBadge = (inProgress && !isCase)
-    ? `<div class="set-item-progress">Paused · card ${session.askedCount || 1} · mastered ${session.masteredCount || 0}/${session.totalCards || session.cards.length}</div>`
+    ? `<div class="set-item-progress">Paused · card ${(Array.isArray(session.seenCards) ? session.seenCards.length : session.askedCount) || 1} · mastered ${session.masteredCount || 0}/${session.totalCards || session.cards.length}</div>`
     : (caseSaved ? `<div class="set-item-progress">Paused · score ${caseSaved.score || 0}</div>`
     : ((!isCase && s.completed) ? `<div class="set-item-progress done">✓ Done · ${fmtDate(s.completedAt)}</div>` : ''));
   row.innerHTML = `
@@ -9500,7 +9524,7 @@ function getRecentActivity(limit){
         status = {type:'completed'};
       } else {
         const sess = allSessions[sid];
-        status = {type:'quiz', asked: sess.askedCount || 1, total: sess.totalCards || sess.cards.length, mastered: sess.masteredCount || 0};
+        status = {type:'quiz', asked: (Array.isArray(sess.seenCards) ? sess.seenCards.length : sess.askedCount) || 1, total: sess.totalCards || sess.cards.length, mastered: sess.masteredCount || 0};
       }
     }
     if(updatedAt) items.push({sid, s, isCase, updatedAt, status});
@@ -9517,7 +9541,7 @@ function getRecentActivity(limit){
       isCase: false,
       isScratch: true,
       updatedAt: scratchSess.updatedAt,
-      status: {type:'quiz', asked: scratchSess.askedCount || 1, total: scratchSess.totalCards || scratchSess.cards.length, mastered: scratchSess.masteredCount || 0}
+      status: {type:'quiz', asked: (Array.isArray(scratchSess.seenCards) ? scratchSess.seenCards.length : scratchSess.askedCount) || 1, total: scratchSess.totalCards || scratchSess.cards.length, mastered: scratchSess.masteredCount || 0}
     });
   }
 
@@ -13527,7 +13551,7 @@ function launchQuiz(cardArr, setId){
   totalCards = cards.length;
   buildSimilarityIndex(cards);
   queue = orderedQueue(cards);
-  masteredCount = 0; masteredCards = new Set(); askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
+  masteredCount = 0; masteredCards = new Set(); askedCount = 0; seenCardKeys = new Set(); score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
   // Fresh quiz: clear the pet's running session signals (streaks, slumps)
   // so its reactions reflect this session, not a leftover run.
   if(typeof window.petStartStudySession === 'function') window.petStartStudySession();
@@ -14169,6 +14193,7 @@ if(forceRefreshBtn){
 function advanceToNextCard(){
   current = queue.shift();
   askedCount++;
+  if(current) seenCardKeys.add(cardKey(current));
   cardsSinceBreak++;
   showCard();
 }
@@ -14779,7 +14804,7 @@ function showCard(restoreOptions){
   const card = current;
   startQuestionTimer();
   hideConfidenceRow();
-  $('indexNo').textContent = 'CARD ' + String(askedCount).padStart(3, '0') + (missedSet.has(card.front) ? ' · retry' : '');
+  $('indexNo').textContent = 'CARD ' + String(seenCardKeys.size).padStart(3, '0') + (missedSet.has(card.front) ? ' · retry' : '');
   const flagBtn = $('flagBtn');
   flagBtn.classList.toggle('flagged', flaggedSet.has(cardKey(card)));
   flagBtn.onclick = () => {
@@ -15108,6 +15133,18 @@ function resumeSession(id){
   // this guard existed.
   masteredCards = new Set();
   askedCount = s.askedCount || 0;
+  if(Array.isArray(s.seenCards)){
+    seenCardKeys = new Set(s.seenCards);
+  }else{
+    // Session saved before seenCards existed: best-effort rebuild from
+    // "every card not currently sitting in the queue, plus the card on
+    // screen" — slightly undercounts if a missed card had already been
+    // requeued back in by the time this was saved, but self-corrects as
+    // the session continues.
+    const queueKeys = new Set(queue.map(c => cardKey(c)));
+    seenCardKeys = new Set(cards.filter(c => !queueKeys.has(cardKey(c))).map(c => cardKey(c)));
+    if(current) seenCardKeys.add(cardKey(current));
+  }
   score = s.score || 0;
   cardsSinceBreak = s.cardsSinceBreak || 0;
   window.__quizStartTime = s.quizStartTime || Date.now();
@@ -15316,7 +15353,7 @@ $('retryFlaggedBtn').onclick = () => {
   if(flaggedCards.length === 0) return;
   totalCards = flaggedCards.length;
   queue = shuffle(flaggedCards);
-  masteredCount = 0; masteredCards = new Set(); askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
+  masteredCount = 0; masteredCards = new Set(); askedCount = 0; seenCardKeys = new Set(); score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
   window.__quizStartTime = Date.now();
   window.__quizActiveMs = 0;
   window.__quizSegmentStart = Date.now();
@@ -15328,7 +15365,7 @@ $('retryFlaggedBtn').onclick = () => {
 
 $('retryAllBtn').onclick = () => {
   queue = orderedQueue(cards);
-  masteredCount = 0; masteredCards = new Set(); askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
+  masteredCount = 0; masteredCards = new Set(); askedCount = 0; seenCardKeys = new Set(); score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
   window.__quizStartTime = Date.now();
   window.__quizActiveMs = 0;
   window.__quizSegmentStart = Date.now();
@@ -15342,7 +15379,7 @@ $('retryMissedBtn').onclick = () => {
   if(missedSet.size === 0) return;
   totalCards = missedSet.size;
   queue = shuffle(Array.from(missedSet.values()));
-  masteredCount = 0; masteredCards = new Set(); askedCount = 0; score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
+  masteredCount = 0; masteredCards = new Set(); askedCount = 0; seenCardKeys = new Set(); score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
   window.__quizStartTime = Date.now();
   window.__quizActiveMs = 0;
   window.__quizSegmentStart = Date.now();
