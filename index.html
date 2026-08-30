@@ -7228,7 +7228,7 @@ async function fetchCommunityFullDeck(id, reason){
   // Explicit columns only. `cards` is the expensive field; everything else
   // here is actually used by import/remix, so avoid `select('*')` overhead.
   const { data, error } = await sb.from('community_sets')
-    .select('id,title,subject,card_type,topic,le,professor,kind,card_count,cards,algo_source,username,updated_at')
+    .select('id,title,subject,card_type,mode,topic,le,professor,kind,card_count,cards,algo_source,username,updated_at')
     .eq('id', id)
     .maybeSingle();
   logEgress('COMMUNITY_FULL_DECK', 'community_sets', reason || 'full-fetch', {id});
@@ -7279,6 +7279,13 @@ async function publishSetToCommunity(sid){
     le: s.le || null,
     professor: s.professor || null,
     kind: s.kind || null,
+    // Grid input mode ('classic' | 'full' | 'samplex') controls how many
+    // columns the card-table editor shows when this set is later opened for
+    // editing (3 for Classic vs 11 for Samplex). This was never published,
+    // so an imported/remixed Samplex set silently fell back to the 'classic'
+    // default and only showed 3 columns — see mode: s.mode below and the
+    // matching fix in importCommunitySet/p2Remix.
+    mode: s.mode || null,
     cards: s.cards || [],
     card_count: (s.cards || []).length,
     // Case-game sets (kind:'algorithm') keep their playable content in
@@ -7917,7 +7924,7 @@ async function p2Remix(setId){
   const sb=getSupabase();if(!sb||!currentUser)return;
   const {data,error}=await fetchCommunityFullDeck(setId,'remix-fetch');if(error||!data){alert('Could not load deck.');return;}
   const sets=loadSets(),id=genSetId(),now=Date.now();
-  sets[id]={name:`${data.title} (remix)`,subject:data.subject,cardType:data.card_type,topic:data.topic,kind:data.kind||undefined,cards:JSON.parse(JSON.stringify(data.cards||[])),algoSource:data.algo_source||undefined,completed:false,createdAt:now,updatedAt:now,remixOfCommunityId:data.id,remixOfUsername:data.username};
+  sets[id]={name:`${data.title} (remix)`,subject:data.subject,cardType:data.card_type,topic:data.topic,kind:data.kind||undefined,cards:JSON.parse(JSON.stringify(data.cards||[])),algoSource:data.algo_source||undefined,mode:deriveCommunitySetMode(data),completed:false,createdAt:now,updatedAt:now,remixOfCommunityId:data.id,remixOfUsername:data.username};
   saveSetsData(sets);await sb.from('community_set_forks').insert({community_set_id:data.id,forked_by:currentUser.id,fork_type:'remix'});
   p2CloseModal();closeCommunityPreview();alert(`"${data.title}" was remixed into your sets.`);showLanding();
 }
@@ -8314,6 +8321,23 @@ async function deleteCommunityComment(commentId){
   }
 }
 
+// Sets published before the `mode` column existed on community_sets (or
+// before publishSetToCommunity started sending it) won't have a stored
+// mode to restore, even after the fix above. Derive it from the actual
+// card shape instead, so already-published Samplex sets get their full
+// column set back on import/remix too, not just future re-publishes.
+// Mirrors the same options/optionTips checks already used elsewhere
+// (e.g. line ~13303) to tell card formats apart.
+function deriveCommunitySetMode(data){
+  if(data.mode === 'classic' || data.mode === 'full' || data.mode === 'samplex') return data.mode;
+  const cards = Array.isArray(data.cards) ? data.cards : [];
+  const hasOptionTips = cards.some(c => c && Array.isArray(c.optionTips) && c.optionTips.some(t => t));
+  if(hasOptionTips || data.card_type === 'samplex') return 'samplex';
+  const hasOptions = cards.some(c => c && Array.isArray(c.options) && c.options.length >= 2);
+  if(hasOptions) return 'full';
+  return 'classic';
+}
+
 async function importCommunitySet(communitySetId){
   const sb = getSupabase();
   if(!sb || !currentUser) return;
@@ -8326,6 +8350,7 @@ async function importCommunitySet(communitySetId){
     name: data.title, subject: data.subject || undefined, cardType: data.card_type || undefined,
     topic: data.topic || undefined, le: data.le || undefined, kind: data.kind || undefined,
     cards: data.cards || [], algoSource: data.algo_source || undefined, completed: false, completedAt: undefined,
+    mode: deriveCommunitySetMode(data),
     createdAt: now, updatedAt: now
   };
   saveSetsData(sets);
