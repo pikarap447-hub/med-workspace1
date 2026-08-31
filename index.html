@@ -4872,7 +4872,7 @@ OUTCOME: NEG
           <div id="samplexPromptWrap" class="hidden">
             <label class="field-label" style="margin-top:14px;">Don't have questions typed up yet?</label>
             <div class="hint" style="margin-top:0;">
-              Copy a ready-made prompt to paste into ChatGPT, Claude, or any LLM, along with your source material (notes, a past exam, a textbook chapter) — edit the "X" to how many cards you want, then paste it in. It asks the LLM to hand back an actual Excel (.xlsx) file (not a markdown table) in the exact Samplex column format. Open that file and copy the rows from there into the grid below — pasting straight from the chat window can garble rows whenever a tip or rationale itself contains a "|" character or a line break.
+              Copy a ready-made prompt to paste into ChatGPT, Claude, or any LLM, along with your source material (notes, a past exam, a textbook chapter) — edit the "X" to how many cards you want, then paste it in. It asks the LLM to hand back an actual Excel (.xlsx) file (not a markdown table) in the exact Samplex column format, including Professor, Year, and Topic columns so every question gets tagged automatically in bulk — no manual per-card tagging needed afterward. Open that file and copy the rows from there into the grid below — pasting straight from the chat window can garble rows whenever a tip or rationale itself contains a "|" character or a line break.
             </div>
             <input type="text" class="text-field" id="samplexPromptTopic" placeholder="Describe the subject/source material here (or paste/attach it directly to the LLM)">
             <div class="row" style="justify-content:flex-start; margin-top:10px;">
@@ -12419,7 +12419,7 @@ $('copyAlgoPromptBtn').onclick = async () => {
    to copy rows from into the grid below, and skips the manual export step.
    The leading "X" is a literal placeholder — the person edits it to the
    number of cards they want before copying the prompt. ---- */
-const SAMPLEX_LLM_PROMPT_TEMPLATE = `Please generate X flashcards/questions from the source material below and output them as an actual Excel (.xlsx) file for me to download — not a markdown table, not plain text — using exactly these columns, in this order: Front | A | B | C | D | Answer (A-D) | Exam Tip A | Exam Tip B | Exam Tip C | Exam Tip D | Rationale
+const SAMPLEX_LLM_PROMPT_TEMPLATE = `Please generate X flashcards/questions from the source material below and output them as an actual Excel (.xlsx) file for me to download — not a markdown table, not plain text — using exactly these columns, in this order: Front | A | B | C | D | Answer (A-D) | Exam Tip A | Exam Tip B | Exam Tip C | Exam Tip D | Rationale | Professor | Year | Topic
 
 Strict Content Rules:
 
@@ -12428,6 +12428,9 @@ Strict Content Rules:
 3. Answer (A-D): Output ONLY the single letter of the correct answer (e.g., A, B, C, or D).
 4. Exam Tips (A-D): Must be high-yield. Provide a specific, testable fact, mnemonic, or key distinguishing clinical feature for that specific option. CRITICAL: Do not just repeat the option text, and do not just say "This is incorrect because...".
 5. Rationale: Must be high-yield. Explain the underlying core concept, mechanism, or clinical reasoning behind the question. CRITICAL: Do not simply restate the correct answer. Focus on why it is correct and the broad takeaway.
+6. Professor: If the source material names or clearly implies which professor/lecturer wrote or gave this material, put their name here formatted as "LAST NAME, F." (last name, comma, first initial + period). If unknown, leave this column blank — do not guess.
+7. Year: If the source material states or clearly implies the year this exam/samplex is from, put just the 4-digit year here (e.g., 2026). If unknown, leave this column blank — do not guess.
+8. Topic: A short topic/subtopic label for that specific question (e.g., "Cardiac Arrhythmias", "Renal Physiology") — keep it a few words, consistent across questions that clearly cover the same topic. If the source material doesn't make the topic clear, leave this column blank — do not guess.
 
 Give me the Excel file itself (one row per card, header row with the column names above) — no markdown table, no preamble, no commentary. Keep every field's text free of unnecessary "|" characters and line breaks.
 
@@ -12475,7 +12478,10 @@ const COLS_SAMPLEX = [
   {key:'tipb', label:'Exam Tip B', placeholder:'Exam tip B (optional)'},
   {key:'tipc', label:'Exam Tip C', placeholder:'Exam tip C (optional)'},
   {key:'tipd', label:'Exam Tip D', placeholder:'Exam tip D (optional)'},
-  {key:'rationale', label:'Rationale', placeholder:'Rationale (optional)'}
+  {key:'rationale', label:'Rationale', placeholder:'Rationale (optional)'},
+  {key:'professor', label:'Professor', placeholder:'Professor (optional)'},
+  {key:'year', label:'Year', placeholder:'Year (optional)'},
+  {key:'topic', label:'Topic', placeholder:'Topic (optional)'}
 ];
 let inputMode = 'classic'; // 'classic' | 'full' | 'samplex'
 function currentCols(){
@@ -12599,6 +12605,9 @@ function cardToRowData(card){
       correct: correctIdx >= 0 ? String.fromCharCode(65 + correctIdx) : '',
       tipa: tips[0] || '', tipb: tips[1] || '', tipc: tips[2] || '', tipd: tips[3] || '',
       rationale: card.rationale || card.tip || '',
+      professor: card.professor || '',
+      year: card.year || '',
+      topic: card.topic || '',
       img: card.img || ''
     };
   }
@@ -13209,6 +13218,9 @@ function collectSamplexRows(){
     const correctRaw = cells[5].textContent.trim();
     const rawTips = [cells[6].textContent.trim(), cells[7].textContent.trim(), cells[8].textContent.trim(), cells[9].textContent.trim()];
     const rationale = cells[10].textContent.trim();
+    const professor = (cells[11] ? cells[11].textContent.trim() : '');
+    const year = (cells[12] ? cells[12].textContent.trim() : '');
+    const topic = (cells[13] ? cells[13].textContent.trim() : '');
     if(!front) return;
     if(headerWords1.includes(front.toLowerCase()) && ['a','option a','correct'].includes(rawOpts[0].toLowerCase())) return;
 
@@ -13235,7 +13247,10 @@ function collectSamplexRows(){
       back: options[correctIndex],
       rationale, tip: rationale,
       mode: 'full',
-      img: tr.dataset.img || undefined
+      img: tr.dataset.img || undefined,
+      professor: professor || undefined,
+      year: year || undefined,
+      topic: topic || undefined
     });
   });
   return rows;
