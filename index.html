@@ -598,6 +598,7 @@ QUICK DEBUG ROUTING
   body.mode-dark .folder-tile,
   body.mode-dark .opt,
   body.mode-dark .edit-option-letter,
+  body.mode-dark .edit-option-thumb-wrap,
   body.mode-dark .card-edit-panel,
   body.mode-dark table.sheet td,
   body.mode-dark .modal-input{
@@ -863,6 +864,20 @@ transition:background var(--transition-normal), color var(--transition-normal), 
   .edit-option-row textarea{
     min-height:unset;
     flex:1;
+  }
+  .edit-option-thumb-wrap{
+    flex:0 0 auto;
+    width:40px; height:40px;
+    border-radius:8px;
+    overflow:hidden;
+    border:1.5px solid var(--tile-blue-pale);
+    background:#fff;
+  }
+  .edit-option-thumb-wrap.hidden{ display:none; }
+  .edit-option-thumb{
+    width:100%; height:100%;
+    object-fit:cover;
+    display:block;
   }
   label.field-label{
     display:block;
@@ -8687,8 +8702,13 @@ function renderProfSearchResults(matches){
     row.className = 'community-set-card';
     const subjColor = c._srcSubject ? subjectColor(c._srcSubject) : null;
     if(subjColor) row.style.setProperty('--subject-accent', subjColor);
+    // Skip the per-row professor tag when the results are already filtered
+    // to that exact professor (chip active, or "<name>'s pattern" panel
+    // showing above) — repeating the same name on every single row below
+    // it is redundant clutter once you already know what you're browsing.
+    const profTagRedundant = profSearchFilterProf && normTag(c._effProfessor) === profSearchFilterProf;
     const tags = [
-      c._effProfessor ? `<span class="community-set-tag">👤 ${escapeHtml(c._effProfessor)}${!c.professor ? ' (set)' : ''}</span>` : '',
+      (c._effProfessor && !profTagRedundant) ? `<span class="community-set-tag">👤 ${escapeHtml(c._effProfessor)}${!c.professor ? ' (set)' : ''}</span>` : '',
       c.year ? `<span class="community-set-tag">📅 ${escapeHtml(c.year)}</span>` : '',
       c.topic ? `<span class="community-set-tag">🏷️ ${escapeHtml(c.topic)}</span>` : '',
       c.sameLecAsPrevYear ? `<span class="community-set-tag">🔁 Same lecture as last year</span>` : (c._autoRepeatYear ? `<span class="community-set-tag" title="Same professor + topic also tagged in ${escapeHtml(c._autoRepeatYear)}">🔁 Possible repeat (auto)</span>` : ''),
@@ -14424,6 +14444,17 @@ else initStudySessionControls();
 
 const EDIT_LETTERS = ['A','B','C','D','E','F'];
 let editCorrectIndex = 0;
+// Parallel to the rendered option rows: which index into the CURRENTLY
+// SAVED current.options/current.optionTips each row started life as, set
+// once when the editor opens (see openCardEditor) and kept in sync by the
+// "+ option" handler. Lets saveCardEditFields() keep a row's exam tip
+// attached to it even after the row's TEXT is edited (e.g. fixing a typo)
+// — matching purely by text would treat a corrected option as brand new
+// and silently drop its A-D tip, which is exactly the "editing loses tips"
+// complaint. A row with no origin (-1) is a genuinely new option, or one
+// added before this tracking existed — falls back to a text match in
+// saveCardEditFields.
+let editRowOrigIdx = [];
 
 function updateEditImgPreview(){
   const url = $('editImg').value.trim();
@@ -14487,7 +14518,19 @@ function openCardEditor(){
   // string, and the extra blank rows give room to split that text apart.
   const opts = (currentOptions && currentOptions.length) ? currentOptions.slice() : [current.back || ''];
   editCorrectIndex = Math.max(0, opts.findIndex(o => (o || '').toLowerCase() === (current.back || '').toLowerCase()));
-  while(opts.length < 4) opts.push('');
+  // Snapshot which stored option each displayed row came from, matching by
+  // text right now (before any edits happen) against the real saved order
+  // in current.options — not the shuffled currentOptions we're displaying.
+  // Each stored option is claimed at most once so duplicate option text
+  // doesn't map two rows to the same tip.
+  const storedOptions = (current.options || []).slice();
+  const claimed = new Array(storedOptions.length).fill(false);
+  editRowOrigIdx = opts.map(o => {
+    const idx = storedOptions.findIndex((so, i) => !claimed[i] && (so || '').toLowerCase() === (o || '').toLowerCase());
+    if(idx !== -1) claimed[idx] = true;
+    return idx;
+  });
+  while(opts.length < 4){ opts.push(''); editRowOrigIdx.push(-1); }
   renderEditOptions(opts);
 
   $('cardEditPanel').classList.remove('hidden');
@@ -14516,6 +14559,31 @@ function renderEditOptions(opts){
     ta.value = opt;
     row.appendChild(letterBtn);
     row.appendChild(ta);
+    // Picture-as-option mode: when an option's text IS an image URL (same
+    // detection buildOptions/optionInnerHtml use at quiz time), show a live
+    // thumbnail right in the editor so it's obvious the option will render
+    // as a picture, not raw link text, and to catch a bad/typo'd URL before
+    // saving. Updates as the person types or pastes a new link.
+    const thumbWrap = document.createElement('div');
+    thumbWrap.className = 'edit-option-thumb-wrap hidden';
+    const thumbImg = document.createElement('img');
+    thumbImg.className = 'edit-option-thumb';
+    thumbImg.alt = 'Option image preview';
+    thumbWrap.appendChild(thumbImg);
+    row.appendChild(thumbWrap);
+    const refreshThumb = () => {
+      const val = ta.value.trim();
+      if(val && isImageUrl(val)){
+        thumbImg.onload = () => thumbWrap.classList.remove('hidden');
+        thumbImg.onerror = () => thumbWrap.classList.add('hidden');
+        thumbImg.src = val;
+      } else {
+        thumbWrap.classList.add('hidden');
+        thumbImg.removeAttribute('src');
+      }
+    };
+    ta.addEventListener('input', refreshThumb);
+    refreshThumb();
     list.appendChild(row);
   });
 }
@@ -14523,6 +14591,7 @@ $('addEditOptionBtn').onclick = () => {
   const vals = Array.from($('editOptionsList').querySelectorAll('textarea')).map(ta => ta.value);
   if(vals.length >= EDIT_LETTERS.length) return;
   vals.push('');
+  editRowOrigIdx.push(-1); // brand-new row, no stored tip to inherit
   renderEditOptions(vals);
 };
 function closeCardEditor(){
@@ -14568,29 +14637,31 @@ function saveCardEditFields(){
   const newDifficulty = $('editDifficulty').value;
   const newHighYield = $('editHighYield').checked;
   const optionTextareas = Array.from($('editOptionsList').querySelectorAll('textarea'));
-  const newOptions = optionTextareas.map(ta => ta.value.trim()).filter(Boolean);
+  // Pair each textarea with the origin index openCardEditor recorded for
+  // its row (see editRowOrigIdx), then drop blank rows — keeping the pairing
+  // in sync so a row's tip stays linked to it after filtering.
+  const rows = optionTextareas
+    .map((ta, i) => ({ text: ta.value.trim(), origIdx: editRowOrigIdx[i] !== undefined ? editRowOrigIdx[i] : -1 }))
+    .filter(r => r.text);
+  const newOptions = rows.map(r => r.text);
   if(!newFront || newOptions.length < 2){ alert("Question needs text, and at least 2 answer choices."); return false; }
   const correctIdx = Math.min(editCorrectIndex, newOptions.length - 1);
   const newBack = newOptions[correctIdx];
 
-  // card.optionTips is a *positional* array aligned to card.options — but
-  // openCardEditor seeds this editor from currentOptions (the shuffled
-  // on-screen copy), so newOptions above is very rarely in the same order
-  // the existing card.options/optionTips were saved in. Saving newOptions
-  // as-is while leaving the old optionTips array untouched left
-  // optionTipFor()'s position lookup (card.options.findIndex ->
-  // card.optionTips[idx]) reading the WRONG option's tip for every option
-  // whose position moved — most visibly the newly-correct answer after
-  // changing which letter is correct, whose A-D exam tip would appear to
-  // just vanish. Re-derive optionTips in the new order by matching each new
-  // option's text back to its old position, so an option that wasn't
-  // itself retyped keeps its authored tip no matter where it landed; only a
-  // genuinely retyped option's tip is dropped, which is expected since the
-  // old tip no longer describes the new text.
+  // card.optionTips is a *positional* array aligned to card.options. Prefer
+  // each row's origIdx (captured when the editor opened, before any typing)
+  // to look up its old tip — that way, CORRECTING a typo or otherwise
+  // editing an option's text no longer disconnects it from its authored
+  // A-D exam tip, which used to look exactly like data loss ("I fixed a
+  // typo and the tip vanished"). Text-match is kept only as a fallback for
+  // rows with no recorded origin (e.g. state saved before this tracking
+  // existed) — a genuinely brand-new option (added via "+ option") has no
+  // origin and no old tip to inherit, as expected.
   const oldOptions = current.options || [];
   const oldOptionTips = current.optionTips || [];
-  const newOptionTips = newOptions.map(opt => {
-    const oldIdx = oldOptions.findIndex(o => (o || '').toLowerCase() === opt.toLowerCase());
+  const newOptionTips = rows.map(r => {
+    if(r.origIdx >= 0 && r.origIdx < oldOptionTips.length) return oldOptionTips[r.origIdx] || '';
+    const oldIdx = oldOptions.findIndex(o => (o || '').toLowerCase() === r.text.toLowerCase());
     return oldIdx >= 0 ? (oldOptionTips[oldIdx] || '') : '';
   });
 
