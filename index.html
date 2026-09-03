@@ -6094,7 +6094,39 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
    baked into the page, so if Settings shows an OLD value, that's proof the
    browser is serving a stale cached copy rather than the real thing — use
    the "Force refresh" button in Settings to break out of it. */
-const APP_VERSION = '2026-08-22 community-phase1 v1';
+const APP_VERSION = '2026-09-03 stability-pass v1';
+
+/* ===== JS-01b GLOBAL ERROR LOGGING =====
+   Nothing anywhere in this file previously caught truly unexpected errors
+   or promise rejections — combined with a lot of intentionally-silent
+   catch(e){} blocks scattered through the file (mostly fine on their own,
+   e.g. "this optional cosmetic thing didn't load"), that meant a real
+   failure on a data-safety path (a session save, a sync write) could
+   happen with zero trace left behind, which is exactly what made bugs like
+   an occasional stuck "Next" button after resuming so hard to pin down.
+   This keeps the last handful of uncaught errors in memory (not sent
+   anywhere, not persisted) so they can be inspected after the fact from
+   the console — same opt-in-diagnostics spirit as the egress debug logger
+   below. Enable nothing; it's always on and free (an array push), but only
+   surfaces when someone actually opens devtools and asks for it. */
+window.topicReviewErrorLog = [];
+function _logTopicReviewError(entry){
+  window.topicReviewErrorLog.push(Object.assign({ time: new Date().toISOString() }, entry));
+  if(window.topicReviewErrorLog.length > 50) window.topicReviewErrorLog.shift();
+}
+window.addEventListener('error', e => {
+  _logTopicReviewError({ type: 'error', message: e.message, source: e.filename, line: e.lineno, col: e.colno });
+});
+window.addEventListener('unhandledrejection', e => {
+  const reason = e.reason;
+  _logTopicReviewError({ type: 'unhandledrejection', message: (reason && reason.message) ? reason.message : String(reason) });
+});
+// Call from the console: topicReviewErrorReport()
+window.topicReviewErrorReport = function(){
+  if(!window.topicReviewErrorLog.length){ console.log('No uncaught errors logged this session.'); return; }
+  console.table(window.topicReviewErrorLog);
+  return window.topicReviewErrorLog;
+};
 
 /* ===== JS-02 STORAGE / PERSISTENCE ===== */
 /* Safe localStorage wrapper — some iOS contexts (e.g. Quick Look previews
@@ -6364,8 +6396,25 @@ const appDataLastSyncedAt = {};
 let appDataReady = false;
 APP_DATA_KEYS.forEach(k => { const v = lsGet(k); if(v !== null) appDataCache[k] = v; });
 
-function openAppDataDB(){
-  return new Promise((resolve, reject) => {
+// Single shared IndexedDB connection, opened once and reused everywhere
+// (appDataGet/appDataSet AND the background-image idbGet/idbSet/idbRemove
+// below both point at this same database/version). Previously each of those
+// two areas called indexedDB.open() fresh on every single read/write, which
+// (a) never closed the resulting connections — a real resource leak over a
+// long session — and (b) meant every write had to wait for a brand-new
+// connection to open before the actual put() could even be issued, widening
+// the window in which a backgrounded/killed tab could lose an in-flight
+// save. Caching one connection shrinks that window to just the first call.
+// onversionchange/onblocked are the standard IndexedDB safety pattern: if
+// this database's version is ever bumped in a future update, an open
+// connection left over from an old tab would otherwise block that upgrade
+// forever (indexedDB.open() just hangs, no error, no timeout) — this makes
+// the old connection close itself instead of block, and drops the cache so
+// the next call reopens cleanly against the new version.
+let _sharedAppDBPromise = null;
+function openSharedAppDB(){
+  if(_sharedAppDBPromise) return _sharedAppDBPromise;
+  _sharedAppDBPromise = new Promise((resolve, reject) => {
     const req = indexedDB.open(APP_DATA_DB, 3);
     req.onupgradeneeded = e => {
       const db = e.target.result;
@@ -6373,10 +6422,17 @@ function openAppDataDB(){
       if(!db.objectStoreNames.contains(APP_DATA_STORE)) db.createObjectStore(APP_DATA_STORE);
       if(!db.objectStoreNames.contains(SYNC_QUEUE_STORE)) db.createObjectStore(SYNC_QUEUE_STORE);
     };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+    req.onblocked = () => console.error('IndexedDB open blocked — another tab is holding an older-version connection open');
+    req.onsuccess = () => {
+      const db = req.result;
+      db.onversionchange = () => { console.error('IndexedDB version change detected — closing this connection'); db.close(); _sharedAppDBPromise = null; };
+      resolve(db);
+    };
+    req.onerror = () => { _sharedAppDBPromise = null; reject(req.error); };
   });
+  return _sharedAppDBPromise;
 }
+function openAppDataDB(){ return openSharedAppDB(); }
 async function appDataGet(key){
   if(Object.prototype.hasOwnProperty.call(appDataCache,key)) return appDataCache[key];
   try{
@@ -6387,7 +6443,7 @@ async function appDataGet(key){
     });
     if(value !== undefined && value !== null) appDataCache[key] = value;
     return value ?? null;
-  }catch(e){ return null; }
+  }catch(e){ console.error('appDataGet failed for', key, e); return null; }
 }
 function appDataSet(key, value){
   appDataCache[key] = value;
@@ -6406,10 +6462,13 @@ function appDataSet(key, value){
     if(typeof SYNC_KEYS !== 'undefined' && SYNC_KEYS.includes(key)){
       tx.objectStore(APP_DATA_STORE).put(appDataUpdatedAt[key], key + '__updatedAt');
     }
-    tx.oncomplete = resolve; tx.onerror = resolve; tx.onabort = resolve;
-  })).catch(() => false);
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = () => { console.error('appDataSet write failed for', key, tx.error); resolve(false); };
+    tx.onabort = () => { console.error('appDataSet write aborted for', key, tx.error); resolve(false); };
+  })).catch(e => { console.error('appDataSet could not open DB for', key, e); return false; });
 }
 async function initAppDataStorage(){
+
   try{
     const db = await openAppDataDB();
 
@@ -9097,7 +9156,7 @@ function saveSession(extra){
     const all = loadAllSessions();
     all[activeSetId || SCRATCH_ID] = state;
     saveAllSessions(all);
-  }catch(e){}
+  }catch(e){ console.error('saveSession failed', e); }
 }
 function loadSession(id){
   const all = loadAllSessions();
@@ -11376,21 +11435,12 @@ function renderLearningDashboardSections(allTrackedCards, dash){
 /* ===== JS-10 BACKGROUND / DISPLAY ===== */
 /* ---- Background image + auto color palette (all local, no upload anywhere) ---- */
 
-/* IndexedDB Wrapper to bypass the 5MB localStorage limit for large animated backgrounds */
-const DB_NAME = 'TopicReviewDB';
-function getDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 3);
-    req.onupgradeneeded = e => {
-      const db = e.target.result;
-      if(!db.objectStoreNames.contains('bgStore')) db.createObjectStore('bgStore');
-      if(!db.objectStoreNames.contains(APP_DATA_STORE)) db.createObjectStore(APP_DATA_STORE);
-      if(!db.objectStoreNames.contains(SYNC_QUEUE_STORE)) db.createObjectStore(SYNC_QUEUE_STORE);
-    };
-    req.onsuccess = e => resolve(e.target.result);
-    req.onerror = e => reject(e.target.error);
-  });
-}
+/* IndexedDB Wrapper to bypass the 5MB localStorage limit for large animated backgrounds.
+   Uses the same shared connection as appDataGet/appDataSet (see openSharedAppDB
+   above) instead of opening its own — same database, same version, no reason
+   for a second independent connection sitting open. */
+const DB_NAME = APP_DATA_DB;
+function getDB() { return openSharedAppDB(); }
 async function idbSet(key, value) {
   try {
     const db = await getDB();
@@ -11411,7 +11461,7 @@ async function idbRemove(key) {
   try {
     const db = await getDB();
     db.transaction('bgStore', 'readwrite').objectStore('bgStore').delete(key);
-  } catch(e) {}
+  } catch(e) { console.error("IDB remove failed", e); }
 }
 function rgbToHsl(r, g, b){
   r /= 255; g /= 255; b /= 255;
@@ -14750,6 +14800,13 @@ function saveCardEditFields(){
         s.cards[idx].questionType = newQuestionType || undefined;
         s.cards[idx].difficulty = newDifficulty || undefined;
         s.cards[idx].highYield = newHighYield || undefined;
+        // Sync's conflict merge picks a winner PER SET by comparing
+        // updatedAt (see mergeStrategies/mergeKeyedById) — this write-back
+        // never stamped it, so a card edit made here could lose a
+        // multi-device conflict to a concurrent edit elsewhere in the same
+        // set that happened to have a newer set-level timestamp, even
+        // though this edit itself was correctly queued and uploaded.
+        s.updatedAt = Date.now();
         saveSetsData(setsData);
       } else if(activeSetId === PRACTICE_ID){
         alert("Couldn't match this card back to its original set, so the edit only applies for the rest of this practice round and won't be saved. This can happen if the card was deleted or heavily changed elsewhere first.");
@@ -14954,6 +15011,7 @@ function fixBrokenImageLink(){
       if(idx === -1) idx = current.id ? s.cards.findIndex(c => c.id === current.id) : s.cards.findIndex(c => c.front === current.front);
       if(idx !== -1){
         s.cards[idx].img = newImg || undefined;
+        s.updatedAt = Date.now(); // see the matching comment in saveCardEditFields
         saveSetsData(setsData);
       }
     }
