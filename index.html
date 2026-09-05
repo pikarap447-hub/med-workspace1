@@ -639,16 +639,16 @@ transition:background var(--transition-normal), color var(--transition-normal), 
     *, *::before, *::after{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; }
   }
   :focus-visible{ outline:2px solid var(--tile-blue-mid); outline-offset:2px; border-radius:6px; }
-  .frame{width:100%; max-width:680px;}
-  .frame.wide{max-width:1020px; min-width:0; justify-self:center; width:100%;}
+  .frame{width:100%; max-width:900px;}
+  .frame.wide{max-width:1280px; min-width:0; justify-self:center; width:100%;}
   /* Folder browsing (LE/Topic-Cards/Samplex sub-folder tiles, the set list)
      and the Calendar (a horizontally-scrolling exam timeline) both benefit
-     from more room than the standard 1020px frame — more sub-folder tiles
+     from more room than the standard wide frame — more sub-folder tiles
      per row, and more days visible before the calendar needs horizontal
      scrolling. Toggled on/off .frame.wide via the folderView/calendarView
      visibility observer below, so every other screen keeps the narrower,
      more readable width. */
-  .frame.wide.frame-xl{max-width:1320px;}
+  .frame.wide.frame-xl{max-width:1600px;}
 
   /* ===== CSS-05 APP SHELL / HEADER ===== */
 /* ---- App shell: single centered column. Nav lives under the title
