@@ -6311,6 +6311,9 @@ let missedSet = new Map();
 let flaggedSet = new Set(); // card keys the user has marked for review mid-quiz
 let answered = false;
 let currentChosen = null;   // the option text the student actually submitted
+let currentChosenIdx = -1;  // and the position it was displayed at (see BUGFIX note
+                             // near optionTipForIdx: text alone isn't enough when two
+                             // options on the same card share identical wording)
 let currentIsCorrect = false;
 
 const $ = id => document.getElementById(id);
@@ -8936,6 +8939,15 @@ async function saveCommunityEditModal(){
 const PRACTICE_ID = '__practice__'; // bucket for an ad-hoc "weak cards" practice session
 const SCRATCH_ID = '__scratch__'; // bucket for an in-progress quiz that isn't tied to a saved set
 let currentOptions = [];
+// Parallel to currentOptions: for each displayed position, which index into
+// card.options/card.optionTips it actually came from (or -1). See
+// mapOptionsToOrigIdx and optionTipForIdx for why this exists — matching a
+// displayed option back to its authored per-option tip by TEXT breaks the
+// moment a card has two options with identical wording (e.g. two distractors
+// that both just say "Normal"), since a text search always resolves to
+// whichever one comes first, silently showing that option's tip under a
+// different letter than the one actually picked.
+let currentOptionOrigIdx = [];
 
 /* ===== JS-04 NAVIGATION / SCREEN CONTROL ===== */
 /* ---- Navigation between landing / folder / setup / quiz / results / stats ---- */
@@ -9145,6 +9157,7 @@ function saveSession(extra){
       // resuming would then restore an answered-but-blank card whose
       // Next button never reflected the real chosen/correct state.
       chosen: currentChosen,
+      chosenIdx: currentChosenIdx,
       isCorrect: currentIsCorrect,
       activeSetId,
       mode: inputMode,
@@ -13251,7 +13264,7 @@ function returnToPausedQuiz(){
   showCard(currentOptions);
   const saved = loadSession();
   if(saved && saved.answered){
-    restoreAnsweredView(current, saved.chosen, saved.isCorrect);
+    restoreAnsweredView(current, saved.chosen, saved.isCorrect, saved.chosenIdx);
     answered = true;
   }
 }
@@ -15060,6 +15073,7 @@ else initQuestionImageLightbox();
 function showCard(restoreOptions){
   answered = false;
   currentChosen = null;
+  currentChosenIdx = -1;
   currentIsCorrect = false;
   const card = current;
   startQuestionTimer();
@@ -15092,6 +15106,11 @@ function showCard(restoreOptions){
   const letters = ['A','B','C','D'];
   const options = restoreOptions && restoreOptions.length ? restoreOptions : buildOptions(card);
   currentOptions = options;
+  // Recomputed every time options are (re)shown, whether freshly shuffled
+  // here or restored from a saved/resumed session — see mapOptionsToOrigIdx
+  // and optionTipForIdx for why the per-option exam tip lookup depends on
+  // this rather than matching option text directly.
+  currentOptionOrigIdx = mapOptionsToOrigIdx(card, options);
   const list = $('optionsList');
   list.classList.remove('reviewable');
   list.innerHTML = '';
@@ -15114,7 +15133,7 @@ function showCard(restoreOptions){
 // further taps just switch which option's explanation is showing
 // (reviewOption) without touching the score or the recorded answer.
 function handleOptionClick(btn, opt, idx, card){
-  if(!answered){ selectAnswer(btn, opt, card); return; }
+  if(!answered){ selectAnswer(btn, opt, idx, card); return; }
   reviewOption(btn, opt, idx, card);
 }
 
@@ -15157,24 +15176,51 @@ function buildExamTipText(card){
   return card.rationale || card.tip || '';
 }
 
-// Looks up a specific option's authored Samplex content — for every
-// option A-D this is a real, question-specific explanation of why that
-// option is (or isn't) the best answer, not just a generic fact (see
-// SAMPLEX_LLM_PROMPT_TEMPLATE). Matches by option TEXT rather than array
-// position, because the on-screen choices are a shuffled copy of
-// card.options (buildOptions -> shuffle), so a displayed option's index
-// never reliably matches its index in card.options/card.optionTips.
-function optionTipFor(card, optText){
-  if(!card.optionTips || !Array.isArray(card.options)) return '';
-  const idx = card.options.findIndex(o => o.toLowerCase() === optText.toLowerCase());
-  return idx >= 0 ? (card.optionTips[idx] || '') : '';
+// Builds the displayed-position -> card.options-position map that
+// currentOptionOrigIdx holds for the card currently on screen. The on-screen
+// choices are a shuffled copy of card.options (buildOptions -> shuffle), so
+// a displayed option's index never matches its index in
+// card.options/card.optionTips directly — this recovers that original index
+// so per-option tips can be looked up positionally instead of by text.
+//
+// BUGFIX: the previous approach matched purely by TEXT at lookup time
+// (card.options.findIndex(o => o === optText)). That's exactly what broke
+// when a card had two options with identical wording — findIndex always
+// resolves to whichever one comes FIRST in card.options, so picking the
+// SECOND occurrence (say, the one behind letter C) still pulled up the
+// FIRST occurrence's tip (the one authored for letter A), regardless of
+// which letter the student actually chose. Claiming each source option at
+// most once here (same pattern already used in openCardEditor for the same
+// reason) means duplicate-worded options each get mapped to a distinct
+// origin slot instead of collapsing onto one.
+function mapOptionsToOrigIdx(card, displayedOptions){
+  if(!Array.isArray(card.options)) return displayedOptions.map(() => -1);
+  const claimed = new Array(card.options.length).fill(false);
+  return displayedOptions.map(opt => {
+    const idx = card.options.findIndex((o, i) => !claimed[i] && (o || '').toLowerCase() === (opt || '').toLowerCase());
+    if(idx !== -1) claimed[idx] = true;
+    return idx;
+  });
+}
+
+// Looks up a specific displayed option's authored Samplex content — for
+// every option A-D this is a real, question-specific explanation of why
+// that option is (or isn't) the best answer, not just a generic fact (see
+// SAMPLEX_LLM_PROMPT_TEMPLATE). Takes the option's DISPLAYED position
+// (its index within currentOptions) and resolves the authored tip through
+// currentOptionOrigIdx rather than re-matching by text — see
+// mapOptionsToOrigIdx for why a text match alone isn't safe here.
+function optionTipForIdx(card, displayedIdx){
+  if(!card.optionTips) return '';
+  const origIdx = currentOptionOrigIdx[displayedIdx];
+  return (typeof origIdx === 'number' && origIdx >= 0) ? (card.optionTips[origIdx] || '') : '';
 }
 
 // Builds the inner HTML for one option's slot in the review area: that
 // option's own authored explanation. Falls back to a plain notice only
 // for older/Classic cards that were never authored with per-option tips.
-function optionBodyHtml(card, optText){
-  const content = optionTipFor(card, optText);
+function optionBodyHtml(card, displayedIdx){
+  const content = optionTipForIdx(card, displayedIdx);
   if(content) return `<span class="ofb-para">${mdBoldToHtml(content)}</span>`;
   return `<span class="ofb-para">No additional notes for this option — see the exam tip below.</span>`;
 }
@@ -15185,21 +15231,34 @@ function optionBodyHtml(card, optText){
 // wrong, or just the single correct block when they got it right.
 // Tapping any option afterward (see reviewOption) replaces this with
 // that option's single-block view.
-function renderInitialOptionFeedback(card, chosen, isCorrect){
+function renderInitialOptionFeedback(card, chosen, chosenIdx, isCorrect){
   const letters = ['A','B','C','D'];
-  const chosenIdx = currentOptions.findIndex(o => o.toLowerCase() === chosen.toLowerCase());
-  const correctIdx = currentOptions.findIndex(o => o.toLowerCase() === card.back.toLowerCase());
+  // chosenIdx now comes straight from the click handler (the actual button
+  // position tapped) instead of being re-derived here via
+  // currentOptions.findIndex(text match) — see mapOptionsToOrigIdx for why
+  // a text search alone can pick the wrong duplicate-worded option.
+  //
+  // The correct answer's displayed position still needs to be found, but
+  // routes through currentOptionOrigIdx rather than a direct text search
+  // over currentOptions, so a distractor that happens to share wording with
+  // the correct answer elsewhere on screen can't steal its slot either.
+  const backOrigIdx = Array.isArray(card.options)
+    ? card.options.findIndex(o => (o || '').toLowerCase() === card.back.toLowerCase())
+    : -1;
+  const correctIdx = backOrigIdx >= 0
+    ? currentOptionOrigIdx.indexOf(backOrigIdx)
+    : currentOptions.findIndex(o => o.toLowerCase() === card.back.toLowerCase());
   const box = $('optionFeedbackBox');
   box.classList.remove('ofb-correct','ofb-incorrect','ofb-mixed');
   if(isCorrect){
     $('optionFeedbackLabel').textContent = `✓ ${letters[chosenIdx]} — Correct`;
-    $('optionFeedbackText').innerHTML = optionBodyHtml(card, chosen);
+    $('optionFeedbackText').innerHTML = optionBodyHtml(card, chosenIdx);
     box.classList.add('ofb-correct');
   } else {
     $('optionFeedbackLabel').textContent = 'Review your answer';
     $('optionFeedbackText').innerHTML =
-      `<div class="ofb-block ofb-block-wrong"><span class="ofb-block-label ofb-wrong-label">✕ ${letters[chosenIdx]} — Your answer</span>${optionBodyHtml(card, chosen)}</div>` +
-      `<div class="ofb-block ofb-block-correct"><span class="ofb-block-label ofb-correct-label">✓ ${letters[correctIdx]} — Correct answer</span>${optionBodyHtml(card, card.back)}</div>`;
+      `<div class="ofb-block ofb-block-wrong"><span class="ofb-block-label ofb-wrong-label">✕ ${letters[chosenIdx]} — Your answer</span>${optionBodyHtml(card, chosenIdx)}</div>` +
+      `<div class="ofb-block ofb-block-correct"><span class="ofb-block-label ofb-correct-label">✓ ${letters[correctIdx]} — Correct answer</span>${optionBodyHtml(card, correctIdx)}</div>`;
     box.classList.add('ofb-mixed');
   }
   box.classList.remove('hidden');
@@ -15219,22 +15278,27 @@ function reviewOption(btn, opt, idx, card){
   document.querySelectorAll('.opt').forEach(o => o.classList.remove('reviewing'));
   btn.classList.add('reviewing');
   const isCorrect = opt.toLowerCase() === card.back.toLowerCase();
-  const isChosen = currentChosen !== null && opt.toLowerCase() === currentChosen.toLowerCase();
+  // Compare positions, not text — currentChosenIdx is the exact button
+  // position submitted, so this can't mislabel a duplicate-worded option as
+  // "your answer" just because it shares wording with the one actually
+  // picked (see mapOptionsToOrigIdx for the matching content-lookup fix).
+  const isChosen = currentChosenIdx === idx;
   const label = isCorrect
     ? `✓ ${letters[idx]} — Correct`
     : (isChosen ? `✕ ${letters[idx]} — Your answer` : `✕ ${letters[idx]} — Why it's incorrect`);
   $('optionFeedbackLabel').textContent = label;
-  $('optionFeedbackText').innerHTML = optionBodyHtml(card, opt);
+  $('optionFeedbackText').innerHTML = optionBodyHtml(card, idx);
   const box = $('optionFeedbackBox');
   box.classList.remove('hidden','ofb-correct','ofb-incorrect','ofb-mixed');
   box.style.display = 'block';
   box.classList.add(isCorrect ? 'ofb-correct' : 'ofb-incorrect');
 }
 
-function selectAnswer(btn, chosen, card){
+function selectAnswer(btn, chosen, chosenIdx, card){
   if(answered) return;
   answered = true;
   currentChosen = chosen;
+  currentChosenIdx = chosenIdx;
   const isCorrect = chosen.toLowerCase() === card.back.toLowerCase();
   currentIsCorrect = isCorrect;
   // Buttons deliberately stay enabled here (previously: disabled = true)
@@ -15268,7 +15332,7 @@ function selectAnswer(btn, chosen, card){
   $('scoreText').textContent = `Score ${score}`;
   $('progressText').textContent = `Mastered ${masteredCount} / ${totalCards}`;
   $('progressFill').style.width = (masteredCount / totalCards * 100) + '%';
-  renderInitialOptionFeedback(card, chosen, isCorrect);
+  renderInitialOptionFeedback(card, chosen, chosenIdx, isCorrect);
   const examTipText = buildExamTipText(card);
   if(examTipText){
     $('tipText').innerHTML = mdBoldToHtml(examTipText);
@@ -15353,9 +15417,17 @@ function applyConfidence(attempt, level, btnsWrap, chosenBtn){
   chosenBtn.classList.add('btn-primary');
 }
 
-function restoreAnsweredView(card, chosen, isCorrect){
+function restoreAnsweredView(card, chosen, isCorrect, chosenIdx){
   answered = true;
   currentChosen = chosen;
+  // Older saved sessions (from before chosenIdx was persisted) won't have
+  // this field — fall back to a text match against the just-restored
+  // currentOptions in that case. That fallback carries the same
+  // duplicate-wording caveat mapOptionsToOrigIdx documents, but only for
+  // resuming a session paused before this fix shipped.
+  currentChosenIdx = (typeof chosenIdx === 'number' && chosenIdx >= 0)
+    ? chosenIdx
+    : currentOptions.findIndex(o => o.toLowerCase() === (chosen || '').toLowerCase());
   currentIsCorrect = isCorrect;
   const optButtons = Array.from(document.querySelectorAll('.opt'));
   // Buttons stay enabled (previously: disabled = true) so a resumed,
@@ -15369,7 +15441,7 @@ function restoreAnsweredView(card, chosen, isCorrect){
       o.classList.add('correct');
     }
   });
-  renderInitialOptionFeedback(card, chosen, isCorrect);
+  renderInitialOptionFeedback(card, chosen, currentChosenIdx, isCorrect);
   const examTipText = buildExamTipText(card);
   if(examTipText){
     $('tipText').innerHTML = mdBoldToHtml(examTipText);
@@ -15452,9 +15524,9 @@ function resumeSession(id){
   showCard(s.options);
 
   if(s.answered){
-    restoreAnsweredView(current, s.chosen, s.isCorrect);
+    restoreAnsweredView(current, s.chosen, s.isCorrect, s.chosenIdx);
     answered = true;
-    saveSession({chosen:s.chosen,isCorrect:s.isCorrect});
+    saveSession({chosen:s.chosen,chosenIdx:s.chosenIdx,isCorrect:s.isCorrect});
   }
 }
 
