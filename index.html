@@ -5916,6 +5916,35 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
   </div>
 </div>
 
+<!-- Shown once, only when the page was just loaded from the confirmation
+     link in a "confirm your signup" email (see _cameFromEmailConfirmLink).
+     Supabase's own confirmation redirect otherwise lands the user on a
+     blank/unbranded page with no link back into the app. -->
+<div id="accountConfirmedOverlay" class="community-p2-modal hidden">
+  <div class="community-p2-dialog" style="max-width:380px;text-align:center">
+    <div style="font-size:40px;margin-bottom:8px">✅</div>
+    <div style="font-size:18px;font-weight:900;margin-bottom:6px">Email confirmed!</div>
+    <div class="hint" style="margin-bottom:16px">Your account is set up and you're signed in. Your sets and progress will sync across devices from here on.</div>
+    <button class="btn-primary" id="accountConfirmedContinueBtn" style="width:100%">Continue to Topic Review</button>
+  </div>
+</div>
+
+<!-- Shown when the page was just loaded from a "reset your password" email
+     link (driven by supabase-js's own PASSWORD_RECOVERY auth event, not a
+     URL guess — see showPasswordResetForm()). Previously there was no UI
+     anywhere in the app to actually complete a password reset. -->
+<div id="passwordResetOverlay" class="community-p2-modal hidden">
+  <div class="community-p2-dialog" style="max-width:380px;text-align:center">
+    <div style="font-size:40px;margin-bottom:8px">🔑</div>
+    <div style="font-size:18px;font-weight:900;margin-bottom:6px">Set a new password</div>
+    <div class="hint" style="margin-bottom:14px;text-align:left">You clicked a password reset link. Choose a new password to finish resetting it.</div>
+    <input type="password" id="pwResetNewInput" class="modal-input" placeholder="New password" autocomplete="new-password" style="margin-bottom:8px">
+    <input type="password" id="pwResetConfirmInput" class="modal-input" placeholder="Confirm new password" autocomplete="new-password" style="margin-bottom:10px">
+    <div id="pwResetStatus" class="hint" style="min-height:16px;margin-bottom:10px"></div>
+    <button class="btn-primary" id="pwResetSubmitBtn" style="width:100%">Update password</button>
+  </div>
+</div>
+
             <div class="community-section hidden" id="communityUsernameBlock">
               <div class="community-section-title">Pick a username</div>
               <div class="community-section-sub">This is what other people will see on sets you publish.</div>
@@ -6578,6 +6607,61 @@ async function initAppDataStorage(){
    unreachable, every read/write above still behaves exactly as before. */
 const SUPABASE_URL = 'https://dnlpjfcupxrnbwqbckkk.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_8N72Fw5ttmZdRep-Y5Ik5Q_aEI0Hwyb';
+// ---- Auth-link landing detection (email confirmation) ----
+// Must be captured before the Supabase client is ever created — creating it
+// is what triggers detectSessionInUrl to parse (and then strip) these same
+// URL params, so if we read them any later they may already be gone.
+// Covers both confirmation-link styles Supabase can send: the classic
+// implicit-flow hash (#access_token=...&type=signup) and the PKCE-flow
+// query string (?code=...). Explicitly excluded whenever the link looks
+// like a password-recovery link instead (type=recovery) — that case is
+// handled separately below via the PASSWORD_RECOVERY auth event, which is
+// the authoritative signal for it regardless of URL shape.
+const _urlIndicatesRecovery = /type=recovery/.test(location.hash) || /type=recovery/.test(location.search);
+const _cameFromEmailConfirmLink = !_urlIndicatesRecovery && (
+  /(^|[#&])type=signup(&|$)/.test(location.hash)
+  || /(^|[#&])access_token=/.test(location.hash)
+  || /(^|[?&])code=/.test(location.search)
+);
+let _emailConfirmedOverlayShown = false;
+function maybeShowEmailConfirmedOverlay(){
+  if(!_cameFromEmailConfirmLink || _emailConfirmedOverlayShown) return;
+  _emailConfirmedOverlayShown = true;
+  $('accountConfirmedOverlay')?.classList.remove('hidden');
+  // Belt-and-suspenders: supabase-js already cleans the confirmation
+  // hash/query out of the address bar once it parses the session, but strip
+  // it again here too in case a future client version doesn't.
+  try{ history.replaceState(null, '', location.pathname); }catch(e){}
+}
+// ---- Password-recovery-link landing (forgot-password flow) ----
+function showPasswordResetForm(){
+  $('pwResetStatus').textContent = '';
+  $('pwResetNewInput').value = '';
+  $('pwResetConfirmInput').value = '';
+  $('accountConfirmedOverlay')?.classList.add('hidden'); // mutually exclusive with the confirm overlay
+  $('passwordResetOverlay')?.classList.remove('hidden');
+  try{ history.replaceState(null, '', location.pathname); }catch(e){}
+}
+async function submitPasswordReset(){
+  const sb = getSupabase();
+  const pw1 = $('pwResetNewInput').value;
+  const pw2 = $('pwResetConfirmInput').value;
+  if(!sb){ $('pwResetStatus').textContent = 'Could not reach the sign-in service. Check your connection.'; return; }
+  if(!pw1 || pw1.length < 6){ $('pwResetStatus').textContent = 'Password needs to be at least 6 characters.'; return; }
+  if(pw1 !== pw2){ $('pwResetStatus').textContent = "Passwords don't match."; return; }
+  $('pwResetStatus').textContent = 'Updating…';
+  const { error } = await sb.auth.updateUser({ password: pw1 });
+  if(error){ $('pwResetStatus').textContent = error.message; return; }
+  $('pwResetStatus').textContent = '';
+  $('passwordResetOverlay')?.classList.add('hidden');
+  // The recovery session is already a real signed-in session at this point,
+  // so pick up the same post-sign-in bootstrapping a normal sign-in gets.
+  fullSync();
+  await loadCommunityProfile();
+  await applyPendingCommunityUsername();
+  startCommunityRealtime();
+  checkForNewCommunitySets();
+}
 let _supabase = null;
 function getSupabase(){
   if(_supabase) return _supabase;
@@ -7164,7 +7248,7 @@ async function acctSignUp(){
   if(!email || !password){ $('acctAuthStatus').textContent = 'Enter an email and password.'; return; }
   if(desiredUsername && desiredUsername.length < 3){ $('acctAuthStatus').textContent = 'Username needs to be at least 3 characters (or leave it blank).'; return; }
   $('acctAuthStatus').textContent = 'Creating account…';
-  const { data, error } = await sb.auth.signUp({ email, password });
+  const { data, error } = await sb.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin + window.location.pathname } });
   if(error){ $('acctAuthStatus').textContent = error.message; return; }
   // Stash the chosen username (if any) so it can be applied as soon as this
   // browser has an authenticated session for the new account — that may be
@@ -7231,7 +7315,7 @@ async function acctForgotPassword(){
   const email = $('acctEmailInput').value.trim();
   if(!sb){ $('acctAuthStatus').textContent = 'Could not reach the sign-in service. Check your connection.'; return; }
   if(!email){ $('acctAuthStatus').textContent = 'Enter your email above first, then tap this again.'; return; }
-  const { error } = await sb.auth.resetPasswordForEmail(email);
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname });
   $('acctAuthStatus').textContent = error ? error.message : 'Password reset email sent.';
 }
 
@@ -7244,7 +7328,11 @@ async function initCloudSync(){
     currentAccessToken = session ? session.access_token : null;
     renderAccountUI();
     if(currentUser && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')){
+      maybeShowEmailConfirmedOverlay();
       fullSync(); loadCommunityProfile().then(() => applyPendingCommunityUsername()).then(() => { startCommunityRealtime(); checkForNewCommunitySets(); });
+    }
+    if(currentUser && event === 'PASSWORD_RECOVERY'){
+      showPasswordResetForm();
     }
     if(!currentUser){
       communityUsername = null; stopCommunityRealtime(); showCommunityNewDot(false);
@@ -7263,6 +7351,7 @@ async function initCloudSync(){
   currentAccessToken = session ? session.access_token : null;
   renderAccountUI();
   if(currentUser){
+    maybeShowEmailConfirmedOverlay();
     fullSync();
     await loadCommunityProfile();
     await applyPendingCommunityUsername();
@@ -7279,6 +7368,8 @@ function initAccountSettingsUI(){
   $('acctSignOutBtn').onclick = acctSignOut;
   $('acctForgotBtn').onclick = acctForgotPassword;
   $('syncNowBtn').onclick = fullSync;
+  $('accountConfirmedContinueBtn').onclick = () => $('accountConfirmedOverlay').classList.add('hidden');
+  $('pwResetSubmitBtn').onclick = submitPasswordReset;
 }
 
 /* ===== COMMUNITY SETS (Phase A: public upload/browse) =====
