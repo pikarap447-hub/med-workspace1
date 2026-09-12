@@ -4471,7 +4471,7 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
 /* ===== Community panel ===== */
 .community-panel{
   background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow);
-  padding:24px; max-width:820px; margin:0 auto;
+  padding:24px; max-width:1400px; margin:0 auto;
 }
 .community-hero{margin-bottom:18px;}
 .community-hero-title{font-family:var(--font-display); font-weight:900; font-size:24px; color:var(--text); letter-spacing:-.02em;}
@@ -19149,19 +19149,21 @@ window.uermCalendarJumpToday=()=>jump('TODAY','auto');
 jump('TODAY','auto');
 })();
 
-// ---- Wide-frame toggle for Folders & Calendar ----
-// These two screens (LE/Topic-Cards/Samplex sub-folder tiles, the set list,
-// and the calendar's horizontally-scrolling exam timeline) read as cramped
-// at the standard 1020px frame width — more room means more sub-folder
-// tiles per row and fewer days needing a horizontal scroll. Every other
-// screen (quiz, forms, settings, etc.) stays at the narrower width, since
-// that's more readable for them. A MutationObserver on each view's
-// "hidden" class keeps this in sync with however navigation shows/hides
-// them, rather than needing every show/hide call site updated individually.
+// ---- Wide-frame toggle for Folders, Calendar & Community ----
+// These screens (LE/Topic-Cards/Samplex sub-folder tiles, the set list,
+// the calendar's horizontally-scrolling exam timeline, and the community
+// browser's set list/filters) read as cramped at the standard 1020px frame
+// width — more room means more sub-folder tiles per row, fewer days needing
+// a horizontal scroll, and easier scanning of community sets on wide
+// (horizontal) displays. Every other screen (quiz, forms, settings, etc.)
+// stays at the narrower width, since that's more readable for them. A
+// MutationObserver on each view's "hidden" class keeps this in sync with
+// however navigation shows/hides them, rather than needing every show/hide
+// call site updated individually.
 (function(){
   const frame = document.querySelector('.frame.wide');
   if(!frame) return;
-  const wideViewIds = ['folderView', 'calendarView'];
+  const wideViewIds = ['folderView', 'calendarView', 'communityView'];
   function syncFrameWidth(){
     const anyVisible = wideViewIds.some(id => {
       const el = document.getElementById(id);
