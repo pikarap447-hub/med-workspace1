@@ -6959,6 +6959,24 @@ async function uploadKey(key){
   if(raw === undefined || raw === null) { await dequeueSyncOp(key); return true; }
   let parsed;
   try{ parsed = JSON.parse(raw); }catch(e){ await dequeueSyncOp(key); return true; } // corrupt local value, don't retry forever
+  // SESSIONS_KEY checkpoints fire very often (every pause/navigate-away/tab-
+  // hidden), and each one previously carried a full copy of the active
+  // set's entire `cards` array — content that already lives under SETS_KEY.
+  // Re-uploading the whole deck on nearly every screen transition is a lot
+  // of write volume for essentially duplicate data, and was a likely driver
+  // of Disk IO usage (frequent large upserts = heavy WAL/bloat), separate
+  // from the egress budget this app was already optimized for. Strip that
+  // one field before it goes to Postgres; resumeSession() rehydrates it
+  // from the local set on the receiving end (see below), so behavior is
+  // unchanged — only the redundant bytes-on-the-wire/on-disk go away.
+  if(key === SESSIONS_KEY && parsed && typeof parsed === 'object'){
+    const slim = {};
+    Object.keys(parsed).forEach(sid => {
+      const { cards, ...rest } = parsed[sid] || {};
+      slim[sid] = rest;
+    });
+    parsed = slim;
+  }
   // updated_at is intentionally NOT sent from here — a DB trigger
   // (see sync_updated_at_trigger.sql) stamps it with the server's own
   // clock on every insert/update. That way conflict resolution never
@@ -12914,6 +12932,32 @@ function getCellPos(cell){
   return {rowIndex, colIndex};
 }
 
+// Looks ahead from just after a candidate opening quote (position `start`)
+// to check whether it's a *genuine* Excel-style wrapping quote — one whose
+// matching close is immediately followed by a tab, newline, or end of text
+// — as opposed to a stray literal quote character that just happens to
+// begin an ordinary line (e.g. a question that opens with a quotation
+// mark, with no real escaping intent and no matching close anywhere).
+// Doubled "" pairs are escaped-quote content and don't count as a close.
+// If no valid close turns up, we bail out rather than guess, so a single
+// unmatched quote can't put the parser into quoted mode indefinitely and
+// swallow every tab/newline after it into one field — which is what
+// silently merges dozens of real rows into far fewer garbled ones.
+function hasValidClosingQuote(text, start){
+  const n = text.length;
+  const limit = Math.min(n, start + 20000); // generous cap; no real single cell approaches this
+  let i = start + 1;
+  while(i < limit){
+    if(text[i] === '"'){
+      if(text[i + 1] === '"'){ i += 2; continue; }
+      const next = text[i + 1];
+      return next === undefined || next === '\t' || next === '\n' || next === '\r';
+    }
+    i++;
+  }
+  return false;
+}
+
 // Parses clipboard text the way Excel/Sheets/Docs actually encode it: cells
 // are tab-separated, rows are newline-separated, but any cell that itself
 // contains a tab, a newline, or a quote gets wrapped in double quotes (with
@@ -12938,7 +12982,7 @@ function parseClipboardGrid(text){
       }
       field += ch; i++; continue;
     }
-    if(ch === '"' && field === ''){ inQuotes = true; i++; continue; }
+    if(ch === '"' && field === '' && hasValidClosingQuote(text, i)){ inQuotes = true; i++; continue; }
     if(ch === '\t'){ row.push(field); field = ''; i++; continue; }
     if(ch === '\r'){ i++; continue; }
     if(ch === '\n'){ row.push(field); field = ''; rows.push(row); row = []; i++; continue; }
@@ -15581,9 +15625,22 @@ function restoreAnsweredView(card, chosen, isCorrect, chosenIdx){
 
 function resumeSession(id){
   const s = loadSession(id);
-  if(!s || !s.current || !Array.isArray(s.cards) || !s.cards.length) return;
+  if(!s || !s.current) return;
 
-  cards = s.cards;
+  // Sessions synced down from another device (or re-hydrated after this
+  // device's own upload was slimmed — see uploadKey) no longer carry a full
+  // `cards` copy. Rebuild it from the matching local set instead of bailing
+  // out; everything below already matches cards by `.front` text against
+  // whatever array `cards` points to, so a rehydrated array works exactly
+  // the same as an embedded one.
+  let sCards = s.cards;
+  if(!Array.isArray(sCards) || !sCards.length){
+    const localSet = (s.activeSetId && loadSets()[s.activeSetId]) || null;
+    sCards = (localSet && Array.isArray(localSet.cards)) ? localSet.cards : null;
+  }
+  if(!Array.isArray(sCards) || !sCards.length) return;
+
+  cards = sCards;
   activeSetId = s.activeSetId || null;
 
   current = cards.find(c => c.front === s.current.front) || s.current;
