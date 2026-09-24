@@ -612,6 +612,19 @@ QUICK DEBUG ROUTING
   body.mode-dark .card{ background:var(--surface); }
   body.mode-dark .sidebar-nav{ background:color-mix(in srgb, var(--surface-elevated) 75%, transparent); }
 
+  /* ---- Per-folder accent color (--tab-color, from SUBJECT_TAB_COLORS /
+     SUBJECT_COLOR_MAP) used as the folder-tab-chip's TEXT: that palette is a
+     fixed set of hex values tuned for contrast against a light --surface,
+     not a dark one. Used verbatim in dark mode it reads as washed-out,
+     low-contrast text on every folder tile (Subject/LE/Exam folder
+     browsing) since a medium-dark accent color sits close in lightness to
+     a dark surface. Lighten it toward white for dark mode specifically,
+     text-only — the dot, top-bar stripe, icon tint, and hover border stay
+     on the raw color since those are decorative rather than read as text. */
+  body.mode-dark .folder-tile .folder-tab-chip{
+    color:color-mix(in srgb, var(--tab-color, var(--tile-blue)) 65%, white);
+  }
+
   /* ===== CSS-04 GLOBAL / RESET ===== */
 *{box-sizing:border-box;}
   html{-webkit-text-size-adjust:100%; text-size-adjust:100%;}
@@ -4160,6 +4173,69 @@ body.theme-midnight .recent-item-hero{ background:linear-gradient(155deg, var(--
   color:#9aa1ab;z-index:5;pointer-events:none
 }
 
+/* ---- Dark mode for the embedded UERM exam calendar (.index-calendar):
+   almost everything above is hardcoded to a light-only palette (white
+   surfaces, dark-gray text, light borders) that never responds to
+   Appearance Mode — so in dark mode the whole calendar sat as a separate
+   light-mode window floating on a dark page, instead of adapting like the
+   rest of the app. This re-points those hardcoded colors at the app's
+   dark-aware tokens (surface/surface-elevated/text/text-muted/border)
+   rather than hand-picking a one-off dark value per rule; specificity
+   (two body classes) means source order here doesn't matter. ---- */
+body.mode-dark .index-calendar header{ background:color-mix(in srgb, var(--surface-elevated) 97%, transparent); }
+body.mode-dark .index-calendar .badge{ color:var(--text-muted); }
+body.mode-dark .index-calendar .countdown{
+  border-color:var(--border); background:var(--surface-elevated); color:var(--text);
+}
+body.mode-dark .index-calendar .countdown-label,
+body.mode-dark .index-calendar .countdown-sub,
+body.mode-dark .index-calendar .tool-label{ color:var(--text-muted); }
+body.mode-dark .index-calendar button,
+body.mode-dark .index-calendar .import{
+  background:var(--surface-elevated); color:var(--text); border-color:var(--border);
+}
+body.mode-dark .index-calendar button:hover,
+body.mode-dark .index-calendar .import:hover{ background:var(--surface); border-color:var(--border); }
+body.mode-dark .index-calendar button.primary{
+  background:var(--tile-blue-deep); color:#fff; border-color:var(--tile-blue-deep);
+}
+body.mode-dark .index-calendar button.primary:hover{ background:var(--tile-blue-mid); border-color:var(--tile-blue-mid); }
+body.mode-dark .index-calendar .today-btn{
+  background:var(--surface-elevated); border-color:var(--border); color:var(--text);
+}
+body.mode-dark .index-calendar .today-btn:hover{ background:var(--surface); }
+body.mode-dark .index-calendar #holidayToggle.active{ background:var(--surface-elevated); color:var(--text); border-color:var(--border); }
+body.mode-dark .index-calendar #holidayToggle:not(.active){ color:var(--text-muted); background:var(--surface); }
+body.mode-dark .index-calendar .zoom.active{ background:var(--tile-blue-deep); border-color:var(--tile-blue-deep); }
+body.mode-dark .index-calendar .scroller{ background:var(--surface); border-color:var(--border); }
+body.mode-dark .index-calendar .months,
+body.mode-dark .index-calendar .days{ background:var(--surface); }
+body.mode-dark .index-calendar .month{ color:var(--text-muted); border-color:var(--border); }
+body.mode-dark .index-calendar .day.weekend, body.mode-dark .index-calendar .column.weekend{ background:var(--surface-elevated); }
+body.mode-dark .index-calendar .day.today, body.mode-dark .index-calendar .column.today{ background:color-mix(in srgb, var(--tile-blue-deep) 14%, var(--surface)); }
+body.mode-dark .index-calendar .school{ background:var(--surface-elevated); border-color:var(--border); }
+body.mode-dark .index-calendar .school-label{ color:var(--text-muted); }
+body.mode-dark .index-calendar .school-event{ background:var(--surface); border-color:var(--border); color:var(--text-muted); }
+body.mode-dark .index-calendar .exam{ background:var(--surface-elevated); border-color:var(--border); }
+body.mode-dark .index-calendar .time{ color:var(--text-muted); }
+body.mode-dark .index-calendar .name{ color:var(--text); }
+body.mode-dark .index-calendar .code{ color:var(--text-muted); }
+body.mode-dark .index-calendar .type{ background:var(--surface); color:var(--text-muted); }
+body.mode-dark .index-calendar .overlap{ background:color-mix(in srgb, var(--red) 18%, var(--surface)); border-color:var(--red); color:var(--red); }
+body.mode-dark .index-calendar .subject-panel{ background:var(--surface-elevated); border-color:var(--border); }
+body.mode-dark .index-calendar .subject{ background:var(--surface); border-color:var(--border); }
+body.mode-dark .index-calendar .scode{ color:var(--text-muted); }
+body.mode-dark .index-calendar .modal-box{ background:var(--surface-elevated); border-color:var(--border); }
+body.mode-dark .index-calendar .form input,
+body.mode-dark .index-calendar .form select{ background:var(--surface); color:var(--text); border-color:var(--border); }
+body.mode-dark .index-calendar .form label{ color:var(--text-muted); }
+body.mode-dark .index-calendar .holiday-row{ background:var(--surface); }
+body.mode-dark .index-calendar .holiday-mark{ background:var(--surface-elevated); border-color:var(--border); }
+body.mode-dark .index-calendar .holiday-mark:hover{ background:var(--surface); }
+body.mode-dark .index-calendar .holiday-name,
+body.mode-dark .index-calendar .holiday-label{ color:var(--text-muted); }
+
+
 
 /* =====================================================================
    FINAL COMPONENT HARDENING
@@ -6959,24 +7035,6 @@ async function uploadKey(key){
   if(raw === undefined || raw === null) { await dequeueSyncOp(key); return true; }
   let parsed;
   try{ parsed = JSON.parse(raw); }catch(e){ await dequeueSyncOp(key); return true; } // corrupt local value, don't retry forever
-  // SESSIONS_KEY checkpoints fire very often (every pause/navigate-away/tab-
-  // hidden), and each one previously carried a full copy of the active
-  // set's entire `cards` array — content that already lives under SETS_KEY.
-  // Re-uploading the whole deck on nearly every screen transition is a lot
-  // of write volume for essentially duplicate data, and was a likely driver
-  // of Disk IO usage (frequent large upserts = heavy WAL/bloat), separate
-  // from the egress budget this app was already optimized for. Strip that
-  // one field before it goes to Postgres; resumeSession() rehydrates it
-  // from the local set on the receiving end (see below), so behavior is
-  // unchanged — only the redundant bytes-on-the-wire/on-disk go away.
-  if(key === SESSIONS_KEY && parsed && typeof parsed === 'object'){
-    const slim = {};
-    Object.keys(parsed).forEach(sid => {
-      const { cards, ...rest } = parsed[sid] || {};
-      slim[sid] = rest;
-    });
-    parsed = slim;
-  }
   // updated_at is intentionally NOT sent from here — a DB trigger
   // (see sync_updated_at_trigger.sql) stamps it with the server's own
   // clock on every insert/update. That way conflict resolution never
@@ -9091,6 +9149,12 @@ let currentOptions = [];
 // whichever one comes first, silently showing that option's tip under a
 // different letter than the one actually picked.
 let currentOptionOrigIdx = [];
+// Set by buildOptions() alongside currentOptions whenever it shuffles a
+// card's own options (mode 'full'): the true origIdx order for that
+// shuffle, captured directly instead of re-derived by guessing afterward.
+// See buildOptions for why the guess (mapOptionsToOrigIdx) isn't reliable
+// enough to be the primary source once duplicate-worded options are in play.
+let lastBuiltOptionOrigIdx = null;
 
 /* ===== JS-04 NAVIGATION / SCREEN CONTROL ===== */
 /* ---- Navigation between landing / folder / setup / quiz / results / stats ---- */
@@ -9290,6 +9354,7 @@ function saveSession(extra){
       score,
       missedList: Array.from(missedSet.values()),
       options: currentOptions,
+      optionOrigIdx: currentOptionOrigIdx,
       answered,
       // Falls back to whatever's currently tracked in memory (currentChosen/
       // currentIsCorrect) so a passive autosave — e.g. backgrounding the tab
@@ -12932,32 +12997,6 @@ function getCellPos(cell){
   return {rowIndex, colIndex};
 }
 
-// Looks ahead from just after a candidate opening quote (position `start`)
-// to check whether it's a *genuine* Excel-style wrapping quote — one whose
-// matching close is immediately followed by a tab, newline, or end of text
-// — as opposed to a stray literal quote character that just happens to
-// begin an ordinary line (e.g. a question that opens with a quotation
-// mark, with no real escaping intent and no matching close anywhere).
-// Doubled "" pairs are escaped-quote content and don't count as a close.
-// If no valid close turns up, we bail out rather than guess, so a single
-// unmatched quote can't put the parser into quoted mode indefinitely and
-// swallow every tab/newline after it into one field — which is what
-// silently merges dozens of real rows into far fewer garbled ones.
-function hasValidClosingQuote(text, start){
-  const n = text.length;
-  const limit = Math.min(n, start + 20000); // generous cap; no real single cell approaches this
-  let i = start + 1;
-  while(i < limit){
-    if(text[i] === '"'){
-      if(text[i + 1] === '"'){ i += 2; continue; }
-      const next = text[i + 1];
-      return next === undefined || next === '\t' || next === '\n' || next === '\r';
-    }
-    i++;
-  }
-  return false;
-}
-
 // Parses clipboard text the way Excel/Sheets/Docs actually encode it: cells
 // are tab-separated, rows are newline-separated, but any cell that itself
 // contains a tab, a newline, or a quote gets wrapped in double quotes (with
@@ -12982,7 +13021,7 @@ function parseClipboardGrid(text){
       }
       field += ch; i++; continue;
     }
-    if(ch === '"' && field === '' && hasValidClosingQuote(text, i)){ inQuotes = true; i++; continue; }
+    if(ch === '"' && field === ''){ inQuotes = true; i++; continue; }
     if(ch === '\t'){ row.push(field); field = ''; i++; continue; }
     if(ch === '\r'){ i++; continue; }
     if(ch === '\n'){ row.push(field); field = ''; rows.push(row); row = []; i++; continue; }
@@ -13430,7 +13469,7 @@ $('settingsToggleBtn').onclick = () => {
 function returnToPausedQuiz(){
   hideAllScreens();
   $('quiz').classList.remove('hidden');
-  showCard(currentOptions);
+  showCard(currentOptions, currentOptionOrigIdx);
   const saved = loadSession();
   if(saved && saved.answered){
     restoreAnsweredView(current, saved.chosen, saved.isCorrect, saved.chosenIdx);
@@ -13657,8 +13696,22 @@ function buildOptions(card){
   // Full MC cards already come with their own answer choices — use those
   // directly instead of generating TF-IDF-based distractors.
   if(card.mode === 'full' && Array.isArray(card.options) && card.options.length >= 2){
-    return shuffle(card.options);
+    // Shuffle the ORIGINAL INDICES, not the option text. Shuffling plain
+    // strings throws away which physical option (A/B/C/D) each one came
+    // from — and that's unrecoverable afterward the moment two options
+    // share identical wording (e.g. two distractors that both just say
+    // "Normal"): mapOptionsToOrigIdx's text-match can only tell "a
+    // 'Normal' landed here", never WHICH original 'Normal' (the one with
+    // option A's authored tip, or option C's), so it ends up guessing —
+    // deterministically, but not necessarily correctly. Carrying the
+    // index straight through the shuffle sidesteps that guess entirely
+    // for a fresh question; see showCard, which uses
+    // lastBuiltOptionOrigIdx instead of re-deriving it from text.
+    const order = shuffle(card.options.map((_, i) => i));
+    lastBuiltOptionOrigIdx = order;
+    return order.map(i => card.options[i]);
   }
+  lastBuiltOptionOrigIdx = null;
 
   const cardIndex = cards.indexOf(card);
   const seenBacks = new Set([card.back.toLowerCase()]);
@@ -15239,7 +15292,7 @@ function initQuestionImageLightbox(){
 if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initQuestionImageLightbox);
 else initQuestionImageLightbox();
 
-function showCard(restoreOptions){
+function showCard(restoreOptions, restoreOrigIdx){
   answered = false;
   currentChosen = null;
   currentChosenIdx = -1;
@@ -15273,13 +15326,27 @@ function showCard(restoreOptions){
   ofb.classList.remove('ofb-correct','ofb-incorrect','ofb-mixed');
 
   const letters = ['A','B','C','D'];
-  const options = restoreOptions && restoreOptions.length ? restoreOptions : buildOptions(card);
+  const isRestoring = !!(restoreOptions && restoreOptions.length);
+  const options = isRestoring ? restoreOptions : buildOptions(card);
   currentOptions = options;
-  // Recomputed every time options are (re)shown, whether freshly shuffled
-  // here or restored from a saved/resumed session — see mapOptionsToOrigIdx
-  // and optionTipForIdx for why the per-option exam tip lookup depends on
-  // this rather than matching option text directly.
-  currentOptionOrigIdx = mapOptionsToOrigIdx(card, options);
+  // The per-option exam tip lookup (optionTipForIdx) depends on
+  // currentOptionOrigIdx matching the ACTUAL option each displayed slot
+  // came from. Prefer a true, already-known origIdx over re-deriving one
+  // by text match wherever possible — see buildOptions for why that guess
+  // can silently pick the wrong twin when two options share wording:
+  //  - fresh question just shuffled above: buildOptions captured the real
+  //    order in lastBuiltOptionOrigIdx, no guessing needed.
+  //  - restoring (paused-quiz return, resumed session): use the origIdx
+  //    the caller captured back when these options were first shuffled,
+  //    if it passed one along.
+  //  - otherwise (older saved session from before origIdx was persisted):
+  //    fall back to the text-match guess — the same caveat as before, but
+  //    only for sessions saved prior to this fix.
+  currentOptionOrigIdx = !isRestoring
+    ? (lastBuiltOptionOrigIdx || mapOptionsToOrigIdx(card, options))
+    : (Array.isArray(restoreOrigIdx) && restoreOrigIdx.length === options.length
+        ? restoreOrigIdx.slice()
+        : mapOptionsToOrigIdx(card, options));
   const list = $('optionsList');
   list.classList.remove('reviewable');
   list.innerHTML = '';
@@ -15625,22 +15692,9 @@ function restoreAnsweredView(card, chosen, isCorrect, chosenIdx){
 
 function resumeSession(id){
   const s = loadSession(id);
-  if(!s || !s.current) return;
+  if(!s || !s.current || !Array.isArray(s.cards) || !s.cards.length) return;
 
-  // Sessions synced down from another device (or re-hydrated after this
-  // device's own upload was slimmed — see uploadKey) no longer carry a full
-  // `cards` copy. Rebuild it from the matching local set instead of bailing
-  // out; everything below already matches cards by `.front` text against
-  // whatever array `cards` points to, so a rehydrated array works exactly
-  // the same as an embedded one.
-  let sCards = s.cards;
-  if(!Array.isArray(sCards) || !sCards.length){
-    const localSet = (s.activeSetId && loadSets()[s.activeSetId]) || null;
-    sCards = (localSet && Array.isArray(localSet.cards)) ? localSet.cards : null;
-  }
-  if(!Array.isArray(sCards) || !sCards.length) return;
-
-  cards = sCards;
+  cards = s.cards;
   activeSetId = s.activeSetId || null;
 
   current = cards.find(c => c.front === s.current.front) || s.current;
@@ -15703,7 +15757,7 @@ function resumeSession(id){
   }
 
   $('quiz').classList.remove('hidden');
-  showCard(s.options);
+  showCard(s.options, s.optionOrigIdx);
 
   if(s.answered){
     restoreAnsweredView(current, s.chosen, s.isCorrect, s.chosenIdx);
