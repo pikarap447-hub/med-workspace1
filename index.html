@@ -4544,6 +4544,103 @@ body.mode-dark .index-calendar .holiday-label{ color:var(--text-muted); }
 .card:has(#calendarView:not(.hidden)) > .card-inner > .vine-frame{display:none}
 .card:has(#communityView:not(.hidden)) > .card-inner > .vine-frame{display:none}
 
+/* ===== More screen + Derm Atlas (dm-*) ===== */
+.more-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px; margin-top:16px;}
+.more-tile{
+  text-align:left; background:var(--bg); border:1.5px solid var(--border); border-radius:16px; padding:18px;
+  cursor:pointer; font-family:var(--font); color:var(--text); transition:transform .15s, box-shadow .15s, border-color .15s;
+}
+.more-tile:hover{transform:translateY(-1px); box-shadow:var(--shadow-sm); border-color:var(--tile-blue-mid);}
+.more-tile-emoji{font-size:28px; line-height:1;}
+.more-tile-title{font-family:var(--font-display); font-weight:800; font-size:17px; margin-top:8px;}
+.more-tile-sub{font-size:12.5px; color:var(--text-muted); margin-top:4px; line-height:1.45;}
+.dm-bar{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:12px;}
+.dm-bar select{max-width:260px;}
+.dm-status{font-size:12px; min-height:1.2em; margin-top:8px; color:var(--text-muted);}
+.dm-status.ok{color:var(--success);} .dm-status.err{color:var(--danger);}
+.dm-pub{font-size:11.5px; color:var(--text-muted);}
+.dm-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px; margin-top:16px;}
+.dm-plate{background:var(--bg); border:1.5px solid var(--border); border-radius:14px; overflow:hidden; cursor:pointer; transition:border-color .15s;}
+.dm-plate:hover,.dm-plate:focus-visible{border-color:var(--tile-blue-mid); outline:none;}
+.dm-plate img{width:100%; aspect-ratio:4/3; object-fit:cover; display:block; background:rgba(0,0,0,.06);}
+.dm-cap{padding:12px 14px;}
+.dm-cap h3{font-family:var(--font-display); font-size:16px; margin:0; font-weight:800; line-height:1.3; color:var(--text);}
+.dm-detail{max-height:0; overflow:hidden; transition:max-height .25s ease; padding:0 14px;}
+.dm-plate.open .dm-detail{max-height:420px; padding:0 14px 14px; overflow-y:auto;}
+.dm-tags{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0;}
+.dm-tag{font-size:12px; font-weight:700; background:var(--primary-soft); color:var(--tile-blue); padding:3px 9px; border-radius:8px; border:1px solid var(--border);}
+.dm-rx{font-size:13px; color:var(--text-muted); line-height:1.5;}
+.dm-rx + .dm-rx{margin-top:6px;}
+.dm-rx b{color:var(--text);}
+.dm-empty{text-align:center; color:var(--text-muted); padding:40px 16px; font-size:14px;}
+.dm-quizwrap{max-width:920px; margin:16px auto 0;}
+.dm-scorebar{position:relative; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; font-size:13px; font-weight:700; color:var(--text-muted); margin-bottom:12px;}
+.dm-link{background:none; border:none; padding:10px 6px; margin:-10px -2px; display:inline-block; font-family:var(--font); font-size:13px; font-weight:700; color:var(--text-muted); text-decoration:underline; cursor:pointer;}
+.dm-link:hover{color:var(--primary);}
+.dm-quizcard{background:var(--bg); border:1.5px solid var(--border); border-radius:18px; padding:22px; display:grid; grid-template-columns:1.05fr 1fr; gap:24px; align-items:stretch;}
+.dm-quizcard.solo{grid-template-columns:1fr; text-align:center;}
+.dm-quizcard > img{width:100%; height:100%; min-height:220px; object-fit:cover; border-radius:14px; background:rgba(0,0,0,.06);}
+.dm-quizcard h3{font-family:var(--font-display); font-weight:800; font-size:19px; margin:0 0 12px; color:var(--text);}
+.dm-options{display:grid; gap:8px;}
+.dm-opt{font-family:var(--font); font-size:14.5px; padding:11px 14px; border-radius:10px; border:1.5px solid var(--border); background:var(--surface); color:var(--text); cursor:pointer; text-align:left;}
+.dm-opt:hover{border-color:var(--tile-blue-mid);}
+.dm-opt.correct{background:var(--green-bg); border-color:var(--success); color:var(--success);}
+.dm-opt.wrong{background:var(--red-bg); border-color:var(--danger); color:var(--danger);}
+.dm-opt.locked{cursor:default; pointer-events:none;}
+.dm-opt.locked:not(.correct):not(.wrong){opacity:.5;}
+.dm-reveal{margin-top:14px; padding-top:12px; border-top:1px solid var(--border); display:none; text-align:left;}
+.dm-reveal.show{display:block;}
+.dm-revealname{font-family:var(--font-display); font-weight:800; font-size:16px; margin-bottom:4px;}
+.dm-quizright{max-height:calc(100vh - 260px); overflow-y:auto; padding-right:4px;}
+.dm-next{margin-top:14px; width:100%; padding:11px; border-radius:10px; border:none; background:var(--tile-blue-deep); color:#fff; font-family:var(--font); font-weight:800; font-size:14px; cursor:pointer;}
+.dm-promptpanel{background:var(--surface); border:1.5px solid var(--border); border-radius:14px; padding:22px; display:flex; flex-direction:column; justify-content:center; min-height:220px;}
+.dm-plabel{font-size:11px; letter-spacing:.8px; text-transform:uppercase; color:var(--text-muted); margin-bottom:10px; font-weight:800;}
+.dm-ptext{font-family:var(--font-display); font-size:20px; line-height:1.4; font-weight:800; color:var(--text);}
+.dm-ptags{display:flex; flex-wrap:wrap; gap:8px;}
+.dm-ptags .dm-tag{font-size:14px; padding:6px 12px;}
+.dm-qsettings{display:inline-block; position:static;}
+.dm-qsettings summary{cursor:pointer; text-decoration:underline; list-style:none; display:inline;}
+.dm-qsettings summary::-webkit-details-marker{display:none;}
+.dm-qpanel{position:absolute; right:0; left:auto; top:calc(100% + 4px); z-index:8; width:min(420px,100%); text-align:left; background:var(--surface); border:1.5px solid var(--border); border-radius:12px; padding:14px 16px; box-shadow:var(--shadow); font-weight:600;}
+.dm-qhead{font-size:12px; color:var(--text-muted); margin:0 0 8px;}
+.dm-qhead + .dm-qchips{margin-bottom:12px;}
+.dm-qchips{display:flex; flex-wrap:wrap; gap:6px;}
+.dm-qchip input{position:absolute; opacity:0; pointer-events:none;}
+.dm-qchip span{display:inline-block; font-size:12px; padding:5px 10px; border-radius:8px; border:1.5px solid var(--border); color:var(--text-muted); cursor:pointer;}
+.dm-qchip input:checked + span{background:var(--tile-blue-deep); border-color:var(--tile-blue-deep); color:#fff;}
+.dm-gridwrap{overflow-x:auto; border:1.5px solid var(--border); border-radius:10px; margin-top:12px;}
+#dmEditGrid{border-collapse:collapse; width:100%; min-width:900px; font-size:13px;}
+#dmEditGrid th{background:var(--primary-soft); font-weight:800; font-size:11.5px; color:var(--text-muted); text-align:left; padding:8px 10px; border-bottom:1px solid var(--border); position:sticky; top:0;}
+#dmEditGrid td{border:1px solid var(--border); padding:0; vertical-align:top;}
+#dmEditGrid td.cell{padding:8px 10px; min-width:140px; max-width:280px; outline:none; line-height:1.4; white-space:pre-wrap; word-break:break-word; cursor:text; color:var(--text);}
+#dmEditGrid td.cell:focus{background:var(--primary-soft); box-shadow:inset 0 0 0 2px var(--tile-blue-mid);}
+#dmEditGrid td.rownum{width:34px; text-align:center; color:var(--text-muted); font-size:12px; background:var(--primary-soft); user-select:none;}
+#dmEditGrid td.rowact{width:44px; text-align:center;}
+.dm-del{background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:18px; padding:8px; min-width:44px; min-height:44px;}
+.dm-del:hover{color:var(--danger);}
+.dm-prompt{margin-top:16px; background:var(--bg); border:1.5px solid var(--border); border-radius:8px; padding:12px; font-size:11.5px; white-space:pre-wrap; color:var(--text-muted); max-height:200px; overflow:auto;}
+@media(max-width:760px){
+  .dm-quizcard{grid-template-columns:1fr; padding:18px; gap:18px;}
+  .dm-quizcard > img{height:auto; min-height:0; aspect-ratio:4/3;}
+  .dm-quizright{max-height:none; overflow:visible;}
+}
+.card:has(#moreView:not(.hidden)) > .card-inner > .vine-frame{display:none}
+.card:has(#dermView:not(.hidden)) > .card-inner > .vine-frame{display:none}
+
+#dermView{padding-bottom:96px;} /* keep last content clear of the app's floating text-size/theme toolbar */
+#dmTabs .community-tab{min-height:40px; padding:9px 18px; font-size:13px;}
+.dm-status.warn{color:color-mix(in srgb, var(--accent) 45%, var(--text)); font-weight:700;}
+#dmSaveBtn.dirty{box-shadow:0 0 0 3px var(--tile-blue-mid);}
+.dm-swipe{display:none; font-size:12px; color:var(--text-muted); margin-top:8px;}
+@media(max-width:760px){
+  .dm-bar select{max-width:none; width:100%;}
+  .dm-bar .btn-ghost{flex:1 1 auto; min-height:44px; white-space:nowrap; padding-left:10px; padding-right:10px;}
+  .dm-bar .btn-primary{flex:1 1 100%; min-height:46px;}
+  .dm-swipe{display:block;}
+  .dm-opt{padding:14px;}
+  .dm-next{padding:14px;}
+}
+
 /* ===== Community panel ===== */
 .community-panel{
   background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow);
@@ -4695,7 +4792,10 @@ body.mode-dark .index-calendar .holiday-label{ color:var(--text-muted); }
       <button class="btn-ghost stats-toggle" id="petToggleBtn" title="Pet" aria-label="Pet">🐶 <span>Pet</span></button>
       <button class="btn-ghost stats-toggle" id="calendarToggleBtn" title="Calendar" aria-label="Calendar">🗓️ <span>Calendar</span></button>
       <button class="btn-ghost stats-toggle" id="communityToggleBtn" title="Community" aria-label="Community">🌐 <span>Community</span><span class="nav-new-dot" id="communityNewDot"></span></button>
-      <button class="btn-ghost stats-toggle" id="profSearchToggleBtn" title="Find questions by Professor/Topic" aria-label="Find questions">🧑‍🏫 <span>Find Qs</span></button>
+      <!-- Find Qs is DISABLED in the nav (hidden) but kept fully intact: its view, handlers and code still exist.
+           To bring it back, delete the hidden/style attributes on the button below. -->
+      <button class="btn-ghost stats-toggle" id="profSearchToggleBtn" title="Find questions by Professor/Topic" aria-label="Find questions" hidden style="display:none !important">🧑‍🏫 <span>Find Qs</span></button>
+      <button class="btn-ghost stats-toggle" id="moreToggleBtn" title="More" aria-label="More">➕ <span>More</span></button>
     </nav>
   </div>
 
@@ -6137,6 +6237,65 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== More (home for extra tools; replaces Find Qs in the nav) ===== -->
+      <div id="moreView" class="hidden">
+        <div class="row" style="margin-bottom:14px;">
+          <button class="btn-ghost back-on-photo" id="backFromMoreBtn">← Back</button>
+        </div>
+        <div class="community-panel">
+          <div class="community-hero">
+            <div class="community-hero-title">➕ More</div>
+            <div class="community-hero-sub">Extra study tools live here.</div>
+          </div>
+          <div class="more-grid">
+            <button type="button" class="more-tile" id="openDermBtn">
+              <div class="more-tile-emoji">🩺</div>
+              <div class="more-tile-title">Derm Atlas</div>
+              <div class="more-tile-sub">Lesion photos, keywords, treatment &amp; dosing — browse, quiz yourself, edit, sync and publish.</div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Derm Atlas ===== -->
+      <div id="dermView" class="hidden">
+        <div class="row" style="margin-bottom:14px;">
+          <button class="btn-ghost back-on-photo" id="backFromDermBtn">← Back</button>
+        </div>
+        <div class="community-panel">
+          <div class="community-hero">
+            <div class="community-hero-title">🩺 Derm Atlas</div>
+            <div class="community-hero-sub">lesion · keywords · treatment &amp; dosing — browse or test yourself. Atlases sync with your account and can be published to Community like any other set.</div>
+          </div>
+          <div class="dm-bar" id="dmSetBar"></div>
+          <div class="dm-status" id="dmStatus" role="status" aria-live="polite"></div>
+          <div class="community-tabs" id="dmTabs" role="tablist" aria-label="Derm Atlas sections">
+            <button type="button" class="community-tab active" data-dmtab="browse" role="tab" aria-selected="false">Browse</button>
+            <button type="button" class="community-tab" data-dmtab="quiz" role="tab" aria-selected="false">Quiz</button>
+            <button type="button" class="community-tab" data-dmtab="edit" role="tab" aria-selected="false">Edit data</button>
+          </div>
+          <div id="dmBrowse"><div class="dm-grid" id="dmBrowseGrid"></div></div>
+          <div id="dmQuiz" class="hidden"><div id="dmQuizArea"></div></div>
+          <div id="dmEdit" class="hidden">
+            <p class="community-section-sub" style="margin-top:14px; line-height:1.5;">Live cells — click any one and type, or paste a block copied from Excel, Google Sheets, a CSV or an LLM reply (tab- or comma-separated). A multi-cell paste spills across the grid from that cell and adds rows as needed. Press <b>Save</b> to store it — saved changes sync to your account.</p>
+            <div class="dm-swipe">← swipe the table sideways to see all columns →</div>
+            <div class="dm-gridwrap">
+              <table id="dmEditGrid">
+                <thead><tr><th>#</th><th>Name</th><th>Image URL</th><th>Keywords (separate with |)</th><th>Treatment</th><th>Dosing</th><th></th></tr></thead>
+                <tbody id="dmGridBody"></tbody>
+              </table>
+            </div>
+            <div class="row" style="gap:8px; margin-top:12px; flex-wrap:wrap;">
+              <button class="btn-ghost" id="dmAddRowBtn">+ Add row</button>
+              <button class="btn-ghost" id="dmClearBtn">Clear table</button>
+              <button class="btn-primary" id="dmSaveBtn">Save</button>
+              <button class="btn-ghost" id="dmCopyPromptBtn">Copy LLM prompt</button>
+            </div>
+            <div class="dm-prompt" id="dmPromptText"></div>
           </div>
         </div>
       </div>
@@ -8296,7 +8455,7 @@ function renderCommunityCard(r){
   const cardTypeLabel = r.card_type === 'samplex' ? 'Samplex' : (r.card_type === 'topic' ? 'Topic Cards' : r.card_type);
   const subjColor = r.subject ? subjectColor(r.subject) : null;
   const subjectTag = r.subject ? `<span class="community-set-tag subject-tag" style="background:${subjColor}">${escapeHtml(r.subject)}</span>` : '';
-  const tags = subjectTag + [r.le ? `LE ${r.le}` : null, cardTypeLabel, r.topic, r.professor ? `👤 ${r.professor}` : null, r.kind === 'algorithm' ? 'Algorithm' : null].filter(Boolean).slice(0,4).map(t => `<span class="community-set-tag">${escapeHtml(t)}</span>`).join('');
+  const tags = subjectTag + [r.le ? `LE ${r.le}` : null, cardTypeLabel, r.topic, r.professor ? `👤 ${r.professor}` : null, r.kind === 'algorithm' ? 'Algorithm' : null, r.kind === 'derm' ? 'Derm Atlas' : null].filter(Boolean).slice(0,4).map(t => `<span class="community-set-tag">${escapeHtml(t)}</span>`).join('');
   const uploadedLabel = r.created_at ? new Date(r.created_at).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : null;
   // "Edited" only shows once the gap between created_at and updated_at is
   // large enough to be a real, later edit rather than noise from whatever
@@ -8663,7 +8822,7 @@ async function importCommunitySet(communitySetId){
   if(row) row.import_count = Number(row.import_count||0) + 1;
   closeCommunityPreview();
   applyCommunitySearchFilter();
-  alert(`Added "${data.title}" to your library.`);
+  alert(data.kind === 'derm' ? `Added "${data.title}" — find it under More → Derm Atlas.` : `Added "${data.title}" to your library.`);
 }
 
 // ---- Live "someone just published a set" indicator ----
@@ -8812,7 +8971,7 @@ function findRepeatMatchYear(professor, topic, year, excludeKey){
 // same dedup-by-cardKey approach used by the folder/weak-practice builders
 // above, so a card that's identical across two sets isn't listed twice.
 function getAllTaggedCardsForSearch(){
-  const sets = loadSets();
+  const sets = loadLibrarySets();
   const seenKeys = new Set();
   const out = [];
   Object.entries(sets).forEach(([id, s]) => {
@@ -8995,6 +9154,505 @@ function renderProfSearchView(){
   const matches = profSearchMatches();
   renderProfSearchInsights(matches);
   renderProfSearchResults(matches);
+}
+
+/* ===== DERM ATLAS (More → Derm Atlas) =====
+   Atlases are ordinary sets stored in SETS_KEY with kind:'derm', so they ride the
+   existing machinery for free: IndexedDB + cloud sync (user_app_data), backups,
+   and Community publish/import/remix (community_sets, which already has a `kind`
+   column) — no new tables or SQL. Each lesion is a card:
+   {id, name, front(=name), back(=treatment+dosing summary), image, keywords[], treatment, dosing}
+   front/back exist only so generic code (Community preview, backups) shows something sensible. */
+const DM_LAST_KEY = 'topicReview_dermLastSet_v1'; // device-local "which atlas was open" pref, not synced
+const DM_SAMPLES = [
+  {
+    name:"Psoriasis vulgaris (plaque type)",
+    image:"https://placehold.co/600x450/e8d9c8/8a3a2b?text=sample+image+%E2%80%94+replace",
+    keywords:["Well-demarcated erythematous plaque","Silvery micaceous scale","Extensor surfaces (elbows, knees, scalp)","Auspitz sign (pinpoint bleeding on scale removal)","Koebner phenomenon"],
+    treatment:"Topical corticosteroid ± vitamin D analogue first-line; phototherapy or systemic agents for moderate-severe disease.",
+    dosing:"Betamethasone dipropionate 0.05% ointment once daily + calcipotriol 0.005% ointment once daily (or combination product) for up to 4 weeks; NB-UVB 3x/week if escalating."
+  },
+  {
+    name:"Molluscum contagiosum",
+    image:"https://placehold.co/600x450/e8d9c8/8a3a2b?text=sample+image+%E2%80%94+replace",
+    keywords:["Dome-shaped papule with central umbilication","Pearly/flesh-colored","Poxvirus (MCV)","Common in children, spreads by contact","Usually self-limited"],
+    treatment:"Often observation (self-resolving over months); cryotherapy, curettage, or topical cantharidin if treated.",
+    dosing:"Cantharidin 0.7% applied to each lesion in-office, washed off after 4-6 hours; repeat every 2-3 weeks as needed."
+  },
+  {
+    name:"Basal cell carcinoma (nodular)",
+    image:"https://placehold.co/600x450/e8d9c8/8a3a2b?text=sample+image+%E2%80%94+replace",
+    keywords:["Pearly papule/nodule","Rolled telangiectatic border","Central ulceration (rodent ulcer)","Sun-exposed skin, most common skin cancer","Slow-growing, rarely metastasizes"],
+    treatment:"Surgical excision or Mohs micrographic surgery for high-risk/facial sites; topical or radiotherapy in select cases.",
+    dosing:"Imiquimod 5% cream 5x/week for 6 weeks for low-risk superficial BCC; Mohs surgery is single-session, margin-controlled (no drug dosing)."
+  }
+];
+const DM_LLM_PROMPT = `You are compiling a dermatology flashcard set for a study app. For the lesion(s) I list below:
+
+1. Search the web for each lesion and find a REAL, currently working image URL of its typical/classic presentation — prefer Wikimedia Commons ("upload.wikimedia.org") or another openly hotlinkable medical-image source. Actually check that the URL resolves to an image of that exact lesion before using it — never invent or guess a URL. If you can't find one you're confident in, leave that cell blank rather than guessing.
+2. For each lesion note: the standard name; 4-6 short MUST-KNOW exam keywords (classic morphology, distribution, pathognomonic signs, associations — short phrases, not full sentences); a one-sentence TREATMENT summary (the general approach/drug class, e.g. "topical corticosteroid + vitamin D analogue"); and a separate, precise DOSING line — actual drug name(s), strength/concentration, frequency, route, and typical duration, exactly as it would be tested (e.g. "Betamethasone dipropionate 0.05% ointment BID for 2-4 weeks"). If a lesion has no drug dosing (e.g. pure surgical management), say so briefly in that cell rather than leaving it blank.
+3. Compile everything into a table with exactly these 5 columns, no header row: Name, Image URL, Keywords, Treatment, Dosing. Put multiple keywords in one cell separated by " | " (not commas, since some phrases already contain commas).
+
+Output: if you're able to create and share a downloadable file, save this as a CSV (or Google Sheet / XLSX) file with those 5 columns and give me the file. If you can't create files, output the same 5 columns as plain rows in your reply (tab-separated if possible, comma-separated otherwise) so I can paste it straight into the app's grid.
+
+Lesions to compile: [PASTE YOUR LIST HERE]`;
+const DM_QTYPES = {
+  image:   {label:'Image → name',      hint:'Identify from the photo'},
+  kw2name: {label:'Findings → name',   hint:'Name the lesion from its keywords'},
+  name2kw: {label:'Name → finding',    hint:'Pick a true finding for the lesion'},
+  odd:     {label:'Odd one out',       hint:'Spot the keyword that doesn\u2019t belong'},
+  rx2name: {label:'Treatment → name',  hint:'Which lesion gets this treatment'},
+  name2rx: {label:'Name → treatment',  hint:'Pick the right treatment'},
+  dose2name:{label:'Dosing → name',    hint:'Which lesion uses this regimen'},
+  name2dose:{label:'Name → dosing',    hint:'Pick the right regimen'}
+};
+let dmActiveId = null, dmTab = 'browse';
+let dmGridDirty = false, dmGridKey = null, dmGridSetId = null;
+const DM_COLS = ['Name','Image URL','Keywords','Treatment','Dosing'];
+function dmMarkDirty(){
+  if(!dmGridDirty){ dmGridDirty = true; dmSay('Unsaved changes — press Save on the Edit data tab.', 'warn'); }
+  const b = $('dmSaveBtn'); if(b){ b.classList.add('dirty'); b.textContent = 'Save changes ●'; }
+}
+function dmClearDirty(){ dmGridDirty = false; const b = $('dmSaveBtn'); if(b){ b.classList.remove('dirty'); b.textContent = 'Save'; } }
+const dmQ = { qs:[], idx:0, score:0, answered:false, started:false, skipped:0,
+  cfg:{ types:new Set(Object.keys(DM_QTYPES)), length:0 } };
+const DM_BAD_IMAGES = new Set();
+
+/* -- data helpers -- */
+function dmNewId(){ return 'dm_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
+function dmEntries(){
+  return Object.entries(loadSets()).filter(([,s]) => s && s.kind === 'derm')
+    .sort((a,b) => (a[1].createdAt||0) - (b[1].createdAt||0));
+}
+function dmCurrent(){
+  const s = dmActiveId ? loadSets()[dmActiveId] : null;
+  return (s && s.kind === 'derm') ? s : null;
+}
+function dmMakeCard(o){
+  const name = String(o.name || o.front || '').trim() || 'Untitled';
+  const keywords = Array.isArray(o.keywords) ? o.keywords.map(k => String(k).trim()).filter(Boolean) : [];
+  const treatment = String(o.treatment || '').trim();
+  const dosing = String(o.dosing || '').trim();
+  const back = [treatment, dosing ? 'Dosing: ' + dosing : ''].filter(Boolean).join('\n') || keywords.join(' | ');
+  return { id: o.id || dmNewId(), front: name, back, name, image: String(o.image || '').trim(), keywords, treatment, dosing };
+}
+function dmCards(){ const s = dmCurrent(); return s && Array.isArray(s.cards) ? s.cards.map(dmMakeCard) : []; }
+function dmMutate(fn){
+  const sets = loadSets(); const s = sets[dmActiveId];
+  if(!s) return false;
+  fn(s); s.updatedAt = Date.now(); // updatedAt drives the sync merge (newer copy wins per set)
+  saveSetsData(sets);
+  return true;
+}
+function dmSay(msg, cls){ const el = $('dmStatus'); el.textContent = msg || ''; el.className = 'dm-status' + (cls ? ' ' + cls : ''); }
+function dmCreateSet(name, cards){
+  const sets = loadSets(), id = genSetId(), now = Date.now();
+  sets[id] = { name, subject:'DERM', kind:'derm', mode:'classic', cards:cards.map(dmMakeCard), completed:false, createdAt:now, updatedAt:now };
+  saveSetsData(sets);
+  return id;
+}
+
+/* -- open / chrome -- */
+function dmOpen(){
+  saveBeforeNavigation(); hideAllScreens(); $('dermView').classList.remove('hidden');
+  const entries = dmEntries();
+  const last = lsGet(DM_LAST_KEY);
+  dmActiveId = entries.find(([id]) => id === dmActiveId) ? dmActiveId
+    : (entries.find(([id]) => id === last) ? last : (entries[0] ? entries[0][0] : null));
+  dmQ.started = false;
+  if(!(dmGridDirty && dmGridSetId === dmActiveId && dmCurrent())){ dmClearDirty(); dmGridKey = null; dmSay(''); } // returning to the same atlas keeps unsaved table edits
+  dmRenderAll();
+}
+function dmRenderAll(){
+  dmRenderBar(); dmRenderBrowse();
+  $('dmPromptText').textContent = DM_LLM_PROMPT;
+  const has = !!dmCurrent();
+  $('dmTabs').style.display = has ? '' : 'none';
+  if(!has){ ['dmBrowse','dmQuiz','dmEdit'].forEach(id => $(id).classList.toggle('hidden', id !== 'dmBrowse')); return; }
+  dmSetTab(dmTab, true);
+}
+function dmRenderBar(){
+  const bar = $('dmSetBar'), entries = dmEntries(), s = dmCurrent();
+  if(!entries.length){
+    bar.innerHTML = `<button class="btn-primary" id="dmSamplesBtn">Start with 3 sample lesions</button><button class="btn-ghost" id="dmNewBtn">＋ New empty atlas</button>`;
+  } else {
+    bar.innerHTML = `<select id="dmSetSelect" class="modal-input" aria-label="Atlas">${
+      entries.map(([id, x]) => `<option value="${escapeHtml(id)}"${id === dmActiveId ? ' selected' : ''}>${escapeHtml(x.name)} (${(x.cards||[]).length})</option>`).join('')
+    }</select>
+      <button class="btn-ghost" id="dmNewBtn" title="New atlas">＋ New</button>
+      <button class="btn-ghost" id="dmRenameBtn" title="Rename">✏️ Rename</button>
+      <button class="btn-ghost" id="dmDeleteBtn" title="Delete this atlas">🗑 Delete</button>
+      <button class="btn-primary" id="dmPublishBtn">🌐 ${s && s.communityId ? 'Update on Community' : 'Publish to Community'}</button>`;
+  }
+  const on = (id, fn) => { const el = $(id); if(el) el.onclick = fn; };
+  on('dmSamplesBtn', () => { dmActiveId = dmCreateSet('Derm Atlas', DM_SAMPLES); lsSet(DM_LAST_KEY, dmActiveId); dmQ.started = false; dmRenderAll(); });
+  on('dmNewBtn', () => {
+    if(!dmConfirmDiscard()) return;
+    const name = prompt('Name for the new atlas:', 'Derm Atlas');
+    if(!name || !name.trim()) return;
+    dmActiveId = dmCreateSet(name.trim(), []); lsSet(DM_LAST_KEY, dmActiveId);
+    dmQ.started = false; dmClearDirty(); dmGridKey = null; dmTab = 'edit'; dmRenderAll();
+  });
+  on('dmRenameBtn', () => {
+    const cur = dmCurrent(); if(!cur) return;
+    const name = prompt('Rename atlas:', cur.name);
+    if(!name || !name.trim() || name.trim() === cur.name) return;
+    dmMutate(x => { x.name = name.trim(); }); dmRenderBar();
+  });
+  on('dmDeleteBtn', () => {
+    const cur = dmCurrent(); if(!cur) return;
+    if(!confirm(`Delete "${cur.name}" (${(cur.cards||[]).length} lessons) from this account? ${cur.communityId ? 'Its Community copy stays live until you remove it under Community → My Uploads. ' : ''}This can't be undone.`)) return;
+    const sets = loadSets(); delete sets[dmActiveId]; saveSetsData(sets);
+    dmActiveId = null; dmQ.started = false; dmClearDirty(); dmGridKey = null;
+    const first = dmEntries()[0]; if(first) dmActiveId = first[0];
+    dmRenderAll();
+  });
+  on('dmPublishBtn', async () => {
+    if(!dmCurrent()) return;
+    if(dmGridDirty && !confirm('You have unsaved edits in the table — they won\'t be included. Publish the last saved version?')) return;
+    await publishSetToCommunity(dmActiveId);
+    dmRenderBar();
+  });
+  const sel = $('dmSetSelect');
+  if(sel) sel.onchange = () => {
+    if(!dmConfirmDiscard()){ sel.value = dmActiveId; return; }
+    dmActiveId = sel.value; lsSet(DM_LAST_KEY, dmActiveId);
+    dmQ.started = false; dmClearDirty(); dmGridKey = null; dmSay('');
+    dmRenderAll();
+  };
+}
+function dmConfirmDiscard(){ return !dmGridDirty || confirm('Discard unsaved edits in the table?'); }
+function dmSetTab(t, silent){
+  dmTab = t;
+  $('dmTabs').querySelectorAll('[data-dmtab]').forEach(b => { const on = b.dataset.dmtab === t; b.classList.toggle('active', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
+  $('dmBrowse').classList.toggle('hidden', t !== 'browse');
+  $('dmQuiz').classList.toggle('hidden', t !== 'quiz');
+  $('dmEdit').classList.toggle('hidden', t !== 'edit');
+  if(t === 'browse') dmRenderBrowse();
+  if(t === 'quiz' && !dmQ.started) dmStartQuiz();
+  if(t === 'edit'){
+    const s = dmCurrent(), key = s ? dmActiveId + ':' + (s.updatedAt || 0) : null;
+    if(!dmGridDirty && dmGridKey !== key){ dmRenderGrid(); dmGridKey = key; }
+    dmGridSetId = dmActiveId;
+  }
+}
+
+/* -- Browse -- */
+function dmRenderBrowse(){
+  const grid = $('dmBrowseGrid'), cards = dmCards();
+  if(!dmCurrent()){ grid.innerHTML = '<div class="dm-empty">No atlas yet — start with the samples or create an empty one.</div>'; return; }
+  if(!cards.length){ grid.innerHTML = '<div class="dm-empty">No lesions in this atlas yet. Add some under <b>Edit data</b>.</div>'; return; }
+  grid.innerHTML = cards.map((l, i) => `
+    <div class="dm-plate" data-i="${i}" tabindex="0" role="button" aria-expanded="false">
+      ${l.image ? `<img src="${escapeHtml(l.image)}" alt="${escapeHtml(l.name)}" loading="lazy" onerror="this.style.opacity=.3">` : ''}
+      <div class="dm-cap"><h3>${escapeHtml(l.name)}</h3></div>
+      <div class="dm-detail">
+        <div class="dm-tags">${l.keywords.map(k => `<span class="dm-tag">${escapeHtml(k)}</span>`).join('')}</div>
+        ${l.treatment ? `<div class="dm-rx"><b>Treatment — </b>${escapeHtml(l.treatment)}</div>` : ''}
+        ${l.dosing ? `<div class="dm-rx"><b>Dosing — </b>${escapeHtml(l.dosing)}</div>` : ''}
+      </div>
+    </div>`).join('');
+  grid.querySelectorAll('.dm-plate').forEach(p => {
+    const toggle = () => { p.classList.toggle('open'); p.setAttribute('aria-expanded', p.classList.contains('open')); };
+    p.addEventListener('click', toggle);
+    p.addEventListener('keydown', e => { if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); } });
+  });
+}
+
+/* -- Quiz engine: each question type asks about a different cell -- */
+const dmShuffle = arr => arr.map(v => [Math.random(), v]).sort((a,b) => a[0]-b[0]).map(v => v[1]);
+const dmNorm = s => String(s || '').trim().toLowerCase();
+const dmBlank = v => !v || /^(n\/?a|none|nil|tbd|unknown|not applicable.*|no (specific |drug )?(dosing|dose|treatment)\b.*|[-–—?.\s]+)$/i.test(String(v).trim());
+function dmClean(l){
+  return { raw:l, name:l.name,
+    image: (dmBlank(l.image) || DM_BAD_IMAGES.has(l.image)) ? '' : l.image,
+    keywords: (l.keywords || []).filter(k => !dmBlank(k)),
+    treatment: dmBlank(l.treatment) ? '' : l.treatment,
+    dosing: dmBlank(l.dosing) ? '' : l.dosing };
+}
+const dmPick = (arr, n) => dmShuffle(arr).slice(0, n);
+function dmDistinct(pool, avoid, n){
+  const seen = new Set(avoid.map(dmNorm)); const out = [];
+  for(const v of dmShuffle(pool)){
+    const k = dmNorm(v);
+    if(!k || seen.has(k)) continue;
+    seen.add(k); out.push(v);
+    if(out.length === n) break;
+  }
+  return out.length === n ? out : null;
+}
+const dmOptions = (correct, wrongs) => dmShuffle([{text:correct, correct:true}, ...wrongs.map(t => ({text:t, correct:false}))]);
+const DM_BUILDERS = {
+  image(l, others){
+    if(!l.image) return null;
+    const w = dmDistinct(others.map(o => o.name), [l.name], 3); if(!w) return null;
+    return {q:'Identify this lesion', image:l.image, options:dmOptions(l.name, w), answerIsName:true};
+  },
+  kw2name(l, others){
+    if(!l.keywords.length) return null;
+    const w = dmDistinct(others.filter(o => o.keywords.join('|') !== l.keywords.join('|')).map(o => o.name), [l.name], 3); if(!w) return null;
+    return {q:'Which lesion fits these findings?', label:'Findings', tags:dmPick(l.keywords, 3), options:dmOptions(l.name, w), answerIsName:true};
+  },
+  name2kw(l, others){
+    if(!l.keywords.length) return null;
+    const correct = dmPick(l.keywords, 1)[0];
+    const w = dmDistinct(others.flatMap(o => o.keywords), l.keywords, 3); if(!w) return null;
+    return {q:'Which finding belongs to this lesion?', label:'Lesion', text:l.name, options:dmOptions(correct, w), answerIsName:false};
+  },
+  odd(l, others){
+    if(l.keywords.length < 3) return null;
+    const imp = dmDistinct(others.flatMap(o => o.keywords), l.keywords, 1); if(!imp) return null;
+    const own = dmPick(l.keywords, 3);
+    return {q:'Which finding does NOT belong?', label:'Lesion', text:l.name, options:dmShuffle([...own.map(t => ({text:t, correct:false})), {text:imp[0], correct:true}]), answerIsName:false};
+  },
+  rx2name(l, others){
+    if(!l.treatment) return null;
+    const w = dmDistinct(others.filter(o => dmNorm(o.treatment) !== dmNorm(l.treatment)).map(o => o.name), [l.name], 3); if(!w) return null;
+    return {q:'Which lesion is treated this way?', label:'Treatment', text:l.treatment, options:dmOptions(l.name, w), answerIsName:true};
+  },
+  name2rx(l, others){
+    if(!l.treatment) return null;
+    const w = dmDistinct(others.map(o => o.treatment), [l.treatment], 3); if(!w) return null;
+    return {q:'What is the treatment?', label:'Lesion', text:l.name, options:dmOptions(l.treatment, w), answerIsName:false};
+  },
+  dose2name(l, others){
+    if(!l.dosing) return null;
+    const w = dmDistinct(others.filter(o => dmNorm(o.dosing) !== dmNorm(l.dosing)).map(o => o.name), [l.name], 3); if(!w) return null;
+    return {q:'Which lesion uses this regimen?', label:'Dosing', text:l.dosing, options:dmOptions(l.name, w), answerIsName:true};
+  },
+  name2dose(l, others){
+    if(!l.dosing) return null;
+    const w = dmDistinct(others.map(o => o.dosing), [l.dosing], 3); if(!w) return null;
+    return {q:'What is the dosing?', label:'Lesion', text:l.name, options:dmOptions(l.dosing, w), answerIsName:false};
+  }
+};
+function dmBuildFor(c, others, types){
+  for(const t of dmShuffle(types)){
+    const q = DM_BUILDERS[t](c, others);
+    if(q) return {...q, type:t, lesion:c.raw};
+  }
+  return null;
+}
+function dmBuildQuestions(){
+  const enabled = Object.keys(DM_QTYPES).filter(k => dmQ.cfg.types.has(k));
+  const pool = dmCards().map(dmClean);
+  const qs = []; dmQ.skipped = 0;
+  for(const c of dmShuffle(pool)){
+    if(dmQ.cfg.length && qs.length >= dmQ.cfg.length) break;
+    const q = dmBuildFor(c, pool.filter(o => o !== c), enabled);
+    if(q) qs.push(q); else dmQ.skipped++;
+  }
+  return qs;
+}
+function dmFallbackQuestion(q){
+  const pool = dmCards().map(dmClean);
+  const c = pool.find(o => o.raw.id === q.lesion.id); if(!c) return null;
+  const others = pool.filter(o => o !== c);
+  const sel = Object.keys(DM_QTYPES).filter(k => dmQ.cfg.types.has(k) && k !== 'image');
+  const any = Object.keys(DM_QTYPES).filter(k => k !== 'image');
+  return dmBuildFor(c, others, sel) || dmBuildFor(c, others, any);
+}
+function dmStartQuiz(){ dmQ.score = 0; dmQ.idx = 0; dmQ.started = true; dmQ.qs = dmBuildQuestions(); dmRenderQuizCard(); }
+function dmSettingsHTML(){
+  const chips = Object.entries(DM_QTYPES).map(([k,t]) =>
+    `<label class="dm-qchip" title="${escapeHtml(t.hint)}"><input type="checkbox" data-type="${k}" ${dmQ.cfg.types.has(k) ? 'checked' : ''}><span>${escapeHtml(t.label)}</span></label>`).join('');
+  const lens = [[10,'10'],[25,'25'],[0,'All']].map(([v,t]) =>
+    `<label class="dm-qchip"><input type="radio" name="dmqlen" data-len="${v}" ${dmQ.cfg.length === v ? 'checked' : ''}><span>${t}</span></label>`).join('');
+  return `<details class="dm-qsettings"><summary class="dm-link">Customize</summary>
+    <div class="dm-qpanel">
+      <div class="dm-qhead">Ask me about <button class="dm-link" id="dmQAll" type="button">all</button> · <button class="dm-link" id="dmQNone" type="button">none</button></div>
+      <div class="dm-qchips">${chips}</div>
+      <div class="dm-qhead">Questions per round</div>
+      <div class="dm-qchips">${lens}</div>
+    </div></details>`;
+}
+function dmWireSettings(area){
+  area.querySelectorAll('input[data-type]').forEach(cb => cb.addEventListener('change', () => {
+    cb.checked ? dmQ.cfg.types.add(cb.dataset.type) : dmQ.cfg.types.delete(cb.dataset.type); dmStartQuiz();
+  }));
+  area.querySelectorAll('input[data-len]').forEach(r => r.addEventListener('change', () => { dmQ.cfg.length = +r.dataset.len; dmStartQuiz(); }));
+  const all = area.querySelector('#dmQAll'), none = area.querySelector('#dmQNone');
+  if(all) all.onclick = () => { Object.keys(DM_QTYPES).forEach(k => dmQ.cfg.types.add(k)); dmStartQuiz(); };
+  if(none) none.onclick = () => { dmQ.cfg.types.clear(); dmStartQuiz(); };
+}
+function dmRenderQuizCard(){
+  const area = $('dmQuizArea'), total = dmCards().length;
+  if(total < 4){
+    area.innerHTML = '<div class="dm-empty">Load at least 4 lesions (Edit data tab) to run the quiz — Browse works with fewer.</div>';
+    return;
+  }
+  if(!dmQ.qs.length){
+    area.innerHTML = `<div class="dm-quizwrap"><div class="dm-scorebar"><span>No questions available</span><span>${dmSettingsHTML()}</span></div>
+      <div class="dm-empty">None of the selected question types can be built from your data. Open <b>Customize</b> and turn on more types (e.g. Name → finding needs keywords; Dosing types need dosing filled in).</div></div>`;
+    dmWireSettings(area); return;
+  }
+  if(dmQ.idx >= dmQ.qs.length){
+    area.innerHTML = `<div class="dm-quizwrap"><div class="dm-quizcard solo">
+      <h3>Set complete</h3>
+      <p style="color:var(--text-muted)">Score: ${dmQ.score} / ${dmQ.qs.length}</p>
+      ${dmQ.skipped ? `<p style="color:var(--text-muted); font-size:13px">${dmQ.skipped} lesion(s) were skipped — they're missing data the selected question types need.</p>` : ''}
+      <button class="dm-next" id="dmRestartBtn">Run again</button></div></div>`;
+    const rb = $('dmRestartBtn'); rb.onclick = dmStartQuiz; rb.focus(); return;
+  }
+  dmQ.answered = false;
+  const q = dmQ.qs[dmQ.idx], l = q.lesion;
+  const left = q.image
+    ? `<img src="${escapeHtml(q.image)}" alt="lesion">`
+    : `<div class="dm-promptpanel"><div class="dm-plabel">${escapeHtml(q.label)}</div>${
+        q.tags ? `<div class="dm-ptags">${q.tags.map(t => `<span class="dm-tag">${escapeHtml(t)}</span>`).join('')}</div>`
+               : `<div class="dm-ptext">${escapeHtml(q.text)}</div>`}</div>`;
+  const kws = (l.keywords || []).filter(k => !dmBlank(k));
+  area.innerHTML = `
+    <div class="dm-quizwrap">
+      <div class="dm-scorebar"><span>Question ${dmQ.idx + 1} / ${dmQ.qs.length}</span><span>Score ${dmQ.score} · ${dmSettingsHTML()} · <button class="dm-link" id="dmRestartQuizBtn" title="Reshuffle and start over">Restart</button></span></div>
+      <div class="dm-quizcard">
+        ${left}
+        <div class="dm-quizright">
+          <h3>${escapeHtml(q.q)}</h3>
+          <div class="dm-options">
+            ${q.options.map((o, i) => `<button class="dm-opt" data-correct="${o.correct}" data-i="${i}">${escapeHtml(o.text)}</button>`).join('')}
+          </div>
+          <div class="dm-reveal" id="dmReveal">
+            ${q.answerIsName ? '' : `<div class="dm-revealname">${escapeHtml(l.name)}</div>`}
+            ${kws.length ? `<div class="dm-tags">${kws.map(k => `<span class="dm-tag">${escapeHtml(k)}</span>`).join('')}</div>` : ''}
+            ${!dmBlank(l.treatment) ? `<div class="dm-rx"><b>Treatment — </b>${escapeHtml(l.treatment)}</div>` : ''}
+            ${!dmBlank(l.dosing) ? `<div class="dm-rx"><b>Dosing — </b>${escapeHtml(l.dosing)}</div>` : ''}
+          </div>
+          <button class="dm-next" id="dmNextBtn" style="display:none">Next</button>
+        </div>
+      </div>
+    </div>`;
+  $('dmRestartQuizBtn').onclick = dmStartQuiz;
+  dmWireSettings(area);
+  const qimg = area.querySelector('.dm-quizcard > img');
+  if(qimg) qimg.addEventListener('error', () => {
+    DM_BAD_IMAGES.add(q.image);
+    const alt = dmQ.answered ? null : dmFallbackQuestion(q);
+    if(alt){ dmQ.qs[dmQ.idx] = alt; dmRenderQuizCard(); } else qimg.style.opacity = .3;
+  });
+  area.querySelectorAll('.dm-opt').forEach(btn => btn.addEventListener('click', () => {
+    if(dmQ.answered) return;
+    dmQ.answered = true;
+    if(btn.dataset.correct === 'true') dmQ.score++;
+    area.querySelectorAll('.dm-opt').forEach(b => {
+      b.classList.add('locked');
+      if(b.dataset.correct === 'true') b.classList.add('correct'); else if(b === btn) b.classList.add('wrong');
+    });
+    $('dmReveal').classList.add('show');
+    const nb = $('dmNextBtn'); nb.style.display = 'block'; nb.focus();
+  }));
+  $('dmNextBtn').onclick = () => { dmQ.idx++; dmRenderQuizCard(); };
+  const first = area.querySelector('.dm-opt'); if(first) first.focus({preventScroll:true});
+}
+
+/* -- Edit grid -- */
+function dmBuildRow(cells, cid){
+  const tr = document.createElement('tr');
+  if(cid) tr.dataset.cid = cid; // keeps each lesion's id stable across edits so sync/merge and Community versions line up
+  tr.innerHTML = `<td class="rownum"></td>${cells.map((v, c) => `<td class="cell" contenteditable="true" data-col="${c}" role="textbox" aria-multiline="true" aria-label="${DM_COLS[c]}">${escapeHtml(v)}</td>`).join('')}<td class="rowact"><button class="dm-del" title="Remove row" aria-label="Remove row">×</button></td>`;
+  return tr;
+}
+function dmRenumber(){
+  [...$('dmGridBody').children].forEach((tr, i) => {
+    tr.querySelector('.rownum').textContent = i + 1;
+    tr.querySelectorAll('.cell').forEach(td => td.dataset.row = i);
+  });
+}
+function dmRenderGrid(){
+  const body = $('dmGridBody'); body.innerHTML = '';
+  dmCards().forEach(l => body.appendChild(dmBuildRow([l.name, l.image, l.keywords.join(' | '), l.treatment, l.dosing], l.id)));
+  if(!body.children.length) body.appendChild(dmBuildRow(['','','','',''], null));
+  dmRenumber(); dmClearDirty(); dmGridSetId = dmActiveId;
+}
+function dmGridToCards(){
+  return [...$('dmGridBody').children].map(tr => ({ tr, r:[...tr.querySelectorAll('.cell')].map(td => td.textContent.trim()) }))
+    .filter(x => x.r.some(v => v))
+    .map(x => dmMakeCard({ id:x.tr.dataset.cid, name:x.r[0], image:x.r[1], keywords:(x.r[2] || '').split('|'), treatment:x.r[3], dosing:x.r[4] }));
+}
+function dmParseLine(line, delim){
+  const cells = []; let cur = '', inQ = false;
+  for(let i = 0; i < line.length; i++){
+    const ch = line[i];
+    if(inQ){
+      if(ch === '"'){ if(line[i+1] === '"'){ cur += '"'; i++; } else inQ = false; } else cur += ch;
+    } else if(ch === '"' && cur === ''){ inQ = true; }
+    else if(ch === delim){ cells.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  cells.push(cur); return cells;
+}
+function dmInitGrid(){
+  const body = $('dmGridBody');
+  body.addEventListener('input', () => dmMarkDirty());
+  body.addEventListener('paste', e => {
+    const td = e.target.closest('td.cell'); if(!td) return;
+    const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+    const hasTabs = text.includes('\t'), hasNl = text.includes('\n');
+    if(!hasTabs && !hasNl) return; // plain single-cell paste: browser default
+    e.preventDefault();
+    const delim = hasTabs ? '\t' : ',';
+    let rows = text.replace(/\r/g, '').split('\n');
+    while(rows.length && rows[rows.length-1] === '') rows.pop();
+    const startRow = parseInt(td.dataset.row, 10), startCol = parseInt(td.dataset.col, 10);
+    let added = false, dropped = false;
+    rows.forEach((rowText, r) => {
+      const ri = startRow + r;
+      while(!body.children[ri]){ body.appendChild(dmBuildRow(['','','','',''], null)); added = true; }
+      dmParseLine(rowText, delim).forEach((cellText, c) => {
+        const tc = startCol + c;
+        if(tc > 4){ dropped = true; return; }
+        const t = body.children[ri].querySelector(`.cell[data-col="${tc}"]`);
+        if(t) t.textContent = cellText.trim();
+      });
+    });
+    if(added) dmRenumber();
+    dmMarkDirty();
+    if(dropped) dmSay('Pasted data had more than 5 columns in at least one row — extra columns were dropped.', 'err');
+  });
+  body.addEventListener('click', e => {
+    const btn = e.target.closest('.dm-del'); if(!btn) return;
+    const tr = btn.closest('tr'); dmMarkDirty();
+    if(body.children.length <= 1){ tr.querySelectorAll('.cell').forEach(td => td.textContent = ''); delete tr.dataset.cid; return; }
+    const idx = [...body.children].indexOf(tr); tr.remove(); dmRenumber();
+    const rows = [...body.children]; const target = rows[idx] || rows[rows.length-1];
+    if(target) target.querySelector('.cell').focus();
+  });
+  $('dmAddRowBtn').onclick = () => {
+    body.appendChild(dmBuildRow(['','','','',''], null)); dmRenumber(); dmMarkDirty();
+    body.children[body.children.length-1].querySelector('.cell').focus();
+  };
+  $('dmClearBtn').onclick = () => {
+    if(!confirm('Clear every row in this table? (Nothing is deleted until you press Save.)')) return;
+    body.innerHTML = ''; const tr = dmBuildRow(['','','','',''], null); body.appendChild(tr); dmRenumber();
+    dmMarkDirty(); tr.querySelector('.cell').focus();
+    dmSay('Table cleared — add or paste rows, then Save.', 'warn');
+  };
+  $('dmSaveBtn').onclick = () => {
+    if(!dmCurrent()){ dmSay('Create an atlas first.', 'err'); return; }
+    const cards = dmGridToCards();
+    if(!cards.length && !confirm('The table is empty — saving will remove every lesion from this atlas. Continue?')) return;
+    dmMutate(s => { s.cards = cards; });
+    dmQ.started = false; dmClearDirty();
+    const s = dmCurrent(); dmGridKey = dmActiveId + ':' + (s ? s.updatedAt || 0 : 0);
+    dmRenderGrid(); dmRenderBrowse(); dmRenderBar();
+    dmSay(`Saved — ${cards.length} lesion(s).${s && s.communityId ? ' Press “Update on Community” to push the changes live.' : ''}`, 'ok');
+  };
+  $('dmCopyPromptBtn').onclick = async () => {
+    try{ await navigator.clipboard.writeText(DM_LLM_PROMPT); dmSay('Prompt copied to clipboard.', 'ok'); }
+    catch(e){ dmSay('Could not copy automatically — select the text below manually.', 'err'); }
+  };
+}
+function initDermUI(){
+  $('moreToggleBtn').onclick = () => { saveBeforeNavigation(); hideAllScreens(); $('moreView').classList.remove('hidden'); };
+  $('backFromMoreBtn').onclick = () => { $('moreView').classList.add('hidden'); showLanding(); };
+  $('openDermBtn').onclick = dmOpen;
+  $('backFromDermBtn').onclick = () => {
+    if(!dmConfirmDiscard()) return;
+    dmClearDirty(); dmGridKey = null; $('dermView').classList.add('hidden'); $('moreView').classList.remove('hidden');
+  };
+  $('dmTabs').querySelectorAll('[data-dmtab]').forEach(b => b.onclick = () => dmSetTab(b.dataset.dmtab));
+  dmInitGrid();
+  window.addEventListener('beforeunload', e => { if(dmGridDirty){ e.preventDefault(); e.returnValue = ''; } });
 }
 
 function initProfSearchUI(){
@@ -9228,7 +9886,7 @@ document.addEventListener('visibilitychange', () => {
 window.addEventListener('pagehide', saveBeforeNavigation);
 
 function hideAllScreens(){
-  ['landing','folderView','setup','quiz','caseGame','brainBreak','results','statsView','settingsView','petView','calendarView','communityView','profSearchView'].forEach(id => {
+  ['landing','folderView','setup','quiz','caseGame','brainBreak','results','statsView','settingsView','petView','calendarView','communityView','profSearchView','moreView','dermView'].forEach(id => {
     const el = $(id);
     if(el) el.classList.add('hidden');
   });
@@ -9391,6 +10049,9 @@ function clearSession(id){
 
 /* ===== JS-05 SETS / FOLDERS / CARDS ===== */
 function loadSets(){ try{ return JSON.parse(appDataCache[SETS_KEY] || 'null') || {}; }catch(e){ return {}; } }
+// Derm Atlas sets (kind:'derm') share SETS_KEY for sync/publish but are managed under More → Derm Atlas,
+// so the flashcard library, recents, stats and Find Qs read this filtered, read-only view instead.
+function loadLibrarySets(){ const all = loadSets(), out = {}; Object.keys(all).forEach(k => { if(!(all[k] && all[k].kind === 'derm')) out[k] = all[k]; }); return out; }
 function saveSetsData(obj){ appDataSet(SETS_KEY, JSON.stringify(obj)); }
 function loadStatsData(){ try{ return JSON.parse(appDataCache[STATS_KEY] || 'null') || {}; }catch(e){ return {}; } }
 function saveStatsData(obj){ appDataSet(STATS_KEY, JSON.stringify(obj)); }
@@ -9517,7 +10178,7 @@ function folderKeyFn(mode){ return mode === 'le' ? leKey : subjectKey; }
 function cardTypeOf(s){ return s.cardType === 'samplex' ? 'samplex' : 'topic'; }
 
 function setsInFolder(folderId, mode){
-  const sets = loadSets();
+  const sets = loadLibrarySets();
   const keyFn = folderKeyFn(mode);
   return Object.entries(sets).filter(([id, s]) => keyFn(s) === folderId);
 }
@@ -9626,7 +10287,7 @@ function subjectColor(id){
 }
 
 function renderLanding(){
-  const sets = loadSets();
+  const sets = loadLibrarySets();
   const allSessions = loadAllSessions();
   const grid = $('folderGrid');
   grid.innerHTML = '';
@@ -9898,7 +10559,7 @@ function trueLastPlayedAt(sid, s, allSessions, allCaseProgress){
 // page shortcut to the most recently touched sets, not a separate
 // progress-tracking system.
 function getRecentActivity(limit){
-  const sets = loadSets();
+  const sets = loadLibrarySets();
   const allSessions = loadAllSessions();
   const allCaseProgress = loadCaseProgressAll();
   const items = [];
@@ -10424,7 +11085,7 @@ function renderSearchResults(query){
   box.innerHTML = '';
   const sets = loadSets();
   const matches = Object.entries(sets)
-    .filter(([, s]) => s.name.toLowerCase().includes(q))
+    .filter(([, s]) => s.kind !== 'derm' && s.name.toLowerCase().includes(q))
     .sort((a,b) => (b[1].updatedAt||0) - (a[1].updatedAt||0));
   if(matches.length === 0){
     const p = document.createElement('div');
@@ -11439,7 +12100,7 @@ function rebuildLearningAnalytics(){
 }
 
 function renderStatsScreen(){
-  const sets = loadSets();
+  const sets = loadLibrarySets();
   const statsAll = loadStatsData();
   const g = loadGlobalStats();
 
@@ -12082,6 +12743,20 @@ $('imgSettingsSave').onclick = () => {
     else if(document.getElementById('calendarView')?.classList.contains('hidden')) cardEl.style.display = '';
   }
   new MutationObserver(sync).observe(communityViewEl, { attributes: true, attributeFilter: ['class'] });
+  sync();
+})();
+
+// Same empty-pill issue as above, for #moreView / #dermView. Registered after the calendar and community
+// observers so it runs last and wins: the card is hidden whenever ANY of those four sibling views is open.
+(function syncCardWithMoreViews(){
+  const ids = ['calendarView', 'communityView', 'moreView', 'dermView'];
+  const cardEl = document.querySelector('.card');
+  if(!cardEl) return;
+  function sync(){
+    const anyOpen = ids.some(id => { const el = document.getElementById(id); return el && !el.classList.contains('hidden'); });
+    cardEl.style.display = anyOpen ? 'none' : '';
+  }
+  ['moreView', 'dermView'].forEach(id => { const el = document.getElementById(id); if(el) new MutationObserver(sync).observe(el, { attributes: true, attributeFilter: ['class'] }); });
   sync();
 })();
 
@@ -13428,6 +14103,7 @@ initAppDataStorage().then(() => {
 initAccountSettingsUI();
 initCommunityUI();
 initProfSearchUI();
+initDermUI();
 initCloudSync();
 
 $('homeBtn').onclick = () => {
@@ -19300,7 +19976,7 @@ jump('TODAY','auto');
 (function(){
   const frame = document.querySelector('.frame.wide');
   if(!frame) return;
-  const wideViewIds = ['folderView', 'calendarView', 'communityView'];
+  const wideViewIds = ['folderView', 'calendarView', 'communityView', 'dermView'];
   function syncFrameWidth(){
     const anyVisible = wideViewIds.some(id => {
       const el = document.getElementById(id);
