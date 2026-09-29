@@ -610,6 +610,41 @@ QUICK DEBUG ROUTING
   body.mode-dark table.sheet td.rownum{ color:var(--text-muted); background:var(--color-surface-2) !important; border-color:var(--tile-blue-mid) !important; }
   body.mode-dark .cell:empty::before{ color:var(--text-muted); }
   body.mode-dark .card{ background:var(--surface); }
+  body{ --text:var(--ink); --text-muted:var(--ink-soft); --border:var(--tile-blue-pale);
+    --color-bg:var(--bg); --color-surface:var(--surface); --color-surface-2:var(--tile-blue-paler);
+    --color-surface-elevated:var(--surface-elevated); --color-text:var(--ink); --color-text-muted:var(--ink-soft);
+    --color-border:var(--tile-blue-pale); --color-primary:var(--primary); --color-primary-soft:var(--primary-soft); }
+  /* Dark-mode audit: these had hardcoded cream backgrounds but ink text that
+     turns light in dark mode -> invisible text (Settings > Controller rows,
+     text areas, algo example, edit bar, image wrappers, hint code chips). */
+  body.mode-dark textarea,
+  body.mode-dark .gp-map-row,
+  body.mode-dark .algo-example,
+  body.mode-dark .question-image-wrap,
+  body.mode-dark .tip-image-wrap,
+  body.mode-dark .edit-mode-bar,
+  body.mode-dark .hint code,
+  body.mode-dark .case-bubble.hint{
+    background:var(--surface-elevated);
+    color:var(--ink);
+    border-color:var(--tile-blue-pale);
+  }
+  body.mode-dark .hint code{ color:var(--tile-blue); }
+  body.mode-dark .switch-track{ background:color-mix(in srgb, var(--ink-soft) 45%, var(--surface)); }
+  body.mode-dark .switch input:checked ~ .switch-track{ background:var(--tile-blue-deep); }
+  body.mode-dark .backup-block{ border-top-color:var(--tile-blue-pale); }
+  /* Safety net: every Settings text element reads from the per-theme ink. */
+  body.mode-dark #settingsView{ color:var(--ink); }
+  body.mode-dark #settingsView .settings-nav-title,
+  body.mode-dark #settingsView .switch-label,
+  body.mode-dark #settingsView .theme-preview-name,
+  body.mode-dark #settingsView .gp-map-row *{ color:var(--ink); }
+  body.mode-dark #settingsView .settings-nav-sub,
+  body.mode-dark #settingsView .theme-preview-desc,
+  body.mode-dark #settingsView .hint{ color:var(--ink-soft); }
+  /* Native controls (sliders, checkboxes, scrollbars, select popups) follow the mode. */
+  body.mode-dark{ color-scheme:dark; }
+  body:not(.mode-dark){ color-scheme:light; }
   body.mode-dark .sidebar-nav{ background:color-mix(in srgb, var(--surface-elevated) 75%, transparent); }
 
   /* ---- Per-folder accent color (--tab-color, from SUBJECT_TAB_COLORS /
@@ -4762,6 +4797,57 @@ body.mode-dark .index-calendar .holiday-label{ color:var(--text-muted); }
      The app works fully offline/local without ever loading this. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+<style id="quiz-focus-mode-2">
+/* All widths, active quiz: hide app header, slim progress line, sticky action bar, tidy dock. */
+body:has(#quiz:not(.hidden)) .frame > .header{ display:none; }
+body:has(#quiz:not(.hidden):not(.edit-mode)){ padding-top:12px !important; padding-bottom:96px !important; }
+#quiz:not(.edit-mode) .progress-row{ font-family:var(--font); font-size:13px; font-weight:600; text-transform:none; letter-spacing:0; margin-bottom:5px; }
+#quiz:not(.edit-mode) .progress-track{ height:6px; margin-bottom:6px; }
+#quiz:not(.edit-mode) .question{ margin-bottom:16px; }
+#quiz:not(.edit-mode) .review-hint{ text-transform:none; letter-spacing:0; font-size:13px; }
+.quiz-right{ min-width:0; }
+.quiz-left{ min-width:0; }
+body:has(#quiz:not(.hidden):not(.edit-mode)) .card{ overflow:visible; }
+#quiz:not(.edit-mode) .footer-row{ position:sticky; bottom:calc(64px + env(safe-area-inset-bottom)); z-index:6; margin-top:14px; padding:8px 0; background:color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px); border-radius:14px; }
+body:has(#quiz:not(.hidden):not(.edit-mode)) .zoom-controls{ left:auto; right:12px; transform:none; bottom:calc(10px + env(safe-area-inset-bottom)); }
+body:has(#quiz:not(.hidden):not(.edit-mode)) .study-session-widget{ left:12px; transform:none; bottom:calc(10px + env(safe-area-inset-bottom)); width:min(320px, calc(100vw - 230px)); }
+@media (min-width:900px){
+  .quiz-panes{ display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); gap:28px; align-items:start; }
+  .quiz-right{ position:sticky; top:12px; max-height:calc(100vh - 150px); overflow:auto; }
+  .quiz-right > :first-child{ margin-top:0; }
+  #quiz:not(.edit-mode) .footer-row{ bottom:calc(72px + env(safe-area-inset-bottom)); }
+}
+</style>
+<style id="quiz-focus-mode">
+/* Quiz focus mode (phone). Scoped to an active, non-edit quiz. Theme tokens only. No JS, no storage. */
+@media (max-width:600px){
+  body:has(#quiz:not(.hidden):not(.edit-mode)){ padding-top:10px !important; padding-bottom:124px !important; }
+  body:has(#quiz:not(.hidden):not(.edit-mode)) .card{ overflow:visible; }
+  body:has(#quiz:not(.hidden):not(.edit-mode)) .card-inner{ padding:12px 14px 14px; }
+  #quiz:not(.edit-mode) .progress-row{ font-family:var(--font); font-size:13px; font-weight:600; text-transform:none; letter-spacing:0; margin-bottom:5px; }
+  #quiz:not(.edit-mode) .progress-track{ height:5px; margin-bottom:4px; }
+  #quiz:not(.edit-mode) .index-no-row{ margin:0 -8px; min-height:44px; }
+  #quiz:not(.edit-mode) .card-icon-actions{ gap:6px; }
+  #quiz:not(.edit-mode) #editCardBtn{ margin-right:14px; }
+  #quiz:not(.edit-mode) .flag-btn{ min-width:44px; min-height:44px; opacity:.75; }
+  #quiz:not(.edit-mode) .question{ font-size:clamp(18px,4.8vw,22px); line-height:1.3; margin:0 0 12px; }
+  #quiz:not(.edit-mode) .options{ gap:8px; }
+  #quiz:not(.edit-mode) .opt{ font-size:16px; line-height:1.35; padding:11px 12px; gap:10px; align-items:flex-start; min-height:44px; }
+  #quiz:not(.edit-mode) .opt .letter{ flex:0 0 26px; height:26px; border-radius:8px; display:inline-flex; align-items:center; justify-content:center; font-size:14px; background:var(--tile-blue-paler); color:var(--tile-blue-deep,var(--ink)); }
+  #quiz:not(.edit-mode) .tip-box{ padding:9px 12px; font-size:14px; line-height:1.4; margin-top:8px; }
+  #quiz:not(.edit-mode) .tip-image-wrap img{ max-height:150px; }
+  /* Sticky action bar: Next stays reachable without scrolling. */
+  #quiz:not(.edit-mode) .footer-row{ position:sticky; bottom:calc(58px + env(safe-area-inset-bottom)); z-index:6; margin:12px -14px -14px; padding:8px 14px; background:var(--surface); border-top:1px solid var(--border,var(--tile-blue-pale)); flex-direction:row; }
+  #quiz:not(.edit-mode) .footer-row button{ width:auto; flex:1; min-height:44px; }
+  #quiz:not(.edit-mode) #quitBtn{ flex:0 0 auto; }
+  /* One dock row: Study Session pill (left) + zoom/dark/fullscreen (right). */
+  body:has(#quiz:not(.hidden):not(.edit-mode)) .zoom-controls{ left:auto; right:8px; transform:none; bottom:calc(8px + env(safe-area-inset-bottom)); padding:3px; gap:2px; }
+  body:has(#quiz:not(.hidden):not(.edit-mode)) .zoom-controls button{ width:36px; height:36px; }
+  body:has(#quiz:not(.hidden):not(.edit-mode)) .study-session-widget{ left:8px; transform:none; width:calc(100vw - 210px); min-width:120px; bottom:calc(8px + env(safe-area-inset-bottom)); }
+  body:has(#quiz:not(.hidden):not(.edit-mode)) .brain-break-countdown{ bottom:calc(120px + env(safe-area-inset-bottom)); }
+  body:has(#quiz:not(.hidden):not(.edit-mode)) #studyPetOverlay{ transform:scale(.6); transform-origin:bottom right; bottom:calc(112px + env(safe-area-inset-bottom)); right:0; pointer-events:none; }
+}
+</style>
 </head>
 <!-- ===== HTML-01 APP SHELL ===== -->
 <body>
@@ -5166,6 +5252,7 @@ OUTCOME: NEG
           <button type="button" class="btn-primary sm" id="editModeNextBtn">Next ›</button>
           <button type="button" class="btn-ghost sm" id="editModeExitBtn">Exit edit mode</button>
         </div>
+        <div class="quiz-panes"><div class="quiz-left">
         <div class="question" id="questionText"></div>
         <div class="question-image-wrap hidden" id="questionImageWrap" title="Tap to enlarge">
           <img id="questionImage" alt="Reference image" referrerpolicy="no-referrer">
@@ -5177,11 +5264,36 @@ OUTCOME: NEG
         </div>
         <div class="options" id="optionsList"></div>
         <div class="review-hint hidden" id="reviewHint">Tap an option to review it</div>
+        </div><div class="quiz-right">
         <div class="tip-box option-feedback-box hidden" id="optionFeedbackBox">
           <span class="tip-label" id="optionFeedbackLabel">Review</span>
           <span id="optionFeedbackText"></span>
         </div>
 
+        <div class="tip-box" id="tipBox">
+          <span class="tip-label">Exam tip</span>
+          <span id="tipText"></span>
+        </div>
+        <div class="tip-image-wrap hidden" id="tipImageWrap">
+          <img id="tipImage" alt="" referrerpolicy="no-referrer">
+        </div>
+        <div class="hint hidden" id="learningNotice" style="margin-top:8px;"></div>
+        <div class="tip-box hidden" id="confidenceRow" style="align-items:center; gap:8px; flex-wrap:wrap;">
+          <span class="tip-label" style="margin:0;">How confident were you?</span>
+          <div id="confidenceBtns" style="display:flex; gap:6px;"></div>
+        </div>
+
+        <!-- Shown instead of auto-jumping into the brain-break screen the
+             instant Focus time hits zero — the person may be mid-read on
+             the exam tip above. Stays up (see showBreakReadyPrompt, called
+             on every pomodoro tick while a break is owed) until they
+             actually tap through. -->
+        <div class="tip-box hidden" id="breakReadyBanner" style="align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; border-color:var(--gold); margin-top:8px;">
+          <span>🍅 Focus time's up — ready for your break?</span>
+          <button type="button" class="btn-primary" id="breakReadyBtn" style="padding:6px 14px; font-size:13px; white-space:nowrap;">Take a break →</button>
+        </div>
+
+        </div></div>
         <div class="card-edit-panel hidden" id="cardEditPanel">
           <label class="field-label">Question</label>
           <textarea id="editFront" class="edit-textarea" rows="2"></textarea>
@@ -5253,29 +5365,6 @@ OUTCOME: NEG
             <button class="btn-ghost" id="cancelCardEditBtn">Cancel</button>
             <button class="btn-primary" id="saveCardEditBtn">Save changes</button>
           </div>
-        </div>
-
-        <div class="tip-box" id="tipBox">
-          <span class="tip-label">Exam tip</span>
-          <span id="tipText"></span>
-        </div>
-        <div class="tip-image-wrap hidden" id="tipImageWrap">
-          <img id="tipImage" alt="" referrerpolicy="no-referrer">
-        </div>
-        <div class="hint hidden" id="learningNotice" style="margin-top:8px;"></div>
-        <div class="tip-box hidden" id="confidenceRow" style="align-items:center; gap:8px; flex-wrap:wrap;">
-          <span class="tip-label" style="margin:0;">How confident were you?</span>
-          <div id="confidenceBtns" style="display:flex; gap:6px;"></div>
-        </div>
-
-        <!-- Shown instead of auto-jumping into the brain-break screen the
-             instant Focus time hits zero — the person may be mid-read on
-             the exam tip above. Stays up (see showBreakReadyPrompt, called
-             on every pomodoro tick while a break is owed) until they
-             actually tap through. -->
-        <div class="tip-box hidden" id="breakReadyBanner" style="align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; border-color:var(--gold); margin-top:8px;">
-          <span>🍅 Focus time's up — ready for your break?</span>
-          <button type="button" class="btn-primary" id="breakReadyBtn" style="padding:6px 14px; font-size:13px; white-space:nowrap;">Take a break →</button>
         </div>
 
         <div class="footer-row">
@@ -5362,6 +5451,7 @@ OUTCOME: NEG
           <button class="btn-ghost" id="retryMissedBtn">Retry missed only</button>
           <button class="btn-ghost hidden" id="retryFlaggedBtn">Retry flagged only</button>
           <button class="btn-ghost" id="editBtn">Edit cards</button>
+          <button class="btn-ghost hidden" id="backToFolderBtn">← Back to folder</button>
         </div>
         <div class="row hidden" id="cramContinueRow" style="margin-top:10px;">
           <button class="btn-primary" id="cramContinueBtn">⏰ Continue cramming — next sprint →</button>
@@ -9929,6 +10019,7 @@ function hideAllScreens(){
 function showLanding(){
   hideAllScreens();
   $('landing').classList.remove('hidden');
+  setupReturnTo = null; // landing is the root — never carry a stale folder target
   currentFolderId = null;
   currentFolderLE = null;
   currentFolderCardType = null;
@@ -14659,6 +14750,9 @@ $('editModeBtn').onclick = () => {
 // Shared quiz-launch path used by "Start quiz", and by the weak-cards
 // practice session, so both get the same reset/queue/save behavior.
 function launchQuiz(cardArr, setId){
+  // Launched from an open folder view (incl. folder-wide review rounds)? Remember
+  // exactly which folder/sub-folder so results can offer a way back to it.
+  { const _ft = currentFolderReturnTarget(); if(_ft) setupReturnTo = _ft; }
   cards = cardArr;
   activeSetId = setId;
   window.__quizSessionId = 'sess_' + Date.now() + '_' + Math.random().toString(36).slice(2,7);
@@ -16515,6 +16609,14 @@ function finishQuiz(){
   clearSession();
   $('quiz').classList.add('hidden');
   $('results').classList.remove('hidden');
+  {
+    const btf = $('backToFolderBtn');
+    if(btf){
+      const inFolder = !!(setupReturnTo && setupReturnTo.screen === 'folder');
+      btf.classList.toggle('hidden', !inFolder);
+      if(inFolder) btf.textContent = folderReturnLabel(setupReturnTo);
+    }
+  }
   $('progressFill').style.width = '100%';
   $('finalScore').textContent = `${masteredCount} / ${totalCards}`;
   const pct = totalCards ? Math.round(masteredCount / totalCards * 100) : 0;
@@ -16700,6 +16802,19 @@ $('retryMissedBtn').onclick = () => {
 $('editBtn').onclick = () => {
   showSetupScreen();
 };
+// Return to the folder/sub-folder (Topic Cards, Samplex, LE...) the set was
+// launched from. setupReturnTo is captured when a set is started from a folder.
+function folderReturnLabel(t){
+  if(!t) return 'Back to folder';
+  const base = t.cardType === 'topic' ? 'Topic Cards' : t.cardType === 'samplex' ? 'Samplex' : 'folder';
+  return '← Back to ' + base;
+}
+function goBackToSetFolder(){
+  const t = setupReturnTo;
+  if(t && t.screen === 'folder') showFolder(t.id, t.mode, t.cardType, t.le);
+  else showLanding();
+}
+$('backToFolderBtn').onclick = goBackToSetFolder;
 
 /* ---- Custom keyboard shortcuts: user-personalized keys, layered on top
    of the built-in 1-4 / A-D / U-P / Enter / Space scheme below rather than
