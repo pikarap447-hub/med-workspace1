@@ -6971,7 +6971,7 @@ function scheduleQuickSync(){
   clearTimeout(_quickSyncTimer);
   _quickSyncTimer = setTimeout(() => {
     syncQueuedChanges().catch(e => console.error('Queued sync failed', e));
-  }, 2000);
+  }, 10000); // was 2s; backgrounding still flushes immediately via keepalive
 }
 // Last-resort push attempt for the moment the tab is actually backgrounded
 // or closed (see the visibilitychange/pagehide listeners below) — i.e. the
@@ -6996,6 +6996,7 @@ function flushSyncQueueKeepalive(){
       if(raw === undefined || raw === null) return;
       let parsed;
       try{ parsed = JSON.parse(raw); }catch(e){ return; }
+      parsed = syncPayloadFor(key, parsed);
       try{
         fetch(`${SUPABASE_URL}/rest/v1/user_app_data?on_conflict=user_id,data_key`, {
           method: 'POST',
@@ -7187,6 +7188,29 @@ async function mergeSyncConflict(key, localRaw, cloudData){
   }
   return mergedValue;
 }
+// ---- Disk IO helpers ----
+// Session checkpoints used to embed the whole card deck (already stored under
+// SETS_KEY), re-uploading megabytes on every answer/pause. Cards are stripped
+// for upload and rehydrated locally from SETS_KEY (see loadAllSessions).
+const _lastUploadedSig = {};
+function syncPayloadFor(key, parsed){
+  if(key === SESSIONS_KEY && parsed && typeof parsed === 'object'){
+    const out = {};
+    Object.keys(parsed).forEach(k => {
+      const v = parsed[k];
+      if(v && typeof v === 'object' && Array.isArray(v.cards)){
+        const c = Object.assign({}, v); delete c.cards; out[k] = c;
+      } else out[k] = v;
+    });
+    return out;
+  }
+  return parsed;
+}
+function syncSig(obj){
+  const str = JSON.stringify(obj); let h = 5381;
+  for(let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return str.length + ':' + h;
+}
 async function uploadKey(key){
   const sb = getSupabase();
   if(!sb || !currentUser) return false;
@@ -7198,6 +7222,14 @@ async function uploadKey(key){
   // (see sync_updated_at_trigger.sql) stamps it with the server's own
   // clock on every insert/update. That way conflict resolution never
   // depends on this device's clock being correct.
+  // Disk-IO guard: strip derived bulk (session card copies) and skip the
+  // write entirely if this exact payload was already uploaded this page-load.
+  parsed = syncPayloadFor(key, parsed);
+  const _sig = syncSig(parsed);
+  if(_lastUploadedSig[key] === _sig){
+    if(getLocalSyncValue(key) === raw) await dequeueSyncOp(key);
+    return true;
+  }
   const { data, error } = await sb.from('user_app_data').upsert({
     user_id: currentUser.id,
     data_key: key,
@@ -7205,6 +7237,7 @@ async function uploadKey(key){
   }, { onConflict: 'user_id,data_key' }).select('updated_at').single();
   logEgress('SYNC_UPLOAD', 'user_app_data', 'upsert', {key});
   if(error){ console.error('Cloud upload failed for', key, error); return false; }
+  _lastUploadedSig[key] = _sig;
   if(data && data.updated_at){
     appDataUpdatedAt[key] = data.updated_at;
     await persistSyncedAt(key, data.updated_at);
@@ -9953,7 +9986,22 @@ function showSetupScreen(){
 // unsaved set) so pausing one deck never overwrites another deck's
 // in-progress quiz. All buckets live under one localStorage key.
 function loadAllSessions(){
-  try{ return JSON.parse(appDataCache[SESSIONS_KEY] || 'null') || {}; }catch(e){ return {}; }
+  let all;
+  try{ all = JSON.parse(appDataCache[SESSIONS_KEY] || 'null') || {}; }catch(e){ return {}; }
+  // Sessions that arrived from the cloud have no `cards` (stripped on upload
+  // to save Disk IO) — rebuild them from the local set so resume still works.
+  try{
+    let sets = null;
+    Object.keys(all).forEach(k => {
+      const v = all[k];
+      if(v && typeof v === 'object' && v.current && !Array.isArray(v.cards)){
+        sets = sets || loadSets();
+        const set = sets[v.activeSetId || k];
+        if(set && Array.isArray(set.cards)) v.cards = set.cards;
+      }
+    });
+  }catch(e){}
+  return all;
 }
 function saveAllSessions(obj){ appDataSet(SESSIONS_KEY, JSON.stringify(obj)); }
 
@@ -17559,6 +17607,9 @@ document.addEventListener('DOMContentLoaded',function(){
 
   function loadPet(){try{const p={...defaultPet,...JSON.parse(localStorage.getItem(PET_KEY)||'null')};if(!p.breed)p.breed='cavalier';return p}catch(e){return{...defaultPet}}}
   function savePet(){ try{ lsSet(PET_KEY, JSON.stringify(pet)); }catch(e){} }
+  // Passive time-decay is derivable from lastTick on any device, so it is saved
+  // locally only — no queue entry, no cloud write every 30s while the app is open.
+  function savePetQuiet(){ try{ suppressLocalSync = true; lsSet(PET_KEY, JSON.stringify(pet)); }catch(e){} finally{ suppressLocalSync = false; } }
   function clampPet(n){return Math.max(0,Math.min(100,Math.round(n)))}
   function petMood(){const a=(pet.hunger+pet.happy+pet.energy+pet.clean)/4;if(pet.energy<20)return['Sleepy','😴'];if(pet.hunger<20)return['Hungry','🍖'];if(pet.clean<20)return['Messy','🫧'];if(a>=80)return['Thriving','✨'];if(a>=60)return['Happy','😊'];if(a>=40)return['Okay','🙂'];return['Needy','🥺']}
   // Show a short speech line over the pet. There are two possible surfaces:
@@ -18269,7 +18320,7 @@ function isDevModeEnabled(){return lsGet('topicReviewDevMode')==='1'}
   let petNeedBubbleAt=0;
   function petTick(){
     const now=Date.now(),steps=Math.floor(Math.max(0,now-(pet.lastTick||now))/30000);
-    if(steps>0){pet.hunger=clampPet(pet.hunger-2*steps);pet.happy=clampPet(pet.happy-1*steps);pet.energy=clampPet(pet.energy-1*steps);pet.clean=clampPet(pet.clean-1*steps);pet.lastTick=now;savePet()}
+    if(steps>0){pet.hunger=clampPet(pet.hunger-2*steps);pet.happy=clampPet(pet.happy-1*steps);pet.energy=clampPet(pet.energy-1*steps);pet.clean=clampPet(pet.clean-1*steps);pet.lastTick=now;savePetQuiet()}
     // Occasionally let a low stat speak up on its own, instead of the pet
     // only ever reacting to something the person just did — a bit of
     // unprompted personality is what makes it feel alive rather than a
