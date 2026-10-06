@@ -5102,7 +5102,7 @@ OUTCOME: NEG
           <div id="samplexPromptWrap" class="hidden">
             <label class="field-label" style="margin-top:14px;">Don't have questions typed up yet?</label>
             <div class="hint" style="margin-top:0;">
-              Copy a ready-made prompt to paste into ChatGPT, Claude, or any LLM, along with your source material (notes, a past exam, a textbook chapter) — edit the "X" to how many cards you want, then paste it in. It asks the LLM to hand back an actual Excel (.xlsx) file (not a markdown table) in the exact Samplex column format, including Professor, Year, and Topic columns so every question gets tagged automatically in bulk — no manual per-card tagging needed afterward. Open that file and copy the rows from there into the grid below — pasting straight from the chat window can garble rows whenever a tip or rationale itself contains a "|" character or a line break.
+              Copy a ready-made prompt to paste into ChatGPT, Claude, or any LLM, along with your source material (notes, a past exam, a textbook chapter) — then paste it in. It asks for high-yield, must-know concepts only, with all four options kept the same length so the answer never gives itself away, and **bold** key terms in the tips and rationale. To get a specific number of cards, just add it to the source box (e.g. "20 cards on …"). It asks the LLM to hand back an actual Excel (.xlsx) file (not a markdown table) in the exact Samplex column format, including Professor, Year, and Topic columns so every question gets tagged automatically in bulk — no manual per-card tagging needed afterward. Open that file and copy the rows from there into the grid below — pasting straight from the chat window can garble rows whenever a tip or rationale itself contains a "|" character or a line break.
             </div>
             <input type="text" class="text-field" id="samplexPromptTopic" placeholder="Describe the subject/source material here (or paste/attach it directly to the LLM)">
             <div class="row" style="justify-content:flex-start; margin-top:10px;">
@@ -13532,22 +13532,23 @@ $('copyAlgoPromptBtn').onclick = async () => {
    silently misalign the row), the prompt now asks the LLM to produce the
    Excel (.xlsx) file directly. That's a clean, already-tab-delimited source
    to copy rows from into the grid below, and skips the manual export step.
-   The leading "X" is a literal placeholder — the person edits it to the
-   number of cards they want before copying the prompt. ---- */
-const SAMPLEX_LLM_PROMPT_TEMPLATE = `Please generate X flashcards/questions from the source material below and output them as an actual Excel (.xlsx) file for me to download — not a markdown table, not plain text — using exactly these columns, in this order: Front | A | B | C | D | Answer (A-D) | Exam Tip A | Exam Tip B | Exam Tip C | Exam Tip D | Rationale | Professor | Year | Topic
+   There is no card-count placeholder: the prompt asks for high-yield,
+   must-know concepts and lets the LLM decide how many cards the material
+   warrants (the person can add a number in the source box if they want one). ---- */
+const SAMPLEX_LLM_PROMPT_TEMPLATE = `Please generate high-yield flashcards/questions from the source material below. Prioritize the most crucial, must-know concepts. Output them as an actual Excel (.xlsx) file for me to download — not a markdown table, not plain text — using exactly these columns, in this order: Front | A | B | C | D | Answer (A-D) | Exam Tip A | Exam Tip B | Exam Tip C | Exam Tip D | Rationale | Professor | Year | Topic
 
 Strict Content Rules:
 
-1. Front: The exact question stem.
-2. A, B, C, D: Extract and output the full text of each corresponding choice. Do not just put the letter.
-3. Answer (A-D): Output ONLY the single letter of the correct answer (e.g., A, B, C, or D).
-4. Exam Tips (A-D): Must be high-yield. Provide a specific, testable fact, mnemonic, or key distinguishing clinical feature for that specific option. CRITICAL: Do not just repeat the option text, and do not just say "This is incorrect because...".
-5. Rationale: Must be high-yield. Explain the underlying core concept, mechanism, or clinical reasoning behind the question. CRITICAL: Do not simply restate the correct answer. Focus on why it is correct and the broad takeaway.
-6. Professor: If the source material names or clearly implies which professor/lecturer wrote or gave this material, put their name here formatted as "LAST NAME, F." (last name, comma, first initial + period). If unknown, leave this column blank — do not guess.
-7. Year: If the source material states or clearly implies the year this exam/samplex is from, put just the 4-digit year here (e.g., 2026). If unknown, leave this column blank — do not guess.
-8. Topic: A short topic/subtopic label for that specific question (e.g., "Cardiac Arrhythmias", "Renal Physiology") — keep it a few words, consistent across questions that clearly cover the same topic. If the source material doesn't make the topic clear, leave this column blank — do not guess.
+* Front: The exact question stem.
+* A, B, C, D: Extract or generate the full text of each corresponding choice. CRITICAL: Ensure that options A, B, C, and D are all approximately the same length and word count. Rephrase the distractors or the correct answer if necessary so the right answer is never noticeably longer or shorter than the others. Do not just put the letter.
+* Answer (A-D): Output ONLY the single letter of the correct answer (e.g., A, B, C, or D).
+* Exam Tips (A-D): Must be high-yield. Provide a specific, testable fact, mnemonic, or key distinguishing clinical feature for that specific option. Use ** ** to bold important text under exam tips. CRITICAL: Do not just repeat the option text, and do not just say \"This is incorrect because...\".
+* Rationale: Must be high-yield. Explain the underlying core concept, mechanism, or clinical reasoning behind the question. Use ** ** to bold important text under the rationale. CRITICAL: Do not simply restate the correct answer. Focus on why it is correct and the broad takeaway.
+* Professor: If the source material names or clearly implies which professor/lecturer wrote or gave this material, put their name here formatted as \"LAST NAME, F.\" (last name, comma, first initial + period). If unknown, leave this column blank — do not guess.
+* Year: If the source material states or clearly implies the year this exam/samplex is from, put just the 4-digit year here (e.g., 2026). If unknown, leave this column blank — do not guess.
+* Topic: A short topic/subtopic label for that specific question (e.g., \"Cardiac Arrhythmias\", \"Renal Physiology\") — keep it a few words, consistent across questions that clearly cover the same topic. If the source material doesn't make the topic clear, leave this column blank — do not guess.
 
-Give me the Excel file itself (one row per card, header row with the column names above) — no markdown table, no preamble, no commentary. Keep every field's text free of unnecessary "|" characters and line breaks.
+Give me the Excel file itself (one row per card, header row with the column names above) — no markdown table, no preamble, no commentary. Keep every field's text free of unnecessary \"|\" characters and line breaks.
 
 ===== SOURCE MATERIAL / TOPIC =====
 
@@ -13560,7 +13561,7 @@ $('copySamplexPromptBtn').onclick = async () => {
   const statusEl = $('samplexPromptStatus');
   try{
     await navigator.clipboard.writeText(text);
-    statusEl.textContent = '✓ Prompt copied — paste it into ChatGPT, Claude, or any LLM (edit the "X" to how many cards you want first). Open the Excel file it gives you and copy the rows from there into the grid below.';
+    statusEl.textContent = '✓ Prompt copied — paste it into ChatGPT, Claude, or any LLM. Open the Excel file it gives you and copy the rows from there into the grid below.';
     statusEl.style.color = 'var(--green)';
   }catch(e){
     window.prompt('Copy this prompt:', text);
