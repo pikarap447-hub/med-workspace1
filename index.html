@@ -5190,6 +5190,8 @@ OUTCOME: NEG
         <div class="index-no-row">
           <div class="index-no" id="indexNo">CARD 001</div>
           <div class="card-icon-actions">
+            <button type="button" class="flag-btn" id="jumpBtn" title="Skip ahead / jump to a question" aria-label="Skip ahead or jump to a question">⏭️</button>
+            <button type="button" class="flag-btn" id="shuffleBtn" title="Shuffle" aria-label="Toggle shuffle" aria-pressed="true">🔀</button>
             <button type="button" class="flag-btn" id="editCardBtn" title="Edit this card">✏️</button>
             <button type="button" class="flag-btn" id="flagBtn" title="Mark for review">🏳️</button>
             <button type="button" class="flag-btn" id="ssClockBtn" title="Study session timers">⏱️</button>
@@ -10115,6 +10117,7 @@ function saveSession(extra){
       cardsSinceBreak,
       quizStartTime: window.__quizStartTime || Date.now(),
       quizActiveMs: window.__quizActiveMs,
+      skippedKeys: Array.from(window.__skippedKeys || []),
       updatedAt: Date.now()
     }, extra || {});
     const all = loadAllSessions();
@@ -11343,6 +11346,7 @@ function recordSession(){
     correct: score,
     total: askedCount,
     mastered: masteredCount,
+    skipped: (window.__skippedKeys ? window.__skippedKeys.size : 0),
     totalCards,
     missedList: Array.from(missedSet.values())
   };
@@ -14725,7 +14729,7 @@ function launchQuiz(cardArr, setId){
   totalCards = cards.length;
   buildSimilarityIndex(cards);
   queue = orderedQueue(cards);
-  masteredCount = 0; masteredCards = new Set(); askedCount = 0; seenCardKeys = new Set(); score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
+  masteredCount = 0; masteredCards = new Set(); askedCount = 0; seenCardKeys = new Set(); window.__skippedKeys = new Set(); score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
   // Fresh quiz: clear the pet's running session signals (streaks, slumps)
   // so its reactions reflect this session, not a leftover run.
   if(typeof window.petStartStudySession === 'function') window.petStartStudySession();
@@ -16503,6 +16507,7 @@ function resumeSession(id){
   // counted as time spent studying.
   window.__quizActiveMs = s.quizActiveMs || 0;
   window.__quizSegmentStart = Date.now();
+  window.__skippedKeys = new Set(Array.isArray(s.skippedKeys) ? s.skippedKeys : []);
 
   buildSimilarityIndex(cards);
   setInputMode(s.mode || 'classic');
@@ -16570,7 +16575,7 @@ function finishQuiz(){
   // finalSub stays populated (for anything reading its text, e.g. no
   // current callers, but harmless to keep accurate) even though it's
   // visually replaced by the ring + stat tiles below.
-  $('finalSub').textContent = `${pct}% mastered · ${score} correct answers over ${askedCount} questions asked`;
+  $('finalSub').textContent = `${pct}% mastered · ${score} correct answers over ${askedCount} questions asked` + ((window.__skippedKeys && window.__skippedKeys.size) ? ` · ${window.__skippedKeys.size} skipped` : '');
 
   // Headline tone scales with how the session went, so the result screen
   // reads as a quick verdict at a glance instead of just a raw number.
@@ -16582,6 +16587,7 @@ function finishQuiz(){
     else if(pct >= 80) headline = 'Great work!';
     else if(pct >= 50) headline = 'Solid progress.';
     else headline = 'Keep going — every rep helps.';
+    if((headline === 'Perfect run! 🎉' || headline === 'All mastered — nice recovery!') && window.__skippedKeys && window.__skippedKeys.size) headline = 'Finished — ' + window.__skippedKeys.size + ' skipped ⏭️';
     headlineEl.textContent = headline;
   }
 
@@ -16710,7 +16716,7 @@ $('retryFlaggedBtn').onclick = () => {
   if(flaggedCards.length === 0) return;
   totalCards = flaggedCards.length;
   queue = shuffle(flaggedCards);
-  masteredCount = 0; masteredCards = new Set(); askedCount = 0; seenCardKeys = new Set(); score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
+  masteredCount = 0; masteredCards = new Set(); askedCount = 0; seenCardKeys = new Set(); window.__skippedKeys = new Set(); score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
   window.__quizStartTime = Date.now();
   window.__quizActiveMs = 0;
   window.__quizSegmentStart = Date.now();
@@ -16722,7 +16728,7 @@ $('retryFlaggedBtn').onclick = () => {
 
 $('retryAllBtn').onclick = () => {
   queue = orderedQueue(cards);
-  masteredCount = 0; masteredCards = new Set(); askedCount = 0; seenCardKeys = new Set(); score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
+  masteredCount = 0; masteredCards = new Set(); askedCount = 0; seenCardKeys = new Set(); window.__skippedKeys = new Set(); score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
   window.__quizStartTime = Date.now();
   window.__quizActiveMs = 0;
   window.__quizSegmentStart = Date.now();
@@ -16736,7 +16742,7 @@ $('retryMissedBtn').onclick = () => {
   if(missedSet.size === 0) return;
   totalCards = missedSet.size;
   queue = shuffle(Array.from(missedSet.values()));
-  masteredCount = 0; masteredCards = new Set(); askedCount = 0; seenCardKeys = new Set(); score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
+  masteredCount = 0; masteredCards = new Set(); askedCount = 0; seenCardKeys = new Set(); window.__skippedKeys = new Set(); score = 0; missedSet = new Map(); cardsSinceBreak = 0; flaggedSet = new Set();
   window.__quizStartTime = Date.now();
   window.__quizActiveMs = 0;
   window.__quizSegmentStart = Date.now();
@@ -20187,6 +20193,324 @@ jump('TODAY','auto');
     <span class="ss-collapsed-summary" id="ssCollapsedSummary">No active timers</span>
   </button>
 </div>
+
+
+<style>
+  .jump-overlay{position:fixed; inset:0; z-index:100005; background:rgba(20,15,10,.55); display:flex; align-items:flex-end; justify-content:center;}
+  .jump-overlay.hidden{display:none;}
+  .jump-sheet{
+    width:100%; max-width:560px; max-height:88vh; overflow-y:auto;
+    background:var(--surface); color:var(--text);
+    border:1px solid var(--border); border-radius:18px 18px 0 0;
+    padding:16px 16px calc(18px + env(safe-area-inset-bottom,0px));
+    box-shadow:0 -10px 40px rgba(0,0,0,.25);
+    font-family:var(--font-body, inherit);
+  }
+  @media (min-width:700px){
+    .jump-overlay{align-items:center;}
+    .jump-sheet{border-radius:18px; max-height:84vh;}
+  }
+  .jump-sheet:focus{outline:none;}
+  .jump-head{display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:10px;}
+  .jump-title{font-family:var(--font-display); font-size:20px; font-weight:700; line-height:1.2;}
+  .jump-sub{font-size:12.5px; color:var(--text-muted); margin-top:3px;}
+  .jump-close{background:transparent; border:none; cursor:pointer; font-size:18px; min-width:40px; min-height:40px; color:var(--text-muted);}
+  .jump-quick{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;}
+  .jump-chip{
+    min-height:42px; padding:8px 14px; border-radius:999px; cursor:pointer;
+    border:1px solid var(--border); background:var(--primary-soft); color:var(--text);
+    font:inherit; font-size:14px; font-weight:600;
+  }
+  .jump-chip:active{transform:scale(.97);}
+  .jump-goto{display:flex; align-items:center; gap:8px; margin-bottom:12px;}
+  .jump-goto label{font-size:14px; font-weight:600; white-space:nowrap;}
+  .jump-goto input{
+    flex:1; min-width:0; min-height:42px; padding:8px 12px; font:inherit; font-size:16px;
+    border:1px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text);
+  }
+  .jump-goto .btn-primary{min-height:42px; padding:8px 18px;}
+  .jump-pages{display:flex; gap:6px; overflow-x:auto; padding-bottom:6px; margin-bottom:8px;}
+  .jump-page{
+    flex:0 0 auto; min-height:36px; padding:6px 12px; border-radius:8px; cursor:pointer;
+    border:1px solid var(--border); background:transparent; color:var(--text); font:inherit; font-size:13px;
+  }
+  .jump-page.on{background:var(--primary); border-color:var(--primary); color:#fff;}
+  .jump-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(52px,1fr)); gap:7px;}
+  .jump-tile{
+    min-height:44px; border-radius:10px; cursor:pointer; font:inherit; font-size:15px; font-weight:700;
+    padding:0; margin:0; letter-spacing:0; text-indent:0; text-align:center; line-height:1;
+    display:flex; align-items:center; justify-content:center;
+    border:1px solid var(--border); background:var(--surface); color:var(--text);
+  }
+  .jump-tile.done{background:var(--primary-soft); color:var(--text-muted);}
+  .jump-tile.skipped{background:transparent; border-style:dashed; color:var(--text-muted);}
+  .jump-tile.retry{border-color:var(--gold); border-width:2px;}
+  .jump-tile.current{background:var(--primary); border-color:var(--primary); color:#fff;}
+  .jump-legend{display:flex; flex-wrap:wrap; gap:12px; margin:12px 0 4px; font-size:12px; color:var(--text-muted);}
+  .jump-note{font-size:12px; color:var(--text-muted); line-height:1.45; margin-top:6px;}
+</style>
+<div id="jumpPanel" class="jump-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="jumpTitle">
+  <div class="jump-sheet" id="jumpSheet" tabindex="-1">
+    <div class="jump-head">
+      <div>
+        <div class="jump-title" id="jumpTitle">Skip ahead</div>
+        <div class="jump-sub" id="jumpSub"></div>
+      </div>
+      <button type="button" class="jump-close" id="jumpCloseBtn" aria-label="Close">✕</button>
+    </div>
+    <div class="jump-quick">
+      <button type="button" class="jump-chip" id="jumpSkipOne">Skip this one</button>
+      <button type="button" class="jump-chip" data-skip="5">+5</button>
+      <button type="button" class="jump-chip" data-skip="10">+10</button>
+      <button type="button" class="jump-chip" data-skip="20">+20</button>
+    </div>
+    <div class="jump-goto">
+      <label for="jumpInput">Start at Q</label>
+      <input id="jumpInput" type="number" inputmode="numeric" pattern="[0-9]*" min="1" placeholder="e.g. 41" autocomplete="off">
+      <button type="button" class="btn-primary" id="jumpGoBtn">Go</button>
+    </div>
+    <div class="jump-pages" id="jumpPages"></div>
+    <div class="jump-grid" id="jumpGrid"></div>
+    <div class="jump-legend">
+      <span>■ current</span><span>▢ to do</span><span style="opacity:.8">▣ done</span><span>┅ skipped</span><span>🟨 retry</span>
+    </div>
+    <div class="jump-note">Everything before the question you pick counts as done for this run. Skipping never touches your per-card stats, and you can undo right after.</div>
+  </div>
+</div>
+<script>
+/* ===== Skip ahead / jump to question =====
+   Works on the deck's fixed question numbers (Q1..Qn = position in the set),
+   so "Q41" means the same card on every device even with Shuffle on. Lets you
+   catch up when another device's progress never synced. */
+(function(){
+  const $j = id => document.getElementById(id);
+  const PAGE = 20;
+  let page = 0;
+  let undoTimer = null;
+  if(!window.__skippedKeys) window.__skippedKeys = new Set();
+
+  function universe(){
+    let list = cards.map((c, i) => ({c, n: i + 1}));
+    if(totalCards !== cards.length){            // retry-missed / retry-flagged subsets
+      const keys = new Set(queue.map(cardKey));
+      if(current) keys.add(cardKey(current));
+      masteredCards.forEach(c => keys.add(cardKey(c)));
+      list = list.filter(x => keys.has(cardKey(x.c)));
+    }
+    return list;
+  }
+  function snapshot(){
+    return {
+      current, queue: queue.slice(), masteredCards: new Set(masteredCards), masteredCount, askedCount,
+      seen: new Set(seenCardKeys), skipped: new Set(window.__skippedKeys), answered,
+      chosen: currentChosen, chosenIdx: currentChosenIdx, isCorrect: currentIsCorrect,
+      options: (currentOptions || []).slice(), optIdx: (currentOptionOrigIdx || []).slice()
+    };
+  }
+  function restore(sn){
+    current = sn.current; queue = sn.queue; masteredCards = sn.masteredCards; masteredCount = sn.masteredCount;
+    askedCount = sn.askedCount; seenCardKeys = sn.seen; window.__skippedKeys = sn.skipped;
+    renderPlant(totalCards ? masteredCount / totalCards : 0);
+    showCard(sn.options, sn.optIdx);
+    if(sn.answered){
+      restoreAnsweredView(current, sn.chosen, sn.isCorrect, sn.chosenIdx);
+      answered = true;
+      saveSession({chosen: sn.chosen, chosenIdx: sn.chosenIdx, isCorrect: sn.isCorrect});
+    }
+  }
+  let toastMine = false;
+  const stamp = () => (current ? cardKey(current) : '') + '|' + answered + '|' + queue.length + '|' + askedCount;
+  function dropToast(){ if(toastMine){ toastMine = false; clearTimeout(undoTimer); hideUndoToast(); } }
+  // Undo is only offered while nothing has happened since; any answer/next/skip retires it.
+  function offerUndo(msg, onUndo, ms){
+    const st = stamp();
+    toastMine = true;
+    showUndoToast(msg, () => { const ok = stamp() === st; dropToast(); if(ok) onUndo(); });
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(dropToast, ms || 12000);
+  }
+  // Done = everything in the run that is neither waiting in the queue nor on screen.
+  function setDoneFrom(U, newCurrentKey, newQueue){
+    const qk = new Set(newQueue.map(cardKey));
+    masteredCards = new Set(U.filter(x => { const k = cardKey(x.c); return k !== newCurrentKey && !qk.has(k); }).map(x => x.c));
+    masteredCount = masteredCards.size;
+  }
+  function wasDone(k, curKey, oldQ){
+    return k === curKey ? (answered && currentIsCorrect) : !oldQ.has(k);
+  }
+
+  function jumpToKey(targetKey){
+    const U = universe();
+    const idx = U.findIndex(x => cardKey(x.c) === targetKey);
+    if(idx < 0) return;
+    const curKey = current ? cardKey(current) : null;
+    if(curKey === targetKey){ closePanel(); return; }
+    const sn = snapshot();
+    const oldQ = new Set(queue.map(cardKey));
+    const sk = window.__skippedKeys;
+    U.slice(0, idx).forEach(x => { const k = cardKey(x.c); if(!wasDone(k, curKey, oldQ)) sk.add(k); });
+    U.slice(idx).forEach(x => sk.delete(cardKey(x.c)));
+
+    const after = U.slice(idx + 1);
+    let newQ;
+    if(shuffleEnabled){
+      const keep = new Set(after.map(x => cardKey(x.c))), seen = new Set();
+      newQ = [];
+      queue.forEach(c => { const k = cardKey(c); if(keep.has(k) && !seen.has(k)){ seen.add(k); newQ.push(c); } });
+      newQ = newQ.concat(shuffle(after.filter(x => !seen.has(cardKey(x.c))).map(x => x.c)));
+    } else {
+      newQ = after.map(x => x.c);
+    }
+    if(!answered) askedCount = Math.max(0, askedCount - 1);   // abandoned card isn't "asked"
+    current = U[idx].c;
+    queue = newQ;
+    askedCount++;
+    seenCardKeys.add(targetKey);
+    setDoneFrom(U, targetKey, newQ);
+    renderPlant(totalCards ? masteredCount / totalCards : 0);
+    closePanel();
+    $('quiz').classList.remove('hidden');
+    showCard();
+    offerUndo('Jumped to Q' + U[idx].n + (idx ? ' · skipped ' + idx : ''), () => restore(sn));
+  }
+
+  function skipCurrent(){
+    if(!current) return;
+    const sn = snapshot();
+    const k = cardKey(current);
+    if(!(answered && currentIsCorrect)) window.__skippedKeys.add(k);
+    if(!answered) askedCount = Math.max(0, askedCount - 1);
+    queue = queue.filter(c => cardKey(c) !== k);
+    const U = universe();
+    const nextKey = queue.length ? cardKey(queue[0]) : null;
+    setDoneFrom(U, nextKey, queue);
+    closePanel();
+    const finishing = queue.length === 0;
+    nextFromQueue();
+    if(!finishing) offerUndo('Skipped 1 question', () => restore(sn));
+  }
+
+  function skipAhead(n){
+    const U = universe();
+    if(!U.length) return;
+    const curKey = current ? cardKey(current) : null;
+    let ci = U.findIndex(x => cardKey(x.c) === curKey);
+    if(ci < 0) ci = 0;
+    jumpToKey(cardKey(U[Math.min(U.length - 1, ci + n)].c));
+  }
+
+  function goToNumber(){
+    const U = universe();
+    if(!U.length) return;
+    let n = parseInt($j('jumpInput').value, 10);
+    if(!n || n < 1){ $j('jumpInput').focus(); return; }
+    let hit = U.find(x => x.n === n);
+    if(!hit) hit = n > U[U.length - 1].n ? U[U.length - 1] : U.find(x => x.n > n) || U[0];
+    jumpToKey(cardKey(hit.c));
+  }
+
+  function render(){
+    const U = universe();
+    const curKey = current ? cardKey(current) : null;
+    const qk = new Set(queue.map(cardKey));
+    const sk = window.__skippedKeys;
+    const cur = U.find(x => cardKey(x.c) === curKey);
+    $j('jumpSub').textContent = `On Q${cur ? cur.n : '–'} of ${U.length} · ${masteredCount} done` +
+      (sk.size ? ` · ${sk.size} skipped` : '') + ` · ${queue.length} left`;
+    const pages = Math.max(1, Math.ceil(U.length / PAGE));
+    page = Math.min(page, pages - 1);
+    const pg = $j('jumpPages');
+    pg.innerHTML = '';
+    pg.style.display = pages > 1 ? 'flex' : 'none';
+    for(let p = 0; p < pages; p++){
+      const slice = U.slice(p * PAGE, (p + 1) * PAGE);
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'jump-page' + (p === page ? ' on' : '');
+      b.textContent = slice[0].n + '–' + slice[slice.length - 1].n;
+      b.onclick = () => { page = p; render(); };
+      pg.appendChild(b);
+    }
+    const grid = $j('jumpGrid');
+    grid.innerHTML = '';
+    U.slice(page * PAGE, (page + 1) * PAGE).forEach(x => {
+      const k = cardKey(x.c);
+      const st = k === curKey ? 'current' : qk.has(k) ? (missedSet.has(x.c.front) ? 'retry' : 'todo') : (sk.has(k) ? 'skipped' : 'done');
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'jump-tile ' + st;
+      b.textContent = x.n;
+      b.setAttribute('aria-label', 'Question ' + x.n + ', ' + st);
+      if(st === 'current') b.setAttribute('aria-current', 'true');
+      b.onclick = () => jumpToKey(k);
+      grid.appendChild(b);
+    });
+    $j('jumpInput').placeholder = U.length ? 'e.g. ' + Math.min(U[U.length - 1].n, Math.max(U[0].n, Math.ceil(U.length / 2))) : '';
+  }
+
+  function openPanel(){
+    if(!current) return;
+    const U = universe();
+    const ci = U.findIndex(x => cardKey(x.c) === cardKey(current));
+    page = Math.max(0, Math.floor(Math.max(ci, 0) / PAGE));
+    $j('jumpInput').value = '';
+    render();
+    $j('jumpPanel').classList.remove('hidden');
+    $j('jumpSheet').focus({preventScroll:true});
+  }
+  function closePanel(){
+    const p = $j('jumpPanel');
+    if(!p || p.classList.contains('hidden')) return;
+    p.classList.add('hidden');
+    const b = $j('jumpBtn'); if(b && b.offsetParent !== null) b.focus();
+  }
+
+  $j('quiz').addEventListener('click', e => { if(!e.target.closest('#jumpBtn,#shuffleBtn')) dropToast(); });
+  $j('jumpBtn').addEventListener('click', openPanel);
+  $j('jumpCloseBtn').addEventListener('click', closePanel);
+  $j('jumpPanel').addEventListener('click', e => { if(e.target === $j('jumpPanel')) closePanel(); });
+  $j('jumpSkipOne').addEventListener('click', skipCurrent);
+  $j('jumpGoBtn').addEventListener('click', goToNumber);
+  $j('jumpInput').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); goToNumber(); } });
+  document.querySelectorAll('#jumpPanel [data-skip]').forEach(b => b.addEventListener('click', () => skipAhead(parseInt(b.dataset.skip, 10))));
+  document.addEventListener('keydown', e => { if(e.key === 'Escape' && !$j('jumpPanel').classList.contains('hidden')) closePanel(); });
+
+  // Never leave the sheet floating over another screen.
+  const _hide = window.hideAllScreens;
+  if(typeof _hide === 'function'){
+    window.hideAllScreens = function(){ closePanel(); dropToast(); return _hide.apply(this, arguments); };
+  }
+
+  /* Shuffle toggle available mid-quiz: re-orders only the questions still to come. */
+  function syncShuffleUi(on){
+    const b = $j('shuffleBtn');
+    if(!b) return;
+    b.classList.toggle('flagged', on);
+    b.setAttribute('aria-pressed', String(on));
+    b.title = on ? 'Shuffle is on — tap for chronological order' : 'Chronological order — tap to shuffle';
+  }
+  function setShuffleMode(on){
+    shuffleEnabled = on;
+    try{ lsSet(SHUFFLE_KEY, on ? '1' : '0'); }catch(e){}
+    const t = $j('shuffleToggle'); if(t) t.checked = on;
+    const l = $j('shuffleToggleLabel'); if(l) l.textContent = on ? 'Shuffle questions' : 'Chronological order';
+    syncShuffleUi(on);
+  }
+  function toggleShuffleMidQuiz(){
+    const prevQueue = queue.slice(), prev = shuffleEnabled, next = !prev;
+    const pos = new Map(cards.map((c, i) => [cardKey(c), i]));
+    queue = next ? shuffle(queue) : queue.slice().sort((a, b) => (pos.has(cardKey(a)) ? pos.get(cardKey(a)) : 1e9) - (pos.has(cardKey(b)) ? pos.get(cardKey(b)) : 1e9));
+    setShuffleMode(next);
+    saveSession();
+    offerUndo(next ? 'Shuffle on — remaining questions mixed' : 'Chronological — remaining questions in order',
+      () => { queue = prevQueue; setShuffleMode(prev); saveSession(); }, 6000);
+  }
+  syncShuffleUi(shuffleEnabled);
+  $j('shuffleBtn').addEventListener('click', toggleShuffleMidQuiz);
+  const _st = $j('shuffleToggle'); if(_st) _st.addEventListener('change', () => syncShuffleUi(shuffleEnabled));
+  window.__jump = {jumpToKey, skipCurrent, skipAhead, universe};
+})();
+</script>
 
 <div id="imageLightbox" class="hidden">
   <button type="button" class="lightbox-close" id="lightboxCloseBtn" aria-label="Close image">✕</button>
