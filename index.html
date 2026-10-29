@@ -5077,24 +5077,6 @@ OUTCOME: NEG
         </div>
 
         <div id="manualCardsWrap">
-          <div class="row" style="justify-content:space-between; margin-bottom:10px;">
-            <label class="switch-row" for="modeToggle">
-              <span class="switch">
-                <input type="checkbox" id="modeToggle">
-                <span class="switch-track"><span class="switch-thumb"></span></span>
-              </span>
-              <span class="switch-label" id="modeToggleLabel">Classic (auto-generated answers)</span>
-            </label>
-          </div>
-          <div class="row" style="justify-content:space-between; margin-bottom:10px;">
-            <label class="switch-row" for="samplexToggle">
-              <span class="switch">
-                <input type="checkbox" id="samplexToggle">
-                <span class="switch-track"><span class="switch-thumb"></span></span>
-              </span>
-              <span class="switch-label" id="samplexToggleLabel">Samplex OFF</span>
-            </label>
-          </div>
           <div class="hint" id="pasteHint">
             Click any cell and paste your table straight in — copied from Excel, Sheets, Docs, or Notion. Multi-cell pastes fill across and add rows automatically. Or just type directly into the cells.
           </div>
@@ -13663,17 +13645,6 @@ function renderTableHead(){
 }
 
 function updateModeUI(){
-  const toggle = $('modeToggle');
-  if(toggle){
-    toggle.checked = inputMode === 'full';
-    toggle.disabled = inputMode === 'samplex';
-  }
-  const label = $('modeToggleLabel');
-  if(label) label.textContent = inputMode === 'full' ? 'Full MC (A–D provided)' : 'Classic (auto-generated answers)';
-  const sxToggle = $('samplexToggle');
-  if(sxToggle) sxToggle.checked = inputMode === 'samplex';
-  const sxLabel = $('samplexToggleLabel');
-  if(sxLabel) sxLabel.textContent = inputMode === 'samplex' ? 'Samplex ON (per-option tips + rationale)' : 'Samplex OFF';
   const hint = $('pasteHint');
   if(hint){
     if(inputMode === 'samplex'){
@@ -13991,32 +13962,6 @@ $('editTip')?.addEventListener('keydown', (e) => {
   }
 });
 
-$('modeToggle').onchange = e => {
-  const newMode = e.target.checked ? 'full' : 'classic';
-  const hasContent = Array.from(tableBody.querySelectorAll('.cell')).some(c => c.textContent.trim());
-  if(hasContent && !confirm('Switching format will clear the current table (the two layouts use different columns). Continue?')){
-    e.target.checked = inputMode === 'full';
-    return;
-  }
-  setInputMode(newMode);
-  tableBody.innerHTML = '';
-  addRow();
-  $('setupError').textContent = '';
-};
-
-$('samplexToggle').onchange = e => {
-  const hasContent = Array.from(tableBody.querySelectorAll('.cell')).some(c => c.textContent.trim());
-  if(hasContent && !confirm('Switching format will clear the current table (Samplex uses different columns). Continue?')){
-    e.target.checked = inputMode === 'samplex';
-    return;
-  }
-  const newMode = e.target.checked ? 'samplex' : ($('modeToggle').checked ? 'full' : 'classic');
-  setInputMode(newMode);
-  tableBody.innerHTML = '';
-  addRow();
-  $('setupError').textContent = '';
-};
-
 $('addRowBtn').onclick = () => {
   const tr = addRow();
   tr.querySelector('.cell').focus();
@@ -14141,7 +14086,7 @@ $('newSetBtn').onclick = () => {
   activeSetId = null;
   pendingAlgorithm = false;
   setupReturnTo = null;
-  setInputMode('classic');
+  setInputMode('samplex');
   tableBody.innerHTML = '';
   addRow();
   $('setNameInput').value = '';
