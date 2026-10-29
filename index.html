@@ -4676,6 +4676,28 @@ body.mode-dark .index-calendar .holiday-label{ color:var(--text-muted); }
   .dm-next{padding:14px;}
 }
 
+/* ===== Projects (More → Add project) + LLM import panel ===== */
+.more-tile.add{border-style:dashed; background:transparent; display:flex; flex-direction:column; justify-content:center;}
+.more-tile.add .more-tile-title,.more-tile.add .more-tile-emoji{color:var(--text-muted);}
+.dm-import{margin-top:14px; border:1.5px solid var(--border); border-radius:12px; background:var(--surface);}
+.dm-import > summary{cursor:pointer; list-style:none; min-height:46px; padding:12px 14px; display:flex; align-items:center; font-family:var(--font); font-weight:800; font-size:13.5px; color:var(--text);}
+.dm-import > summary::-webkit-details-marker{display:none;}
+.dm-import > summary::after{content:'▸'; margin-left:auto; color:var(--text-muted); transition:transform .15s;}
+.dm-import[open] > summary::after{transform:rotate(90deg);}
+.dm-import-body{padding:0 14px 14px; display:grid; gap:10px;}
+.dm-step{font-size:11px; font-weight:800; letter-spacing:.7px; text-transform:uppercase; color:var(--text-muted); margin-top:4px;}
+.dm-ta{min-height:130px; resize:vertical; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:12px; line-height:1.45;}
+.dm-opt-inline{display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--text); min-height:36px; cursor:pointer;}
+.dm-import .dm-prompt{margin-top:0;}
+dialog.dm-dialog{border:1.5px solid var(--border); border-radius:16px; background:var(--surface); color:var(--text); padding:20px; width:min(520px,calc(100vw - 24px)); max-height:calc(100vh - 32px); overflow:auto; font-family:var(--font);}
+dialog.dm-dialog::backdrop{background:rgba(0,0,0,.45);}
+.dm-field{display:grid; gap:4px; margin-top:10px;}
+.dm-field > label{font-size:12px; font-weight:800; color:var(--text-muted);}
+.dm-row2{display:grid; grid-template-columns:1fr 96px; gap:10px;}
+.dm-row2.eq{grid-template-columns:1fr 1fr;}
+.dm-dlg-actions{display:flex; gap:8px; justify-content:flex-end; margin-top:16px; flex-wrap:wrap;}
+@media(max-width:480px){ .dm-row2.eq{grid-template-columns:1fr;} .dm-dlg-actions .btn-ghost,.dm-dlg-actions .btn-primary{flex:1 1 auto; min-height:46px;} }
+
 /* ===== Community panel ===== */
 .community-panel{
   background:var(--surface); border-radius:var(--radius); box-shadow:var(--shadow);
@@ -6272,13 +6294,7 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
             <div class="community-hero-title">➕ More</div>
             <div class="community-hero-sub">Extra study tools live here.</div>
           </div>
-          <div class="more-grid">
-            <button type="button" class="more-tile" id="openDermBtn">
-              <div class="more-tile-emoji">🩺</div>
-              <div class="more-tile-title">Derm Atlas</div>
-              <div class="more-tile-sub">Lesion photos, keywords, treatment &amp; dosing — browse, quiz yourself, edit, sync and publish.</div>
-            </button>
-          </div>
+          <div class="more-grid" id="moreGrid"></div>
         </div>
       </div>
 
@@ -6289,8 +6305,8 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
         </div>
         <div class="community-panel">
           <div class="community-hero">
-            <div class="community-hero-title">🩺 Derm Atlas</div>
-            <div class="community-hero-sub">lesion · keywords · treatment &amp; dosing — browse or test yourself. Atlases sync with your account and can be published to Community like any other set.</div>
+            <div class="community-hero-title" id="dmHeroTitle">🩺 Derm Atlas</div>
+            <div class="community-hero-sub" id="dmHeroSub">lesion · keywords · treatment &amp; dosing — browse or test yourself. Atlases sync with your account and can be published to Community like any other set.</div>
           </div>
           <div class="dm-bar" id="dmSetBar"></div>
           <div class="dm-status" id="dmStatus" role="status" aria-live="polite"></div>
@@ -6302,11 +6318,11 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
           <div id="dmBrowse"><div class="dm-grid" id="dmBrowseGrid"></div></div>
           <div id="dmQuiz" class="hidden"><div id="dmQuizArea"></div></div>
           <div id="dmEdit" class="hidden">
-            <p class="community-section-sub" style="margin-top:14px; line-height:1.5;">Live cells — click any one and type, or paste a block copied from Excel, Google Sheets, a CSV or an LLM reply (tab- or comma-separated). A multi-cell paste spills across the grid from that cell and adds rows as needed. Press <b>Save</b> to store it — saved changes sync to your account.</p>
+            <p class="community-section-sub" style="margin-top:14px; line-height:1.5;">Live cells — click any one and type, or paste a block copied from Excel, Google Sheets, a CSV or an LLM reply (tab- or comma-separated). A multi-cell paste spills across the grid from that cell and adds rows as needed. Or use <b>Import</b> below to paste an LLM reply. Press <b>Save</b> to store it — saved changes sync to your account.</p>
             <div class="dm-swipe">← swipe the table sideways to see all columns →</div>
             <div class="dm-gridwrap">
               <table id="dmEditGrid">
-                <thead><tr><th>#</th><th>Name</th><th>Image URL</th><th>Keywords (separate with |)</th><th>Treatment</th><th>Dosing</th><th></th></tr></thead>
+                <thead><tr><th>#</th><th id="dmTh0">Name</th><th id="dmTh1">Image URL</th><th id="dmTh2">Keywords (separate with |)</th><th id="dmTh3">Treatment</th><th id="dmTh4">Dosing</th><th></th></tr></thead>
                 <tbody id="dmGridBody"></tbody>
               </table>
             </div>
@@ -6314,12 +6330,56 @@ Holiday data based on the Philippines iCalendar maintained by Office Holidays.
               <button class="btn-ghost" id="dmAddRowBtn">+ Add row</button>
               <button class="btn-ghost" id="dmClearBtn">Clear table</button>
               <button class="btn-primary" id="dmSaveBtn">Save</button>
-              <button class="btn-ghost" id="dmCopyPromptBtn">Copy LLM prompt</button>
+              <button class="btn-ghost" id="dmImportBtn">⬇️ Import</button>
             </div>
-            <div class="dm-prompt" id="dmPromptText"></div>
+            <details class="dm-import" id="dmImport">
+              <summary>⬇️ Import with an LLM prompt</summary>
+              <div class="dm-import-body">
+                <div class="dm-step">1 · Get the data from an LLM</div>
+                <input type="text" class="modal-input" id="dmImpTopic" placeholder="What should it cover?" autocomplete="off">
+                <div class="row" style="gap:8px;">
+                  <button type="button" class="btn-primary" id="dmCopyPromptBtn">📋 Copy LLM prompt</button>
+                  <button type="button" class="btn-ghost" id="dmTogglePromptBtn">Show prompt</button>
+                </div>
+                <div class="dm-prompt hidden" id="dmPromptText"></div>
+                <div class="dm-step">2 · Paste its reply (markdown table, CSV or tab-separated) or load a file</div>
+                <textarea class="modal-input dm-ta" id="dmImpText" spellcheck="false" placeholder="Paste the reply here…"></textarea>
+                <div class="row" style="gap:12px;">
+                  <label class="btn-ghost" style="cursor:pointer; margin:0;">📄 Load CSV / TXT file<input type="file" id="dmImpFile" accept=".csv,.tsv,.txt,.md,text/*" hidden></label>
+                  <label class="dm-opt-inline"><input type="radio" name="dmImpMode" value="append" checked> Add to table</label>
+                  <label class="dm-opt-inline"><input type="radio" name="dmImpMode" value="replace"> Replace table</label>
+                </div>
+                <button type="button" class="btn-primary" id="dmImpGoBtn">Import into table</button>
+                <div class="dm-status" id="dmImpStatus" role="status" aria-live="polite"></div>
+              </div>
+            </details>
           </div>
         </div>
       </div>
+
+      <!-- ===== Add / edit atlas project ===== -->
+      <dialog id="dmProjDialog" class="dm-dialog" aria-labelledby="dmPjHeading">
+        <div class="community-section-title" id="dmPjHeading" style="font-size:18px;">Add project</div>
+        <div class="community-section-sub" id="dmPjSub" style="line-height:1.5;"></div>
+        <div class="dm-qchips" id="dmPjPresets" style="margin-top:12px;"></div>
+        <div class="dm-row2" style="margin-top:6px;">
+          <div class="dm-field"><label for="dmPjName">Project name</label><input type="text" id="dmPjName" class="modal-input" maxlength="40" placeholder="Radiology Atlas" autocomplete="off"></div>
+          <div class="dm-field"><label for="dmPjEmoji">Emoji</label><input type="text" id="dmPjEmoji" class="modal-input" maxlength="4" placeholder="🩻" autocomplete="off"></div>
+        </div>
+        <div class="dm-field"><label for="dmPjNoun">Each entry is called a… (singular)</label><input type="text" id="dmPjNoun" class="modal-input" maxlength="24" placeholder="diagnosis" autocomplete="off"></div>
+        <div class="community-section-sub" style="margin-top:14px;">Column names — column 2 is always the image URL.</div>
+        <div class="dm-row2 eq">
+          <div class="dm-field"><label for="dmPjL0">Column 1 (name)</label><input type="text" id="dmPjL0" class="modal-input" maxlength="30" autocomplete="off"></div>
+          <div class="dm-field"><label for="dmPjL1">Column 3 (list, split with |)</label><input type="text" id="dmPjL1" class="modal-input" maxlength="30" autocomplete="off"></div>
+          <div class="dm-field"><label for="dmPjL2">Column 4 (one sentence)</label><input type="text" id="dmPjL2" class="modal-input" maxlength="30" autocomplete="off"></div>
+          <div class="dm-field"><label for="dmPjL3">Column 5 (one line)</label><input type="text" id="dmPjL3" class="modal-input" maxlength="30" autocomplete="off"></div>
+        </div>
+        <div class="dm-field"><label for="dmPjNote">Extra instructions for the LLM prompt (optional)</label><textarea id="dmPjNote" class="modal-input" rows="2" maxlength="400" placeholder="e.g. Focus on chest X-ray and CT signs; use UK spelling."></textarea></div>
+        <div class="dm-dlg-actions">
+          <button type="button" class="btn-ghost" id="dmPjCancelBtn">Cancel</button>
+          <button type="button" class="btn-primary" id="dmPjSaveBtn">Create project</button>
+        </div>
+      </dialog>
 
       <!-- ===== Find Questions (search cards by Professor / Topic) ===== -->
       <div id="profSearchView" class="hidden">
@@ -8509,7 +8569,7 @@ function renderCommunityCard(r){
   const cardTypeLabel = r.card_type === 'samplex' ? 'Samplex' : (r.card_type === 'topic' ? 'Topic Cards' : r.card_type);
   const subjColor = r.subject ? subjectColor(r.subject) : null;
   const subjectTag = r.subject ? `<span class="community-set-tag subject-tag" style="background:${subjColor}">${escapeHtml(r.subject)}</span>` : '';
-  const tags = subjectTag + [r.le ? `LE ${r.le}` : null, cardTypeLabel, r.topic, r.professor ? `👤 ${r.professor}` : null, r.kind === 'algorithm' ? 'Algorithm' : null, r.kind === 'derm' ? 'Derm Atlas' : null].filter(Boolean).slice(0,4).map(t => `<span class="community-set-tag">${escapeHtml(t)}</span>`).join('');
+  const tags = subjectTag + [r.le ? `LE ${r.le}` : null, cardTypeLabel, r.topic, r.professor ? `👤 ${r.professor}` : null, r.kind === 'algorithm' ? 'Algorithm' : null, r.kind === 'derm' ? dmTagFor(r) : null].filter(Boolean).slice(0,4).map(t => `<span class="community-set-tag">${escapeHtml(t)}</span>`).join('');
   const uploadedLabel = r.created_at ? new Date(r.created_at).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : null;
   // "Edited" only shows once the gap between created_at and updated_at is
   // large enough to be a real, later edit rather than noise from whatever
@@ -8866,6 +8926,7 @@ async function importCommunitySet(communitySetId){
   sets[genSetId()] = {
     name: data.title, subject: data.subject || undefined, cardType: data.card_type || undefined,
     topic: data.topic || undefined, le: data.le || undefined, kind: data.kind || undefined,
+    project: data.kind === 'derm' ? dmProjForImport(data) : undefined,
     cards: data.cards || [], algoSource: data.algo_source || undefined, completed: false, completedAt: undefined,
     mode: deriveCommunitySetMode(data),
     createdAt: now, updatedAt: now
@@ -8876,7 +8937,7 @@ async function importCommunitySet(communitySetId){
   if(row) row.import_count = Number(row.import_count||0) + 1;
   closeCommunityPreview();
   applyCommunitySearchFilter();
-  alert(data.kind === 'derm' ? `Added "${data.title}" — find it under More → Derm Atlas.` : `Added "${data.title}" to your library.`);
+  alert(data.kind === 'derm' ? `Added "${data.title}" — find it under More → ${dmProjOf({ subject:data.subject }).title}.` : `Added "${data.title}" to your library.`);
 }
 
 // ---- Live "someone just published a set" indicator ----
@@ -9241,46 +9302,239 @@ const DM_SAMPLES = [
     dosing:"Imiquimod 5% cream 5x/week for 6 weeks for low-risk superficial BCC; Mohs surgery is single-session, margin-controlled (no drug dosing)."
   }
 ];
-const DM_LLM_PROMPT = `You are compiling a dermatology flashcard set for a study app. For the lesion(s) I list below:
-
-1. Search the web for each lesion and find a REAL, currently working image URL of its typical/classic presentation — prefer Wikimedia Commons ("upload.wikimedia.org") or another openly hotlinkable medical-image source. Actually check that the URL resolves to an image of that exact lesion before using it — never invent or guess a URL. If you can't find one you're confident in, leave that cell blank rather than guessing.
-2. For each lesion note: the standard name; 4-6 short MUST-KNOW exam keywords (classic morphology, distribution, pathognomonic signs, associations — short phrases, not full sentences); a one-sentence TREATMENT summary (the general approach/drug class, e.g. "topical corticosteroid + vitamin D analogue"); and a separate, precise DOSING line — actual drug name(s), strength/concentration, frequency, route, and typical duration, exactly as it would be tested (e.g. "Betamethasone dipropionate 0.05% ointment BID for 2-4 weeks"). If a lesion has no drug dosing (e.g. pure surgical management), say so briefly in that cell rather than leaving it blank.
-3. Compile everything into a table with exactly these 5 columns, no header row: Name, Image URL, Keywords, Treatment, Dosing. Put multiple keywords in one cell separated by " | " (not commas, since some phrases already contain commas).
-
-Output: if you're able to create and share a downloadable file, save this as a CSV (or Google Sheet / XLSX) file with those 5 columns and give me the file. If you can't create files, output the same 5 columns as plain rows in your reply (tab-separated if possible, comma-separated otherwise) so I can paste it straight into the app's grid.
-
-Lesions to compile: [PASTE YOUR LIST HERE]`;
-const DM_QTYPES = {
-  image:   {label:'Image → name',      hint:'Identify from the photo'},
-  kw2name: {label:'Findings → name',   hint:'Name the lesion from its keywords'},
-  name2kw: {label:'Name → finding',    hint:'Pick a true finding for the lesion'},
-  odd:     {label:'Odd one out',       hint:'Spot the keyword that doesn\u2019t belong'},
-  rx2name: {label:'Treatment → name',  hint:'Which lesion gets this treatment'},
-  name2rx: {label:'Name → treatment',  hint:'Pick the right treatment'},
-  dose2name:{label:'Dosing → name',    hint:'Which lesion uses this regimen'},
-  name2dose:{label:'Name → dosing',    hint:'Pick the right regimen'}
+/* ---- Projects ----
+   Derm Atlas is the built-in project. Any other project (the Radiology preset, or a Custom one) is the SAME
+   machinery with its own title/emoji, entry noun, column labels, quiz wording and LLM import prompt.
+   A project is not a new storage entity: every atlas keeps kind:'derm' (so library filtering, cloud sync,
+   backups and Community publish work unchanged) and may carry an optional set.project = {id,title,emoji,noun,
+   labels,...}. Atlases without it are Derm Atlases. The 5 data fields never change shape
+   (name, image, keywords[], treatment, dosing) — a project only RELABELS them. */
+const DM_SAMPLE_IMG = 'https://placehold.co/600x450/d9dde8/2b3a6b?text=sample+image+%E2%80%94+replace';
+const DM_RADIOLOGY_SAMPLES = [
+  {
+    name:"Pneumothorax (simple, spontaneous)",
+    image:DM_SAMPLE_IMG,
+    keywords:["Thin visceral pleural line","No lung markings beyond the line","Deep sulcus sign (supine film)","Tall, thin young male / smoker (primary spontaneous)","Tension: mediastinal shift + flattened hemidiaphragm"],
+    treatment:"Upright PA chest X-ray to confirm; small and stable → observe with oxygen, large or symptomatic → needle aspiration or chest drain. Tension pneumothorax is a clinical diagnosis — immediate needle decompression, don't wait for imaging.",
+    dosing:"Bulla — air space is concave towards the chest wall; skin fold — lung markings continue beyond the edge; lobar collapse — volume loss rather than a rim of air."
+  },
+  {
+    name:"Small bowel obstruction",
+    image:DM_SAMPLE_IMG,
+    keywords:["Dilated small bowel loops (>3 cm)","Air-fluid levels on erect film","Collapsed distal bowel / colon","Transition point on CT","Adhesions are the most common cause"],
+    treatment:"CT abdomen/pelvis with IV contrast to find the transition point and exclude strangulation; NPO, NG decompression, IV fluids, surgical review (urgent if ischaemia or a closed loop).",
+    dosing:"Ileus — diffuse gas in small bowel and colon, no transition point; large bowel obstruction — dilated colon with a distal cause; pseudo-obstruction (Ogilvie) — massive caecal/colonic dilatation without a mechanical cause."
+  },
+  {
+    name:"Acute appendicitis",
+    image:DM_SAMPLE_IMG,
+    keywords:["Blind-ended tubular structure >6 mm","Non-compressible on ultrasound","Periappendiceal fat stranding","Appendicolith","Wall hyperenhancement on CT"],
+    treatment:"Ultrasound first in children and pregnancy (MRI if equivocal in pregnancy); CT abdomen/pelvis with IV contrast in adults; then surgical referral for appendicectomy ± antibiotics.",
+    dosing:"Mesenteric adenitis — enlarged right iliac fossa nodes, normal appendix; Crohn terminal ileitis — thickened distal ileum; ovarian pathology (torsion, ruptured cyst) — adnexal abnormality on ultrasound."
+  }
+];
+const DM_PRESETS = {
+  derm: {
+    id:'derm', title:'Derm Atlas', emoji:'🩺', subject:'DERM',
+    noun:'lesion', nounPl:'lesions', find:'finding', domain:'dermatology',
+    imageWhat:'typical/classic presentation', imageSrc:'medical-image source',
+    labels:{ name:'Name', keywords:'Keywords', treatment:'Treatment', dosing:'Dosing' },
+    qs:{ rx2name:'Which lesion is treated this way?', name2rx:'What is the treatment?', dose2name:'Which lesion uses this regimen?', name2dose:'What is the dosing?' },
+    guide:{
+      keywords:'4-6 short MUST-KNOW exam keywords (classic morphology, distribution, pathognomonic signs, associations — short phrases, not full sentences)',
+      treatment:'a one-sentence TREATMENT summary (the general approach/drug class, e.g. "topical corticosteroid + vitamin D analogue")',
+      dosing:'a separate, precise DOSING line — actual drug name(s), strength/concentration, frequency, route, and typical duration, exactly as it would be tested (e.g. "Betamethasone dipropionate 0.05% ointment BID for 2-4 weeks"). If a lesion has no drug dosing (e.g. pure surgical management), say so briefly in that cell rather than leaving it blank'
+    },
+    samples: DM_SAMPLES
+  },
+  radiology: {
+    id:'radiology', title:'Radiology Atlas', emoji:'🩻', subject:'RADIOLOGY',
+    noun:'diagnosis', nounPl:'diagnoses', find:'finding', domain:'radiology',
+    imageWhat:'classic imaging appearance (one clear, representative key image — radiograph, CT, MRI or ultrasound as appropriate)',
+    imageSrc:'medical-image source (e.g. NIH Open-i)',
+    labels:{ name:'Diagnosis', keywords:'Imaging findings', treatment:'Next step', dosing:'Differential' },
+    qs:{
+      image:'What is the diagnosis?', kw2name:'Which diagnosis fits these findings?',
+      rx2name:'Which diagnosis fits this next step?', name2rx:'What is the best next step?',
+      dose2name:'Which diagnosis has this differential?', name2dose:'What is the differential?'
+    },
+    guide:{
+      keywords:'4-6 short MUST-KNOW imaging findings (the classic signs, location/distribution, density/signal/echogenicity characteristics, pathognomonic signs, key associations — short phrases, not full sentences)',
+      treatment:'a one-sentence NEXT STEP line (the best confirmatory imaging modality/sequence/projection and the usual immediate management, e.g. "CT pulmonary angiogram to confirm; start anticoagulation")',
+      dosing:'a one-line DIFFERENTIAL — the 2-4 most important mimics, each with the single feature that tells it apart (e.g. "Bulla: concave to the chest wall; skin fold: lung markings continue past the line")'
+    },
+    samples: DM_RADIOLOGY_SAMPLES
+  }
 };
-let dmActiveId = null, dmTab = 'browse';
+const DM_BLANK_PROJECT = {
+  id:'custom', title:'', emoji:'📚', noun:'item', nounPl:'items', find:'key point', domain:'study',
+  imageWhat:'typical/classic appearance', imageSrc:'image source',
+  labels:{ name:'Name', keywords:'Keywords', treatment:'Notes', dosing:'Details' },
+  qs:{}, guide:null, samples:null, guideNote:''
+};
+let dmProj = null; // current project config (computed in dmRenderAll, so hot paths don't re-parse the sets blob)
+const dmCap = s => String(s || '').charAt(0).toUpperCase() + String(s || '').slice(1);
+function dmPlural(n){
+  n = String(n || 'item');
+  if(/[^aeiou]y$/i.test(n)) return n.slice(0, -1) + 'ies';
+  if(/is$/i.test(n)) return n.slice(0, -2) + 'es';
+  if(/(s|x|z|ch|sh)$/i.test(n)) return n + 'es';
+  return n + 's';
+}
+function dmSlug(s){ return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30) || 'project'; }
+function dmTitleCase(s){ return String(s || '').toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase()); }
+function dmMergeProj(p){
+  p = p || {};
+  const base = DM_PRESETS[p.id] || DM_BLANK_PROJECT;
+  const out = Object.assign({}, base, p);
+  out.labels = Object.assign({}, base.labels, p.labels || {});
+  out.qs = base.qs || {};          // quiz wording, LLM guide text and samples are preset-owned, never stored on the set
+  out.guide = base.guide || null;
+  out.samples = base.samples || null;
+  if(!out.noun) out.noun = base.noun;
+  if(!out.nounPl) out.nounPl = dmPlural(out.noun);
+  if(!out.title) out.title = base.title || 'Atlas';
+  return out;
+}
+function dmSerialize(p){
+  const o = { id:p.id, title:p.title, emoji:p.emoji, noun:p.noun, nounPl:p.nounPl, subject:p.subject,
+    labels:{ name:p.labels.name, keywords:p.labels.keywords, treatment:p.labels.treatment, dosing:p.labels.dosing } };
+  if(!DM_PRESETS[p.id] && p.domain) o.domain = p.domain;
+  if(p.guideNote) o.guideNote = p.guideNote;
+  return o;
+}
+const dmSig = p => JSON.stringify(dmSerialize(p));
+function dmProjOf(s){
+  if(s && s.project && s.project.id) return dmMergeProj(s.project);
+  const sub = String((s && s.subject) || '').trim(), key = sub.toLowerCase();
+  if(!sub || key === 'derm') return dmMergeProj({ id:'derm' });
+  if(DM_PRESETS[key]) return dmMergeProj({ id:key });
+  return dmMergeProj({ id:dmSlug(sub), title:dmTitleCase(sub), subject:sub, domain:sub.toLowerCase() }); // Community import of a custom project: keeps its name, labels fall back to generic
+}
+function dmTagFor(r){ return dmProjOf({ subject:r && r.subject }).title; }
+function dmProjForImport(data){ const p = dmProjOf({ subject:data && data.subject }); return p.id === 'derm' ? undefined : dmSerialize(p); }
+function dmProjects(){
+  const out = new Map();
+  out.set('derm', { proj:dmMergeProj({ id:'derm' }), n:0, items:0, explicit:false });
+  Object.values(loadSets()).forEach(s => {
+    if(!s || s.kind !== 'derm') return;
+    const p = dmProjOf(s);
+    let e = out.get(p.id);
+    if(!e){ e = { proj:p, n:0, items:0, explicit:!!s.project }; out.set(p.id, e); }
+    else if(!e.explicit && s.project){ e.proj = p; e.explicit = true; }
+    e.n++; e.items += (s.cards || []).length;
+  });
+  return out;
+}
+function dmProjectCfg(){ const e = dmProjects().get(dmProjectId); return e ? e.proj : dmMergeProj({ id:dmProjectId }); }
+function dmUniquePid(base){
+  const have = dmProjects(); let id = base || 'project', n = 2;
+  while(have.has(id) || DM_PRESETS[id] || id === 'custom') id = base + '-' + n++;
+  return id;
+}
+const dmP = () => dmProj || dmMergeProj({ id:'derm' });
+const dmCount = n => n + ' ' + (n === 1 ? dmP().noun : dmP().nounPl);
+
+/* -- LLM prompt: derm output is word-for-word the original prompt; other projects swap the domain wording -- */
+function dmPrompt(p, topic){
+  const L = p.labels, N = p.noun, NP = p.nounPl, g = p.guide || {};
+  const kwG = g.keywords || `4-6 short MUST-KNOW ${L.keywords.toLowerCase()} (short phrases, not full sentences)`;
+  const rxG = g.treatment || `a one-sentence ${L.treatment.toUpperCase()} line`;
+  const dsG = g.dosing || `a separate, precise ${L.dosing.toUpperCase()} line, exactly as it would be tested — if it doesn't apply to a ${N}, say so briefly in that cell rather than leaving it blank`;
+  const note = String(p.guideNote || '').trim();
+  return `You are compiling a ${p.domain} flashcard set for a study app. For the ${N}(s) I list below:\n\n1. Search the web for each ${N} and find a REAL, currently working image URL of its ${p.imageWhat} — prefer Wikimedia Commons ("upload.wikimedia.org") or another openly hotlinkable ${p.imageSrc}. Actually check that the URL resolves to an image of that exact ${N} before using it — never invent or guess a URL. If you can't find one you're confident in, leave that cell blank rather than guessing.\n2. For each ${N} note: the standard name; ${kwG}; ${rxG}; and ${dsG}.${note ? ' Extra instructions: ' + note : ''}\n3. Compile everything into a table with exactly these 5 columns, no header row: ${L.name}, Image URL, ${L.keywords}, ${L.treatment}, ${L.dosing}. Put multiple keywords in one cell separated by " | " (not commas, since some phrases already contain commas).\n\nOutput: if you're able to create and share a downloadable file, save this as a CSV (or Google Sheet / XLSX) file with those 5 columns and give me the file. If you can't create files, output the same 5 columns as plain rows in your reply (tab-separated if possible, comma-separated otherwise) so I can paste it straight into the app's grid.\n\n${dmCap(NP)} to compile: ${topic || '[PASTE YOUR LIST HERE]'}`;
+}
+
+/* -- Quiz wording (per project) -- */
+const DM_QTYPE_KEYS = ['image','kw2name','name2kw','odd','rx2name','name2rx','dose2name','name2dose'];
+function dmQTypes(){
+  const P = dmP(), L = P.labels, nm = L.name.toLowerCase(), f = P.find, rx = L.treatment.toLowerCase(), ds = L.dosing.toLowerCase();
+  return {
+    image:    {label:`Image → ${nm}`,          hint:'Identify from the image'},
+    kw2name:  {label:`${dmCap(f)}s → ${nm}`,   hint:`Name the ${P.noun} from its ${f}s`},
+    name2kw:  {label:`${L.name} → ${f}`,       hint:`Pick a true ${f} for the ${P.noun}`},
+    odd:      {label:'Odd one out',            hint:`Spot the ${f} that doesn\u2019t belong`},
+    rx2name:  {label:`${L.treatment} → ${nm}`, hint:`Which ${P.noun} matches this ${rx}`},
+    name2rx:  {label:`${L.name} → ${rx}`,      hint:`Pick the right ${rx}`},
+    dose2name:{label:`${L.dosing} → ${nm}`,    hint:`Which ${P.noun} matches this ${ds}`},
+    name2dose:{label:`${L.name} → ${ds}`,      hint:`Pick the right ${ds}`}
+  };
+}
+function dmQs(){
+  const P = dmP(), L = P.labels, N = P.noun, f = P.find, rx = L.treatment.toLowerCase(), ds = L.dosing.toLowerCase(), o = P.qs || {};
+  return {
+    image:     o.image     || `Identify this ${N}`,
+    kw2name:   o.kw2name   || `Which ${N} fits these ${f}s?`,
+    name2kw:   o.name2kw   || `Which ${f} belongs to this ${N}?`,
+    odd:       o.odd       || `Which ${f} does NOT belong?`,
+    rx2name:   o.rx2name   || `Which ${N} matches this ${rx}?`,
+    name2rx:   o.name2rx   || `What is the ${rx}?`,
+    dose2name: o.dose2name || `Which ${N} matches this ${ds}?`,
+    name2dose: o.name2dose || `What is the ${ds}?`,
+    findPl: dmCap(f) + 's', nounCap: dmCap(N)
+  };
+}
+
+/* -- Import: turns an LLM reply / CSV / TSV / markdown table into 5-column grid rows -- */
+function dmSplitMdRow(line){
+  let s = line.trim();
+  if(s[0] === '|') s = s.slice(1);
+  if(s[s.length - 1] === '|' && s[s.length - 2] !== '\\') s = s.slice(0, -1);
+  const cells = []; let cur = '';
+  for(let i = 0; i < s.length; i++){
+    const ch = s[i];
+    if(ch === '\\' && s[i + 1] === '|'){ cur += '|'; i++; }
+    else if(ch === '|'){ cells.push(cur.trim()); cur = ''; }
+    else cur += ch;
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+function dmParseImport(raw){
+  const t = String(raw || '').replace(/\r/g, '').replace(/^\uFEFF/, '').replace(/```[a-zA-Z]*/g, '');
+  const lines = t.split('\n').filter(l => l.trim());
+  if(!lines.length) return [];
+  const mdLine = l => /^\s*\|.*\|\s*$/.test(l);
+  let rows;
+  if(lines.filter(mdLine).length >= Math.max(1, Math.ceil(lines.length / 2))){
+    rows = lines.filter(l => mdLine(l) && !(/^[\s|:-]+$/.test(l) && l.includes('-'))).map(dmSplitMdRow);
+  } else {
+    const delim = lines.some(l => l.includes('\t')) ? '\t' : ',';
+    rows = lines.map(l => dmParseLine(l, delim).map(c => c.trim()));
+  }
+  rows = rows.map(r => {
+    if(r.length > 5){ const n = r.length; r = [r[0], r[1], r.slice(2, n - 2).join(' | '), r[n - 2], r[n - 1]]; } // extra "|" cells = keywords that were split
+    while(r.length < 5) r.push('');
+    return r.slice(0, 5);
+  }).filter(r => r.some(Boolean));
+  if(rows.length && /image|url|link|photo|picture/i.test(rows[0][1]) && !/^(https?:|data:)/i.test(rows[0][1])) rows.shift(); // header row
+  rows.forEach(r => {
+    const m = r[1].match(/\((https?:[^)\s]+)\)/); if(m) r[1] = m[1];   // ![alt](url) / [text](url)
+    r[1] = r[1].replace(/^<|>$/g, '');
+  });
+  return rows;
+}
+let dmActiveId = null, dmTab = 'browse', dmProjectId = 'derm';
 let dmGridDirty = false, dmGridKey = null, dmGridSetId = null;
-const DM_COLS = ['Name','Image URL','Keywords','Treatment','Dosing'];
+const dmCols = () => { const L = dmP().labels; return [L.name, 'Image URL', L.keywords, L.treatment, L.dosing]; };
 function dmMarkDirty(){
   if(!dmGridDirty){ dmGridDirty = true; dmSay('Unsaved changes — press Save on the Edit data tab.', 'warn'); }
   const b = $('dmSaveBtn'); if(b){ b.classList.add('dirty'); b.textContent = 'Save changes ●'; }
 }
 function dmClearDirty(){ dmGridDirty = false; const b = $('dmSaveBtn'); if(b){ b.classList.remove('dirty'); b.textContent = 'Save'; } }
 const dmQ = { qs:[], idx:0, score:0, answered:false, started:false, skipped:0,
-  cfg:{ types:new Set(Object.keys(DM_QTYPES)), length:0 } };
+  cfg:{ types:new Set(DM_QTYPE_KEYS), length:0 } };
 const DM_BAD_IMAGES = new Set();
 
 /* -- data helpers -- */
 function dmNewId(){ return 'dm_' + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
 function dmEntries(){
-  return Object.entries(loadSets()).filter(([,s]) => s && s.kind === 'derm')
+  return Object.entries(loadSets()).filter(([,s]) => s && s.kind === 'derm' && dmProjOf(s).id === dmProjectId)
     .sort((a,b) => (a[1].createdAt||0) - (b[1].createdAt||0));
 }
 function dmCurrent(){
   const s = dmActiveId ? loadSets()[dmActiveId] : null;
-  return (s && s.kind === 'derm') ? s : null;
+  return (s && s.kind === 'derm' && dmProjOf(s).id === dmProjectId) ? s : null;
 }
 function dmMakeCard(o){
   const name = String(o.name || o.front || '').trim() || 'Untitled';
@@ -9299,16 +9553,111 @@ function dmMutate(fn){
   return true;
 }
 function dmSay(msg, cls){ const el = $('dmStatus'); el.textContent = msg || ''; el.className = 'dm-status' + (cls ? ' ' + cls : ''); }
-function dmCreateSet(name, cards){
-  const sets = loadSets(), id = genSetId(), now = Date.now();
-  sets[id] = { name, subject:'DERM', kind:'derm', mode:'classic', cards:cards.map(dmMakeCard), completed:false, createdAt:now, updatedAt:now };
+function dmCreateSet(name, cards, proj){
+  const P = proj || dmP(), sets = loadSets(), id = genSetId(), now = Date.now();
+  const s = { name, subject:P.subject || 'DERM', kind:'derm', mode:'classic', cards:cards.map(dmMakeCard), completed:false, createdAt:now, updatedAt:now };
+  if(P.id !== 'derm' || dmSig(P) !== dmSig(dmMergeProj({ id:'derm' }))) s.project = dmSerialize(P); // plain Derm Atlases keep the original data shape
+  sets[id] = s;
   saveSetsData(sets);
   return id;
 }
 
+/* -- More screen: one tile per project + "Add project" -- */
+function dmRenderMoreGrid(){
+  const g = $('moreGrid'); if(!g) return;
+  const tiles = [...dmProjects().values()].map(e => {
+    const p = e.proj, L = p.labels;
+    const sub = escapeHtml(`${dmCap(p.noun)} images, ${L.keywords.toLowerCase()}, ${L.treatment.toLowerCase()} & ${L.dosing.toLowerCase()} — browse, quiz yourself, edit, sync and publish.`);
+    const count = e.n ? `<div class="more-tile-sub" style="margin-top:8px; font-weight:700;">${e.n} atlas${e.n === 1 ? '' : 'es'} · ${e.items} ${escapeHtml(e.items === 1 ? p.noun : p.nounPl)}</div>` : '';
+    return `<button type="button" class="more-tile" data-pid="${escapeHtml(p.id)}">
+      <div class="more-tile-emoji">${escapeHtml(p.emoji)}</div>
+      <div class="more-tile-title">${escapeHtml(p.title)}</div>
+      <div class="more-tile-sub">${sub}</div>${count}
+    </button>`;
+  }).join('');
+  g.innerHTML = tiles + `<button type="button" class="more-tile add" id="moreAddProjectBtn">
+      <div class="more-tile-emoji">＋</div>
+      <div class="more-tile-title">Add project</div>
+      <div class="more-tile-sub">Start an atlas for another subject — radiology, pathology, anatomy… with its own column names, quiz wording and LLM import prompt.</div>
+    </button>`;
+}
+
+/* -- Add / edit project dialog -- */
+let dmPjMode = 'new';
+function dmFillProjForm(p){
+  $('dmPjName').value = p.title || ''; $('dmPjEmoji').value = p.emoji || ''; $('dmPjNoun').value = p.noun || '';
+  ['name','keywords','treatment','dosing'].forEach((k, i) => { $('dmPjL' + i).value = p.labels[k] || ''; });
+  $('dmPjNote').value = p.guideNote || '';
+}
+function dmCloseProjDialog(){ const d = $('dmProjDialog'); if(typeof d.close === 'function') d.close(); else d.removeAttribute('open'); }
+function dmOpenProjDialog(mode){
+  dmPjMode = mode;
+  const dlg = $('dmProjDialog'), edit = mode === 'edit';
+  $('dmPjHeading').textContent = edit ? 'Project settings' : 'Add project';
+  $('dmPjSub').textContent = edit
+    ? 'Rename the project or change what its columns are called. Saved entries stay exactly as they are.'
+    : 'Pick a starting point, then adjust the names. Each project gets its own atlases, quiz wording and LLM import prompt.';
+  $('dmPjSaveBtn').textContent = edit ? 'Save settings' : 'Create project';
+  const chips = $('dmPjPresets'); chips.classList.toggle('hidden', edit);
+  if(edit){ dmFillProjForm(dmP()); }
+  else {
+    const have = dmProjects();
+    const opts = [['radiology', '🩻 Radiology'], ['custom', '✨ Custom']];
+    const first = opts.find(([v]) => v === 'custom' || !have.has(v))[0];
+    chips.innerHTML = opts.map(([v, t]) => `<label class="dm-qchip"><input type="radio" name="dmPjPreset" value="${v}"${v === first ? ' checked' : ''}><span>${t}${have.has(v) ? ' (added)' : ''}</span></label>`).join('');
+    chips.querySelectorAll('input').forEach(r => r.onchange = () => dmFillProjForm(dmMergeProj({ id:r.value })));
+    dmFillProjForm(dmMergeProj({ id:first }));
+  }
+  if(typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
+  setTimeout(() => $('dmPjName').focus(), 0);
+}
+function dmSubmitProjDialog(){
+  const val = id => $(id).value.trim();
+  const name = val('dmPjName'); if(!name){ $('dmPjName').focus(); return; }
+  const edit = dmPjMode === 'edit', cur = edit ? dmP() : null;
+  const chosen = edit ? cur.id : ((document.querySelector('input[name="dmPjPreset"]:checked') || {}).value || 'custom');
+  if(!edit && chosen !== 'custom' && dmProjects().has(chosen)){ dmCloseProjDialog(); dmOpen(chosen); return; } // preset already added → just open it
+  const baseP = dmMergeProj({ id:chosen });
+  const noun = (val('dmPjNoun') || baseP.noun || 'item').toLowerCase();
+  const pid = edit ? cur.id : (chosen === 'custom' ? dmUniquePid(dmSlug(name)) : chosen);
+  const proj = dmMergeProj({
+    id:pid, title:name, emoji:val('dmPjEmoji') || baseP.emoji || '📚', noun,
+    nounPl: noun === baseP.noun ? baseP.nounPl : dmPlural(noun),
+    labels:{ name:val('dmPjL0') || baseP.labels.name, keywords:val('dmPjL1') || baseP.labels.keywords, treatment:val('dmPjL2') || baseP.labels.treatment, dosing:val('dmPjL3') || baseP.labels.dosing },
+    guideNote:val('dmPjNote'),
+    subject:(edit && cur.subject) ? cur.subject : (baseP.subject || name.toUpperCase().slice(0, 40)),
+    domain:DM_PRESETS[pid] ? baseP.domain : name.toLowerCase()
+  });
+  if(edit){
+    const ser = dmSerialize(proj), sets = loadSets(), now = Date.now(); let changed = 0;
+    Object.values(sets).forEach(s => {
+      if(!s || s.kind !== 'derm' || dmProjOf(s).id !== pid) return;
+      if(dmSig(dmProjOf(s)) === JSON.stringify(ser)) return; // nothing changed → no write, no sync churn
+      s.project = ser; s.updatedAt = now; changed++;
+    });
+    if(changed) saveSetsData(sets);
+    dmCloseProjDialog(); dmGridKey = null; dmRenderAll();
+    dmSay(changed ? 'Project settings saved.' : 'No changes.', changed ? 'ok' : '');
+    return;
+  }
+  const id = dmCreateSet(proj.title, [], proj);
+  dmActiveId = id; lsSet(DM_LAST_KEY, id); dmTab = 'edit';
+  dmQ.started = false; dmClearDirty(); dmGridKey = null;
+  dmCloseProjDialog(); dmOpen(pid);
+  $('dmImport').open = true; // straight to the LLM prompt + paste box
+  dmSay('Project created — copy the LLM prompt below, paste its reply, then press Import and Save.', 'ok');
+}
+function dmInitProjDialog(){
+  $('dmPjSaveBtn').onclick = dmSubmitProjDialog;
+  $('dmPjCancelBtn').onclick = dmCloseProjDialog;
+  $('dmProjDialog').addEventListener('click', e => { if(e.target === $('dmProjDialog')) dmCloseProjDialog(); }); // tap the backdrop to dismiss
+  $('dmPjName').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); dmSubmitProjDialog(); } });
+}
+
 /* -- open / chrome -- */
-function dmOpen(){
+function dmOpen(pid){
   saveBeforeNavigation(); hideAllScreens(); $('dermView').classList.remove('hidden');
+  if(typeof pid === 'string') dmProjectId = pid;
   const entries = dmEntries();
   const last = lsGet(DM_LAST_KEY);
   dmActiveId = entries.find(([id]) => id === dmActiveId) ? dmActiveId
@@ -9317,34 +9666,48 @@ function dmOpen(){
   if(!(dmGridDirty && dmGridSetId === dmActiveId && dmCurrent())){ dmClearDirty(); dmGridKey = null; dmSay(''); } // returning to the same atlas keeps unsaved table edits
   dmRenderAll();
 }
+function dmApplyLabels(){
+  const P = dmP(), L = P.labels;
+  $('dmHeroTitle').textContent = `${P.emoji} ${P.title}`;
+  $('dmHeroSub').textContent = `${P.noun} · ${L.keywords.toLowerCase()} · ${L.treatment.toLowerCase()} & ${L.dosing.toLowerCase()} — browse or test yourself. Atlases sync with your account and can be published to Community like any other set.`;
+  $('dmTabs').setAttribute('aria-label', `${P.title} sections`);
+  [L.name, 'Image URL', `${L.keywords} (separate with |)`, L.treatment, L.dosing].forEach((t, i) => { $('dmTh' + i).textContent = t; });
+  $('dmImpTopic').placeholder = `What should it cover? e.g. a list of ${P.nounPl}`;
+}
 function dmRenderAll(){
-  dmRenderBar(); dmRenderBrowse();
-  $('dmPromptText').textContent = DM_LLM_PROMPT;
+  dmProj = dmProjectCfg();
+  dmApplyLabels(); dmRenderBar(); dmRenderBrowse();
+  $('dmPromptText').textContent = dmPrompt(dmP(), $('dmImpTopic').value.trim());
   const has = !!dmCurrent();
   $('dmTabs').style.display = has ? '' : 'none';
   if(!has){ ['dmBrowse','dmQuiz','dmEdit'].forEach(id => $(id).classList.toggle('hidden', id !== 'dmBrowse')); return; }
   dmSetTab(dmTab, true);
 }
 function dmRenderBar(){
-  const bar = $('dmSetBar'), entries = dmEntries(), s = dmCurrent();
+  const bar = $('dmSetBar'), entries = dmEntries(), s = dmCurrent(), P = dmP();
   if(!entries.length){
-    bar.innerHTML = `<button class="btn-primary" id="dmSamplesBtn">Start with 3 sample lesions</button><button class="btn-ghost" id="dmNewBtn">＋ New empty atlas</button>`;
+    const ns = P.samples ? P.samples.length : 0;
+    bar.innerHTML = (ns ? `<button class="btn-primary" id="dmSamplesBtn">Start with ${ns} sample ${escapeHtml(ns === 1 ? P.noun : P.nounPl)}</button>` : '')
+      + `<button class="${ns ? 'btn-ghost' : 'btn-primary'}" id="dmNewBtn">＋ New empty atlas</button>`
+      + `<button class="btn-ghost" id="dmProjBtn" title="Project settings">⚙️ Project</button>`;
   } else {
     bar.innerHTML = `<select id="dmSetSelect" class="modal-input" aria-label="Atlas">${
       entries.map(([id, x]) => `<option value="${escapeHtml(id)}"${id === dmActiveId ? ' selected' : ''}>${escapeHtml(x.name)} (${(x.cards||[]).length})</option>`).join('')
     }</select>
       <button class="btn-ghost" id="dmNewBtn" title="New atlas">＋ New</button>
       <button class="btn-ghost" id="dmRenameBtn" title="Rename">✏️ Rename</button>
+      <button class="btn-ghost" id="dmProjBtn" title="Project settings (project name and column labels)">⚙️ Project</button>
       <button class="btn-ghost" id="dmDeleteBtn" title="Delete this atlas">🗑 Delete</button>
       <button class="btn-primary" id="dmPublishBtn">🌐 ${s && s.communityId ? 'Update on Community' : 'Publish to Community'}</button>`;
   }
   const on = (id, fn) => { const el = $(id); if(el) el.onclick = fn; };
-  on('dmSamplesBtn', () => { dmActiveId = dmCreateSet('Derm Atlas', DM_SAMPLES); lsSet(DM_LAST_KEY, dmActiveId); dmQ.started = false; dmRenderAll(); });
+  on('dmSamplesBtn', () => { dmActiveId = dmCreateSet(P.title, P.samples, P); lsSet(DM_LAST_KEY, dmActiveId); dmQ.started = false; dmRenderAll(); });
+  on('dmProjBtn', () => dmOpenProjDialog('edit'));
   on('dmNewBtn', () => {
     if(!dmConfirmDiscard()) return;
-    const name = prompt('Name for the new atlas:', 'Derm Atlas');
+    const name = prompt('Name for the new atlas:', P.title);
     if(!name || !name.trim()) return;
-    dmActiveId = dmCreateSet(name.trim(), []); lsSet(DM_LAST_KEY, dmActiveId);
+    dmActiveId = dmCreateSet(name.trim(), [], P); lsSet(DM_LAST_KEY, dmActiveId);
     dmQ.started = false; dmClearDirty(); dmGridKey = null; dmTab = 'edit'; dmRenderAll();
   });
   on('dmRenameBtn', () => {
@@ -9355,10 +9718,12 @@ function dmRenderBar(){
   });
   on('dmDeleteBtn', () => {
     const cur = dmCurrent(); if(!cur) return;
-    if(!confirm(`Delete "${cur.name}" (${(cur.cards||[]).length} lessons) from this account? ${cur.communityId ? 'Its Community copy stays live until you remove it under Community → My Uploads. ' : ''}This can't be undone.`)) return;
+    const lastOne = entries.length === 1 && P.id !== 'derm';
+    if(!confirm(`Delete "${cur.name}" (${dmCount((cur.cards||[]).length)}) from this account? ${cur.communityId ? 'Its Community copy stays live until you remove it under Community → My Uploads. ' : ''}${lastOne ? `This is the last atlas in ${P.title}, so the project will also disappear from More. ` : ''}This can't be undone.`)) return;
     const sets = loadSets(); delete sets[dmActiveId]; saveSetsData(sets);
     dmActiveId = null; dmQ.started = false; dmClearDirty(); dmGridKey = null;
     const first = dmEntries()[0]; if(first) dmActiveId = first[0];
+    if(!first && P.id !== 'derm'){ $('dermView').classList.add('hidden'); $('moreView').classList.remove('hidden'); dmRenderMoreGrid(); return; }
     dmRenderAll();
   });
   on('dmPublishBtn', async () => {
@@ -9375,6 +9740,7 @@ function dmRenderBar(){
     dmRenderAll();
   };
 }
+
 function dmConfirmDiscard(){ return !dmGridDirty || confirm('Discard unsaved edits in the table?'); }
 function dmSetTab(t, silent){
   dmTab = t;
@@ -9395,15 +9761,20 @@ function dmSetTab(t, silent){
 function dmRenderBrowse(){
   const grid = $('dmBrowseGrid'), cards = dmCards();
   if(!dmCurrent()){ grid.innerHTML = '<div class="dm-empty">No atlas yet — start with the samples or create an empty one.</div>'; return; }
-  if(!cards.length){ grid.innerHTML = '<div class="dm-empty">No lesions in this atlas yet. Add some under <b>Edit data</b>.</div>'; return; }
+  if(!cards.length){
+    grid.innerHTML = `<div class="dm-empty">No ${escapeHtml(dmP().nounPl)} in this atlas yet.<br><br><button type="button" class="btn-primary" id="dmEmptyImportBtn">⬇️ Import with an LLM prompt</button> <button type="button" class="btn-ghost" id="dmEmptyEditBtn">Add by hand</button></div>`;
+    $('dmEmptyImportBtn').onclick = () => { dmSetTab('edit'); $('dmImport').open = true; $('dmImport').scrollIntoView({ block:'nearest' }); };
+    $('dmEmptyEditBtn').onclick = () => dmSetTab('edit');
+    return;
+  }
   grid.innerHTML = cards.map((l, i) => `
     <div class="dm-plate" data-i="${i}" tabindex="0" role="button" aria-expanded="false">
       ${l.image ? `<img src="${escapeHtml(l.image)}" alt="${escapeHtml(l.name)}" loading="lazy" onerror="this.style.opacity=.3">` : ''}
       <div class="dm-cap"><h3>${escapeHtml(l.name)}</h3></div>
       <div class="dm-detail">
         <div class="dm-tags">${l.keywords.map(k => `<span class="dm-tag">${escapeHtml(k)}</span>`).join('')}</div>
-        ${l.treatment ? `<div class="dm-rx"><b>Treatment — </b>${escapeHtml(l.treatment)}</div>` : ''}
-        ${l.dosing ? `<div class="dm-rx"><b>Dosing — </b>${escapeHtml(l.dosing)}</div>` : ''}
+        ${l.treatment ? `<div class="dm-rx"><b>${escapeHtml(dmP().labels.treatment)} — </b>${escapeHtml(l.treatment)}</div>` : ''}
+        ${l.dosing ? `<div class="dm-rx"><b>${escapeHtml(dmP().labels.dosing)} — </b>${escapeHtml(l.dosing)}</div>` : ''}
       </div>
     </div>`).join('');
   grid.querySelectorAll('.dm-plate').forEach(p => {
@@ -9440,44 +9811,44 @@ const DM_BUILDERS = {
   image(l, others){
     if(!l.image) return null;
     const w = dmDistinct(others.map(o => o.name), [l.name], 3); if(!w) return null;
-    return {q:'Identify this lesion', image:l.image, options:dmOptions(l.name, w), answerIsName:true};
+    return {q:dmQs().image, image:l.image, options:dmOptions(l.name, w), answerIsName:true};
   },
   kw2name(l, others){
     if(!l.keywords.length) return null;
     const w = dmDistinct(others.filter(o => o.keywords.join('|') !== l.keywords.join('|')).map(o => o.name), [l.name], 3); if(!w) return null;
-    return {q:'Which lesion fits these findings?', label:'Findings', tags:dmPick(l.keywords, 3), options:dmOptions(l.name, w), answerIsName:true};
+    return {q:dmQs().kw2name, label:dmQs().findPl, tags:dmPick(l.keywords, 3), options:dmOptions(l.name, w), answerIsName:true};
   },
   name2kw(l, others){
     if(!l.keywords.length) return null;
     const correct = dmPick(l.keywords, 1)[0];
     const w = dmDistinct(others.flatMap(o => o.keywords), l.keywords, 3); if(!w) return null;
-    return {q:'Which finding belongs to this lesion?', label:'Lesion', text:l.name, options:dmOptions(correct, w), answerIsName:false};
+    return {q:dmQs().name2kw, label:dmQs().nounCap, text:l.name, options:dmOptions(correct, w), answerIsName:false};
   },
   odd(l, others){
     if(l.keywords.length < 3) return null;
     const imp = dmDistinct(others.flatMap(o => o.keywords), l.keywords, 1); if(!imp) return null;
     const own = dmPick(l.keywords, 3);
-    return {q:'Which finding does NOT belong?', label:'Lesion', text:l.name, options:dmShuffle([...own.map(t => ({text:t, correct:false})), {text:imp[0], correct:true}]), answerIsName:false};
+    return {q:dmQs().odd, label:dmQs().nounCap, text:l.name, options:dmShuffle([...own.map(t => ({text:t, correct:false})), {text:imp[0], correct:true}]), answerIsName:false};
   },
   rx2name(l, others){
     if(!l.treatment) return null;
     const w = dmDistinct(others.filter(o => dmNorm(o.treatment) !== dmNorm(l.treatment)).map(o => o.name), [l.name], 3); if(!w) return null;
-    return {q:'Which lesion is treated this way?', label:'Treatment', text:l.treatment, options:dmOptions(l.name, w), answerIsName:true};
+    return {q:dmQs().rx2name, label:dmP().labels.treatment, text:l.treatment, options:dmOptions(l.name, w), answerIsName:true};
   },
   name2rx(l, others){
     if(!l.treatment) return null;
     const w = dmDistinct(others.map(o => o.treatment), [l.treatment], 3); if(!w) return null;
-    return {q:'What is the treatment?', label:'Lesion', text:l.name, options:dmOptions(l.treatment, w), answerIsName:false};
+    return {q:dmQs().name2rx, label:dmQs().nounCap, text:l.name, options:dmOptions(l.treatment, w), answerIsName:false};
   },
   dose2name(l, others){
     if(!l.dosing) return null;
     const w = dmDistinct(others.filter(o => dmNorm(o.dosing) !== dmNorm(l.dosing)).map(o => o.name), [l.name], 3); if(!w) return null;
-    return {q:'Which lesion uses this regimen?', label:'Dosing', text:l.dosing, options:dmOptions(l.name, w), answerIsName:true};
+    return {q:dmQs().dose2name, label:dmP().labels.dosing, text:l.dosing, options:dmOptions(l.name, w), answerIsName:true};
   },
   name2dose(l, others){
     if(!l.dosing) return null;
     const w = dmDistinct(others.map(o => o.dosing), [l.dosing], 3); if(!w) return null;
-    return {q:'What is the dosing?', label:'Lesion', text:l.name, options:dmOptions(l.dosing, w), answerIsName:false};
+    return {q:dmQs().name2dose, label:dmQs().nounCap, text:l.name, options:dmOptions(l.dosing, w), answerIsName:false};
   }
 };
 function dmBuildFor(c, others, types){
@@ -9488,7 +9859,7 @@ function dmBuildFor(c, others, types){
   return null;
 }
 function dmBuildQuestions(){
-  const enabled = Object.keys(DM_QTYPES).filter(k => dmQ.cfg.types.has(k));
+  const enabled = DM_QTYPE_KEYS.filter(k => dmQ.cfg.types.has(k));
   const pool = dmCards().map(dmClean);
   const qs = []; dmQ.skipped = 0;
   for(const c of dmShuffle(pool)){
@@ -9502,13 +9873,13 @@ function dmFallbackQuestion(q){
   const pool = dmCards().map(dmClean);
   const c = pool.find(o => o.raw.id === q.lesion.id); if(!c) return null;
   const others = pool.filter(o => o !== c);
-  const sel = Object.keys(DM_QTYPES).filter(k => dmQ.cfg.types.has(k) && k !== 'image');
-  const any = Object.keys(DM_QTYPES).filter(k => k !== 'image');
+  const sel = DM_QTYPE_KEYS.filter(k => dmQ.cfg.types.has(k) && k !== 'image');
+  const any = DM_QTYPE_KEYS.filter(k => k !== 'image');
   return dmBuildFor(c, others, sel) || dmBuildFor(c, others, any);
 }
 function dmStartQuiz(){ dmQ.score = 0; dmQ.idx = 0; dmQ.started = true; dmQ.qs = dmBuildQuestions(); dmRenderQuizCard(); }
 function dmSettingsHTML(){
-  const chips = Object.entries(DM_QTYPES).map(([k,t]) =>
+  const chips = Object.entries(dmQTypes()).map(([k,t]) =>
     `<label class="dm-qchip" title="${escapeHtml(t.hint)}"><input type="checkbox" data-type="${k}" ${dmQ.cfg.types.has(k) ? 'checked' : ''}><span>${escapeHtml(t.label)}</span></label>`).join('');
   const lens = [[10,'10'],[25,'25'],[0,'All']].map(([v,t]) =>
     `<label class="dm-qchip"><input type="radio" name="dmqlen" data-len="${v}" ${dmQ.cfg.length === v ? 'checked' : ''}><span>${t}</span></label>`).join('');
@@ -9526,32 +9897,32 @@ function dmWireSettings(area){
   }));
   area.querySelectorAll('input[data-len]').forEach(r => r.addEventListener('change', () => { dmQ.cfg.length = +r.dataset.len; dmStartQuiz(); }));
   const all = area.querySelector('#dmQAll'), none = area.querySelector('#dmQNone');
-  if(all) all.onclick = () => { Object.keys(DM_QTYPES).forEach(k => dmQ.cfg.types.add(k)); dmStartQuiz(); };
+  if(all) all.onclick = () => { DM_QTYPE_KEYS.forEach(k => dmQ.cfg.types.add(k)); dmStartQuiz(); };
   if(none) none.onclick = () => { dmQ.cfg.types.clear(); dmStartQuiz(); };
 }
 function dmRenderQuizCard(){
   const area = $('dmQuizArea'), total = dmCards().length;
   if(total < 4){
-    area.innerHTML = '<div class="dm-empty">Load at least 4 lesions (Edit data tab) to run the quiz — Browse works with fewer.</div>';
+    area.innerHTML = `<div class="dm-empty">Load at least 4 ${escapeHtml(dmP().nounPl)} (Edit data tab) to run the quiz — Browse works with fewer.</div>`;
     return;
   }
   if(!dmQ.qs.length){
     area.innerHTML = `<div class="dm-quizwrap"><div class="dm-scorebar"><span>No questions available</span><span>${dmSettingsHTML()}</span></div>
-      <div class="dm-empty">None of the selected question types can be built from your data. Open <b>Customize</b> and turn on more types (e.g. Name → finding needs keywords; Dosing types need dosing filled in).</div></div>`;
+      <div class="dm-empty">None of the selected question types can be built from your data. Open <b>Customize</b> and turn on more types (e.g. “${escapeHtml(dmQTypes().name2kw.label)}” needs ${escapeHtml(dmP().labels.keywords.toLowerCase())}; “${escapeHtml(dmQTypes().name2dose.label)}” needs ${escapeHtml(dmP().labels.dosing.toLowerCase())} filled in).</div></div>`;
     dmWireSettings(area); return;
   }
   if(dmQ.idx >= dmQ.qs.length){
     area.innerHTML = `<div class="dm-quizwrap"><div class="dm-quizcard solo">
       <h3>Set complete</h3>
       <p style="color:var(--text-muted)">Score: ${dmQ.score} / ${dmQ.qs.length}</p>
-      ${dmQ.skipped ? `<p style="color:var(--text-muted); font-size:13px">${dmQ.skipped} lesion(s) were skipped — they're missing data the selected question types need.</p>` : ''}
+      ${dmQ.skipped ? `<p style="color:var(--text-muted); font-size:13px">${dmQ.skipped} ${escapeHtml(dmQ.skipped === 1 ? dmP().noun : dmP().nounPl)} ${dmQ.skipped === 1 ? 'was' : 'were'} skipped — they're missing data the selected question types need.</p>` : ''}
       <button class="dm-next" id="dmRestartBtn">Run again</button></div></div>`;
     const rb = $('dmRestartBtn'); rb.onclick = dmStartQuiz; rb.focus(); return;
   }
   dmQ.answered = false;
   const q = dmQ.qs[dmQ.idx], l = q.lesion;
   const left = q.image
-    ? `<img src="${escapeHtml(q.image)}" alt="lesion">`
+    ? `<img src="${escapeHtml(q.image)}" alt="${escapeHtml(dmP().noun)}">`
     : `<div class="dm-promptpanel"><div class="dm-plabel">${escapeHtml(q.label)}</div>${
         q.tags ? `<div class="dm-ptags">${q.tags.map(t => `<span class="dm-tag">${escapeHtml(t)}</span>`).join('')}</div>`
                : `<div class="dm-ptext">${escapeHtml(q.text)}</div>`}</div>`;
@@ -9569,8 +9940,8 @@ function dmRenderQuizCard(){
           <div class="dm-reveal" id="dmReveal">
             ${q.answerIsName ? '' : `<div class="dm-revealname">${escapeHtml(l.name)}</div>`}
             ${kws.length ? `<div class="dm-tags">${kws.map(k => `<span class="dm-tag">${escapeHtml(k)}</span>`).join('')}</div>` : ''}
-            ${!dmBlank(l.treatment) ? `<div class="dm-rx"><b>Treatment — </b>${escapeHtml(l.treatment)}</div>` : ''}
-            ${!dmBlank(l.dosing) ? `<div class="dm-rx"><b>Dosing — </b>${escapeHtml(l.dosing)}</div>` : ''}
+            ${!dmBlank(l.treatment) ? `<div class="dm-rx"><b>${escapeHtml(dmP().labels.treatment)} — </b>${escapeHtml(l.treatment)}</div>` : ''}
+            ${!dmBlank(l.dosing) ? `<div class="dm-rx"><b>${escapeHtml(dmP().labels.dosing)} — </b>${escapeHtml(l.dosing)}</div>` : ''}
           </div>
           <button class="dm-next" id="dmNextBtn" style="display:none">Next</button>
         </div>
@@ -9603,7 +9974,7 @@ function dmRenderQuizCard(){
 function dmBuildRow(cells, cid){
   const tr = document.createElement('tr');
   if(cid) tr.dataset.cid = cid; // keeps each lesion's id stable across edits so sync/merge and Community versions line up
-  tr.innerHTML = `<td class="rownum"></td>${cells.map((v, c) => `<td class="cell" contenteditable="true" data-col="${c}" role="textbox" aria-multiline="true" aria-label="${DM_COLS[c]}">${escapeHtml(v)}</td>`).join('')}<td class="rowact"><button class="dm-del" title="Remove row" aria-label="Remove row">×</button></td>`;
+  tr.innerHTML = `<td class="rownum"></td>${cells.map((v, c) => `<td class="cell" contenteditable="true" data-col="${c}" role="textbox" aria-multiline="true" aria-label="${escapeHtml(dmCols()[c])}">${escapeHtml(v)}</td>`).join('')}<td class="rowact"><button class="dm-del" title="Remove row" aria-label="Remove row">×</button></td>`;
   return tr;
 }
 function dmRenumber(){
@@ -9684,28 +10055,67 @@ function dmInitGrid(){
   $('dmSaveBtn').onclick = () => {
     if(!dmCurrent()){ dmSay('Create an atlas first.', 'err'); return; }
     const cards = dmGridToCards();
-    if(!cards.length && !confirm('The table is empty — saving will remove every lesion from this atlas. Continue?')) return;
+    if(!cards.length && !confirm(`The table is empty — saving will remove every ${dmP().noun} from this atlas. Continue?`)) return;
     dmMutate(s => { s.cards = cards; });
     dmQ.started = false; dmClearDirty();
     const s = dmCurrent(); dmGridKey = dmActiveId + ':' + (s ? s.updatedAt || 0 : 0);
     dmRenderGrid(); dmRenderBrowse(); dmRenderBar();
-    dmSay(`Saved — ${cards.length} lesion(s).${s && s.communityId ? ' Press “Update on Community” to push the changes live.' : ''}`, 'ok');
+    dmSay(`Saved — ${dmCount(cards.length)}.${s && s.communityId ? ' Press “Update on Community” to push the changes live.' : ''}`, 'ok');
   };
+  /* -- Import (LLM prompt + paste / file) -- */
+  const impSay = (msg, cls) => { const el = $('dmImpStatus'); el.textContent = msg || ''; el.className = 'dm-status' + (cls ? ' ' + cls : ''); };
+  const refreshPrompt = () => { $('dmPromptText').textContent = dmPrompt(dmP(), $('dmImpTopic').value.trim()); };
+  $('dmImpTopic').addEventListener('input', refreshPrompt);
+  $('dmImportBtn').onclick = () => { const d = $('dmImport'); d.open = !d.open; if(d.open) d.scrollIntoView({ block:'nearest', behavior:'smooth' }); };
   $('dmCopyPromptBtn').onclick = async () => {
-    try{ await navigator.clipboard.writeText(DM_LLM_PROMPT); dmSay('Prompt copied to clipboard.', 'ok'); }
-    catch(e){ dmSay('Could not copy automatically — select the text below manually.', 'err'); }
+    refreshPrompt();
+    try{ await navigator.clipboard.writeText($('dmPromptText').textContent); impSay('Prompt copied — paste it into ChatGPT, Claude or any LLM, then paste its reply below.', 'ok'); }
+    catch(e){ $('dmPromptText').classList.remove('hidden'); $('dmTogglePromptBtn').textContent = 'Hide prompt'; impSay('Could not copy automatically — select the prompt text below and copy it manually.', 'err'); }
+  };
+  $('dmTogglePromptBtn').onclick = () => {
+    const el = $('dmPromptText'); el.classList.toggle('hidden');
+    $('dmTogglePromptBtn').textContent = el.classList.contains('hidden') ? 'Show prompt' : 'Hide prompt';
+  };
+  $('dmImpFile').onchange = e => {
+    const f = e.target.files && e.target.files[0]; e.target.value = '';
+    if(!f) return;
+    if(/\.xlsx?$/i.test(f.name)){ impSay('Excel files can\u2019t be read directly — save it as CSV, or copy the rows from the sheet and paste them below.', 'err'); return; }
+    const rd = new FileReader();
+    rd.onload = () => { $('dmImpText').value = String(rd.result || ''); impSay(`Loaded \u201c${f.name}\u201d — press Import into table.`, 'ok'); };
+    rd.onerror = () => impSay('Could not read that file.', 'err');
+    rd.readAsText(f);
+  };
+  $('dmImpGoBtn').onclick = () => {
+    const rows = dmParseImport($('dmImpText').value);
+    if(!rows.length){ impSay('Nothing to import yet — paste the LLM\u2019s reply (or load a file) first.', 'err'); return; }
+    const replace = document.querySelector('input[name="dmImpMode"]:checked').value === 'replace';
+    const hasData = [...body.querySelectorAll('.cell')].some(td => td.textContent.trim());
+    if(replace && hasData && !confirm('Replace every row currently in the table? (Nothing is deleted until you press Save.)')) return;
+    if(replace) body.innerHTML = '';
+    else [...body.children].filter(tr => ![...tr.querySelectorAll('.cell')].some(td => td.textContent.trim())).forEach(tr => tr.remove());
+    rows.forEach(r => body.appendChild(dmBuildRow(r, null)));
+    dmRenumber(); dmMarkDirty();
+    $('dmImpText').value = '';
+    const msg = `Imported ${dmCount(rows.length)} into the table — check it, then press Save.`;
+    impSay(msg, 'ok'); dmSay(msg, 'warn');
+    const wrap = body.closest('.dm-gridwrap'); if(wrap) wrap.scrollIntoView({ block:'start', behavior:'smooth' });
   };
 }
 function initDermUI(){
-  $('moreToggleBtn').onclick = () => { saveBeforeNavigation(); hideAllScreens(); $('moreView').classList.remove('hidden'); };
+  $('moreToggleBtn').onclick = () => { saveBeforeNavigation(); hideAllScreens(); $('moreView').classList.remove('hidden'); dmRenderMoreGrid(); };
   $('backFromMoreBtn').onclick = () => { $('moreView').classList.add('hidden'); showLanding(); };
-  $('openDermBtn').onclick = dmOpen;
+  $('moreGrid').addEventListener('click', e => {
+    const t = e.target.closest('.more-tile'); if(!t) return;
+    if(t.id === 'moreAddProjectBtn') dmOpenProjDialog('new'); else dmOpen(t.dataset.pid);
+  });
   $('backFromDermBtn').onclick = () => {
     if(!dmConfirmDiscard()) return;
-    dmClearDirty(); dmGridKey = null; $('dermView').classList.add('hidden'); $('moreView').classList.remove('hidden');
+    dmClearDirty(); dmGridKey = null; $('dermView').classList.add('hidden'); $('moreView').classList.remove('hidden'); dmRenderMoreGrid();
   };
   $('dmTabs').querySelectorAll('[data-dmtab]').forEach(b => b.onclick = () => dmSetTab(b.dataset.dmtab));
   dmInitGrid();
+  dmInitProjDialog();
+  dmRenderMoreGrid();
   window.addEventListener('beforeunload', e => { if(dmGridDirty){ e.preventDefault(); e.returnValue = ''; } });
 }
 
